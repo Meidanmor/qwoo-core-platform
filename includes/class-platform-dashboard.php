@@ -50,7 +50,22 @@ class Qwoo_Platform_Dashboard {
         'categories_list' => 'action_categories_list',
         'category_create' => 'action_category_create',
         'image_upload'    => 'action_image_upload',
+        'orders_list'     => 'action_orders_list',
+        'order_get'       => 'action_order_get',
+        'order_status'    => 'action_order_status',
+        'order_note'      => 'action_order_note',
+        'order_refund'    => 'action_order_refund',
     ];
+
+    /** Order statuses the owner can move an order to, from each status. */
+    const ORDER_MOVES = [
+        'pending'    => [ 'processing', 'cancelled' ],
+        'on-hold'    => [ 'processing', 'completed', 'cancelled' ],
+        'processing' => [ 'completed', 'on-hold', 'cancelled' ],
+        'completed'  => [ 'processing' ],
+        'failed'     => [ 'cancelled' ],
+    ];
+    const ORDER_FILTERS = [ 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed' ];
 
     /** Product statuses the dashboard shows and sets. */
     const PRODUCT_STATUSES = [ 'publish', 'draft' ];
@@ -537,6 +552,226 @@ class Qwoo_Platform_Dashboard {
             return self::bad( $id->get_error_message() );
         }
         return [ 'id' => (int) $id, 'url' => self::image_url( $id, 'woocommerce_thumbnail' ) ];
+    }
+
+    /* ---------------- orders ---------------- */
+
+    /** A page of orders (20), newest first, plus how many wait in each status. */
+    private static function action_orders_list( array $params ) {
+        $page   = max( 1, min( 1000, (int) ( $params['page'] ?? 1 ) ) );
+        $filter = in_array( $params['filter'] ?? '', self::ORDER_FILTERS, true ) ? $params['filter'] : '';
+        $search = mb_substr( sanitize_text_field( (string) ( $params['search'] ?? '' ) ), 0, 100 );
+        $all    = array_map( static fn( $s ) => substr( $s, 3 ), array_keys( wc_get_order_statuses() ) );
+        $status = $filter !== '' ? [ $filter ] : $all;
+
+        if ( $search !== '' ) {
+            // Order number, customer name, email, address… (WooCommerce's own order search).
+            $ids    = array_map( 'intval', wc_order_search( $search ) );
+            $orders = [];
+            foreach ( $ids as $id ) {
+                $order = wc_get_order( $id );
+                if ( $order && $order->get_type() === 'shop_order' && in_array( $order->get_status(), $status, true ) ) {
+                    $orders[] = $order;
+                }
+            }
+            usort( $orders, static fn( $a, $b ) => $b->get_id() <=> $a->get_id() );
+            $total  = count( $orders );
+            $orders = array_slice( $orders, ( $page - 1 ) * 20, 20 );
+            $pages  = (int) ceil( $total / 20 );
+        } else {
+            $result = wc_get_orders( [
+                'type'     => 'shop_order',
+                'status'   => $status,
+                'limit'    => 20,
+                'page'     => $page,
+                'paginate' => true,
+                'orderby'  => 'date',
+                'order'    => 'DESC',
+            ] );
+            $orders = $result->orders;
+            $total  = (int) $result->total;
+            $pages  = (int) $result->max_num_pages;
+        }
+
+        $counts = [];
+        foreach ( [ 'processing', 'on-hold', 'pending' ] as $s ) {
+            $counts[ $s ] = (int) wc_orders_count( $s );
+        }
+        return [
+            'items'  => array_map( [ __CLASS__, 'order_summary' ], $orders ),
+            'total'  => $total,
+            'pages'  => $pages,
+            'page'   => $page,
+            'counts' => $counts,
+        ];
+    }
+
+    private static function action_order_get( array $params ) {
+        $order = self::find_order( $params['id'] ?? 0 );
+        return is_wp_error( $order ) ? $order : self::order_full( $order );
+    }
+
+    /** { id, status }: only the moves in ORDER_MOVES. WooCommerce emails the customer as usual. */
+    private static function action_order_status( array $params ) {
+        $order = self::find_order( $params['id'] ?? 0 );
+        if ( is_wp_error( $order ) ) {
+            return $order;
+        }
+        $to = (string) ( $params['status'] ?? '' );
+        if ( ! in_array( $to, self::ORDER_MOVES[ $order->get_status() ] ?? [], true ) ) {
+            return self::bad( 'This order can\'t be changed to that status.' );
+        }
+        $order->update_status( $to, 'Changed from the store dashboard.' );
+        return self::order_full( wc_get_order( $order->get_id() ) );
+    }
+
+    /** { id, note, customer }: a private note, or a note emailed to the customer. */
+    private static function action_order_note( array $params ) {
+        $order = self::find_order( $params['id'] ?? 0 );
+        if ( is_wp_error( $order ) ) {
+            return $order;
+        }
+        $note = trim( sanitize_textarea_field( (string) ( $params['note'] ?? '' ) ) );
+        if ( $note === '' || mb_strlen( $note ) > 2000 ) {
+            return self::bad( 'Write a note (up to 2,000 characters).' );
+        }
+        $order->add_order_note( esc_html( $note ), ! empty( $params['customer'] ) ? 1 : 0 );
+        return self::order_full( wc_get_order( $order->get_id() ) );
+    }
+
+    /**
+     * { id, amount, reason, gateway, restock }. With gateway, the payment
+     * provider refunds the customer (when it supports refunds); otherwise
+     * the refund is only recorded and the owner returns the money. Items go
+     * back into stock only with a full refund.
+     */
+    private static function action_order_refund( array $params ) {
+        $order = self::find_order( $params['id'] ?? 0 );
+        if ( is_wp_error( $order ) ) {
+            return $order;
+        }
+        $left   = (float) $order->get_total() - (float) $order->get_total_refunded();
+        $amount = self::price( $params['amount'] ?? '' );
+        if ( $amount === null || $amount === '' || (float) $amount <= 0 ) {
+            return self::bad( 'Enter the amount to refund.' );
+        }
+        if ( (float) $amount > round( $left, wc_get_price_decimals() ) + 0.00001 ) {
+            return self::bad( 'That\'s more than what\'s left to refund (' . wc_format_decimal( $left, wc_get_price_decimals() ) . ').' );
+        }
+        $gateway = ! empty( $params['gateway'] );
+        if ( $gateway && ! self::can_refund_online( $order ) ) {
+            return self::bad( 'This payment method can\'t refund automatically. Record the refund and return the money yourself.' );
+        }
+        $full  = abs( (float) $amount - $left ) < 0.00001;
+        $items = [];
+        if ( $full && ! empty( $params['restock'] ) ) {
+            foreach ( $order->get_items() as $item_id => $item ) {
+                $items[ $item_id ] = [ 'qty' => $item->get_quantity(), 'refund_total' => 0 ];
+            }
+        }
+        $refund = wc_create_refund( [
+            'order_id'       => $order->get_id(),
+            'amount'         => $amount,
+            'reason'         => mb_substr( sanitize_text_field( (string) ( $params['reason'] ?? '' ) ), 0, 200 ),
+            'refund_payment' => $gateway,
+            'restock_items'  => (bool) $items,
+            'line_items'     => $items,
+        ] );
+        if ( is_wp_error( $refund ) ) {
+            return self::bad( 'The refund didn\'t go through: ' . $refund->get_error_message() );
+        }
+        return self::order_full( wc_get_order( $order->get_id() ) );
+    }
+
+    /* ---------------- order helpers ---------------- */
+
+    private static function find_order( $id ) {
+        $order = absint( $id ) ? wc_get_order( absint( $id ) ) : false;
+        if ( ! $order || $order->get_type() !== 'shop_order' || $order->get_status() === 'checkout-draft' ) {
+            return self::error( 'qwoo_dashboard_not_found', 'This order doesn\'t exist.', 404 );
+        }
+        return $order;
+    }
+
+    private static function can_refund_online( WC_Order $order ) {
+        $gateways = WC()->payment_gateways() ? WC()->payment_gateways()->payment_gateways() : [];
+        $gateway  = $gateways[ $order->get_payment_method() ] ?? null;
+        return $gateway && $gateway->supports( 'refunds' ) && $gateway->can_refund_order( $order );
+    }
+
+    private static function order_summary( WC_Order $o ) {
+        $created = $o->get_date_created();
+        return [
+            'id'       => $o->get_id(),
+            'number'   => (string) $o->get_order_number(),
+            'date'     => $created ? $created->getTimestamp() : null,
+            'status'   => $o->get_status(),
+            'label'    => wc_get_order_status_name( $o->get_status() ),
+            'total'    => (float) $o->get_total(),
+            'refunded' => (float) $o->get_total_refunded(),
+            'currency' => $o->get_currency(),
+            'customer' => trim( $o->get_billing_first_name() . ' ' . $o->get_billing_last_name() ),
+            'items'    => $o->get_item_count(),
+        ];
+    }
+
+    private static function order_full( WC_Order $o ) {
+        $items = [];
+        foreach ( $o->get_items() as $item ) {
+            /** @var WC_Order_Item_Product $item */
+            $product = $item->get_product();
+            $meta    = [];
+            foreach ( $item->get_all_formatted_meta_data() as $m ) {
+                $meta[] = wp_strip_all_tags( $m->display_key ) . ': ' . wp_strip_all_tags( $m->display_value );
+            }
+            $items[] = [
+                'name'     => html_entity_decode( $item->get_name(), ENT_QUOTES ),
+                'qty'      => (int) $item->get_quantity(),
+                'total'    => (float) $item->get_total() + (float) $item->get_total_tax(),
+                'sku'      => $product ? $product->get_sku() : '',
+                'image'    => $product ? self::image_url( $product->get_image_id(), 'woocommerce_thumbnail' ) : '',
+                'product'  => $product ? ( $product->get_parent_id() ?: $product->get_id() ) : 0,
+                'meta'     => $meta,
+            ];
+        }
+        $notes = [];
+        foreach ( wc_get_order_notes( [ 'order_id' => $o->get_id() ] ) as $note ) {
+            $notes[] = [
+                'id'       => (int) $note->id,
+                'text'     => html_entity_decode( wp_strip_all_tags( $note->content ), ENT_QUOTES ),
+                'customer' => (bool) $note->customer_note,
+                'date'     => $note->date_created ? $note->date_created->getTimestamp() : null,
+            ];
+        }
+        $refunds = [];
+        foreach ( $o->get_refunds() as $refund ) {
+            $date      = $refund->get_date_created();
+            $refunds[] = [ 'amount' => (float) $refund->get_amount(), 'reason' => $refund->get_reason(), 'date' => $date ? $date->getTimestamp() : null ];
+        }
+        $address = static function ( array $fields ) {
+            $text = WC()->countries->get_formatted_address( $fields, "\n" );
+            return trim( html_entity_decode( wp_strip_all_tags( $text ), ENT_QUOTES ) );
+        };
+        $paid = $o->get_date_paid();
+        return self::order_summary( $o ) + [
+            'moves'        => array_map( static fn( $s ) => [ 'status' => $s, 'label' => wc_get_order_status_name( $s ) ], self::ORDER_MOVES[ $o->get_status() ] ?? [] ),
+            'subtotal'     => (float) $o->get_subtotal(),
+            'shipping'     => (float) $o->get_shipping_total() + (float) $o->get_shipping_tax(),
+            'discount'     => (float) $o->get_discount_total(),
+            'tax'          => (float) $o->get_total_tax(),
+            'payment'      => $o->get_payment_method_title(),
+            'paid'         => $paid ? $paid->getTimestamp() : null,
+            'online_refund' => self::can_refund_online( $o ),
+            'shipping_via' => $o->get_shipping_method(),
+            'email'        => $o->get_billing_email(),
+            'phone'        => $o->get_billing_phone(),
+            'billing'      => $address( $o->get_address( 'billing' ) ),
+            'ship_to'      => $o->has_shipping_address() ? $address( $o->get_address( 'shipping' ) ) : '',
+            'customer_note' => $o->get_customer_note(),
+            'line_items'   => $items,
+            'notes'        => $notes,
+            'refunds'      => $refunds,
+        ];
     }
 
     /* ---------------- product helpers ---------------- */
