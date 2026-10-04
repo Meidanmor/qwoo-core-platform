@@ -1,0 +1,17 @@
+{
+    "name": "qwoo/qwoo-core",
+    "description": "Headless WooCommerce Q-Woo Core Plugin",
+    "type": "wordpress-plugin",
+    "require": {
+        "php": ">=7.4",
+        "minishlink/web-push": "^8.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "QwooCore\\": "src/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

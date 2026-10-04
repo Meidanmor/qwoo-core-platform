@@ -1,0 +1,335 @@
+/* ============================================================
+   Qwoo Core – Technical Settings Page
+   ============================================================ */
+
+:root {
+    --qwoo-bg:          #f0f2f5;
+    --qwoo-card:        #ffffff;
+    --qwoo-border:      #e2e6ea;
+    --qwoo-primary:     #1a1a2e;
+    --qwoo-accent:      #4f46e5;
+    --qwoo-accent-h:    #4338ca;
+    --qwoo-text:        #1e293b;
+    --qwoo-muted:       #64748b;
+    --qwoo-success:     #059669;
+    --qwoo-warning:     #d97706;
+    --qwoo-danger:      #dc2626;
+    --qwoo-radius:      12px;
+    --qwoo-shadow:      0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.04);
+}
+
+/* ── Layout ── */
+.qwoo-tech-wrap {
+    max-width: 900px;
+    padding: 24px 0 60px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--qwoo-text);
+}
+
+/* ── Header ── */
+.qwoo-tech-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.qwoo-tech-header__logo {
+    width: 52px;
+    height: 52px;
+    background: var(--qwoo-primary);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.qwoo-tech-header h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--qwoo-primary);
+}
+
+.qwoo-tech-header__sub {
+    margin: 0;
+    color: var(--qwoo-muted);
+    font-size: 13px;
+}
+
+/* ── Grid ── */
+.qwoo-tech-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* ── Card ── */
+.qwoo-card {
+    background: var(--qwoo-card);
+    border: 1px solid var(--qwoo-border);
+    border-radius: var(--qwoo-radius);
+    box-shadow: var(--qwoo-shadow);
+    padding: 24px 28px;
+}
+
+.qwoo-card__head {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--qwoo-border);
+}
+
+.qwoo-card__icon {
+    font-size: 22px;
+    line-height: 1;
+    margin-top: 2px;
+}
+
+.qwoo-card__head h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--qwoo-primary);
+}
+
+.qwoo-card__head p {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--qwoo-muted);
+}
+
+/* ── Fields ── */
+.qwoo-field {
+    margin-bottom: 18px;
+}
+
+.qwoo-field:last-child {
+    margin-bottom: 0;
+}
+
+.qwoo-field > label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--qwoo-text);
+    margin-bottom: 6px;
+}
+
+.qwoo-hint {
+    display: block;
+    font-size: 11.5px;
+    color: var(--qwoo-muted);
+    margin-top: 5px;
+}
+
+/* ── Inputs ── */
+.qwoo-input {
+    width: 100%;
+    max-width: 480px;
+    padding: 9px 12px;
+    border: 1px solid var(--qwoo-border);
+    border-radius: 8px;
+    font-size: 13.5px;
+    color: var(--qwoo-text);
+    background: #fafafa;
+    transition: border-color .15s, box-shadow .15s;
+    box-sizing: border-box;
+}
+
+.qwoo-input:focus {
+    outline: none;
+    border-color: var(--qwoo-accent);
+    box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+    background: #fff;
+}
+
+.qwoo-input--short {
+    max-width: 120px;
+}
+
+.qwoo-input--masked {
+    max-width: 360px;
+    letter-spacing: 2px;
+    color: var(--qwoo-muted);
+    background: #f8f8f8;
+    cursor: default;
+}
+
+.qwoo-input--key {
+    max-width: 420px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12.5px;
+}
+
+/* ── Toggle ── */
+.qwoo-toggle-label {
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-weight: 500 !important;
+    margin-bottom: 0 !important;
+}
+
+.qwoo-toggle-label input[type="checkbox"] {
+    display: none;
+}
+
+.qwoo-toggle {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    background: #cbd5e1;
+    border-radius: 11px;
+    transition: background .2s;
+    flex-shrink: 0;
+}
+
+.qwoo-toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+
+.qwoo-toggle-label input:checked + .qwoo-toggle {
+    background: var(--qwoo-accent);
+}
+
+.qwoo-toggle-label input:checked + .qwoo-toggle::after {
+    transform: translateX(18px);
+}
+
+/* ── Masked key row ── */
+.qwoo-masked-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* ── Config note ── */
+.qwoo-config-note {
+    padding: 9px 14px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 7px;
+    font-size: 12.5px;
+    color: #166534;
+    max-width: 480px;
+}
+
+.qwoo-config-note code {
+    background: rgba(0,0,0,.06);
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+/* ── Badges ── */
+.qwoo-badge {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 20px;
+    letter-spacing: .3px;
+    text-transform: uppercase;
+}
+
+.qwoo-badge--set {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.qwoo-badge--unset {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.qwoo-badge--config {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+/* ── Buttons ── */
+.qwoo-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 20px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+    border: none;
+}
+
+.qwoo-btn--primary {
+    background: var(--qwoo-accent);
+    color: #fff;
+}
+
+.qwoo-btn--primary:hover {
+    background: var(--qwoo-accent-h);
+}
+
+.qwoo-btn--primary:active {
+    transform: scale(.98);
+}
+
+.qwoo-btn--ghost {
+    background: transparent;
+    color: var(--qwoo-danger);
+    border: 1px solid #fecaca;
+    padding: 7px 14px;
+    font-size: 12.5px;
+}
+
+.qwoo-btn--ghost:hover {
+    background: #fff1f1;
+}
+
+/* ── Notice ── */
+.qwoo-notice {
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 500;
+    margin-bottom: 20px;
+}
+
+.qwoo-notice--success {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    color: #166534;
+}
+
+.qwoo-notice--error {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+}
+
+/* ── Footer ── */
+.qwoo-tech-footer {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--qwoo-border);
+}
+
+/* ── Utilities ── */
+.qwoo-hidden {
+    display: none !important;
+}
