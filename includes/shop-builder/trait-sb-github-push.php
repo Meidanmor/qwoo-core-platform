@@ -84,6 +84,21 @@ trait SB_Github_Push {
             wp_send_json_error( 'Unauthorized' );
         }
 
+        $result = $this->push_all_pages();
+        if ( isset( $result['error'] ) ) {
+            wp_send_json_error( $result['error'] );
+        }
+        wp_send_json_success( $result );
+    }
+
+    /**
+     * Pushes every page's settings (and their images) to the content repo in
+     * one commit. Used by the "Push to Live Website" button and by the
+     * platform after it applies a new store's branding.
+     *
+     * @return array [ 'summary', 'updated_labels', 'skipped_labels', 'failed_labels' ] or [ 'error' => message ].
+     */
+    public function push_all_pages() {
         $options       = get_option( 'shop_builder_options', [] );
         $allowed_pages = self::publishable_pages();
 
@@ -108,16 +123,14 @@ trait SB_Github_Push {
         }
 
         if ( ! $has_any_page_data ) {
-            wp_send_json_error( 'Nothing to push yet — click Save Draft first, then try again.' );
+            return [ 'error' => 'Nothing to push yet — click Save Draft first, then try again.' ];
         }
 
         $batch = aps_github_start_batch();
 
         if ( ! $batch ) {
-            wp_send_json_error(
-                    'Failed to push to GitHub: could not reach the repository. '
-                    . 'Double-check the GitHub Owner/Repo/Token in Technical Settings.'
-            );
+            return [ 'error' => 'Failed to push to GitHub: could not reach the repository. '
+                    . 'Double-check the GitHub Owner/Repo/Token in Technical Settings.' ];
         }
 
         // Maps a staged path back to the human label it belongs to, so the
@@ -208,10 +221,8 @@ trait SB_Github_Push {
         }
 
         if ( ! empty( $batch['failed'] ) ) {
-            wp_send_json_error(
-                    'Failed to push to GitHub: could not upload ' . implode( ', ', $batch['failed'] )
-                    . '. Check the PHP error log for details.'
-            );
+            return [ 'error' => 'Failed to push to GitHub: could not upload ' . implode( ', ', $batch['failed'] )
+                    . '. Check the PHP error log for details.' ];
         }
 
         // Only clean up once every page staged successfully, so a partial
@@ -221,10 +232,8 @@ trait SB_Github_Push {
         $result = aps_github_finish_batch( $batch, 'Update shop config from WP' );
 
         if ( $result === false ) {
-            wp_send_json_error(
-                    'Failed to push to GitHub — the commit could not be created. '
-                    . 'Check the PHP error log for details.'
-            );
+            return [ 'error' => 'Failed to push to GitHub — the commit could not be created. '
+                    . 'Check the PHP error log for details.' ];
         }
 
         $to_labels = function ( $paths ) use ( $path_to_label ) {
@@ -244,19 +253,19 @@ trait SB_Github_Push {
         self::mark_revision_pushed();
 
         if ( $result === 'no_changes' || ( empty( $updated_labels ) && empty( $skipped_labels ) ) ) {
-            wp_send_json_success( [
+            return [
                     'summary'        => 'Nothing changed — everything already up to date on GitHub.',
                     'updated_labels' => [],
                     'skipped_labels' => $skipped_labels,
                     'failed_labels'  => [],
-            ] );
+            ];
         }
 
-        wp_send_json_success( [
+        return [
                 'summary'        => 'Updated: ' . count( $updated_labels ) . ', Skipped (no changes): ' . count( $skipped_labels ),
                 'updated_labels' => $updated_labels,
                 'skipped_labels' => $skipped_labels,
                 'failed_labels'  => [],
-        ] );
+        ];
     }
 }

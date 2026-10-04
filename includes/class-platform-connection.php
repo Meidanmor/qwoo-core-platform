@@ -17,7 +17,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *     of a token saved in Technical Settings;
  *   - pushes to the content repo redeploy the storefront through a
  *     webhook the platform added to that repo (nothing to do here);
- *   - the platform can run the starter-template import (REST route below).
+ *   - the platform can run the starter-template import and apply the
+ *     owner's branding (REST routes below).
  *
  * Stores without it (like the original Aura site) keep using the GitHub
  * settings from Technical Settings, unchanged.
@@ -154,6 +155,11 @@ class Qwoo_Platform_Connection {
             'callback'            => [ __CLASS__, 'rest_import_template' ],
             'permission_callback' => [ __CLASS__, 'rest_authorized' ],
         ] );
+        register_rest_route( 'qwoo/v1', '/platform/apply-branding', [
+            'methods'             => 'POST',
+            'callback'            => [ __CLASS__, 'rest_apply_branding' ],
+            'permission_callback' => [ __CLASS__, 'rest_authorized' ],
+        ] );
     }
 
     public static function rest_authorized( WP_REST_Request $request ) {
@@ -164,6 +170,15 @@ class Qwoo_Platform_Connection {
 
     public static function rest_import_template() {
         $result = Shop_Settings_Builder::import_template_step();
+        if ( ! empty( $result['error'] ) ) {
+            return new WP_REST_Response( $result, 500 );
+        }
+        return rest_ensure_response( $result );
+    }
+
+    /** The owner's colors, logo and icon from the platform's signup (JSON body). */
+    public static function rest_apply_branding( WP_REST_Request $request ) {
+        $result = Shop_Settings_Builder::apply_platform_branding( (array) $request->get_json_params() );
         if ( ! empty( $result['error'] ) ) {
             return new WP_REST_Response( $result, 500 );
         }

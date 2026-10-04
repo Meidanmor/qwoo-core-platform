@@ -116,6 +116,101 @@ trait SB_Template_Import {
         return [ 'done' => true ] + $summary;
     }
 
+    /* ---------------- the owner's branding (platform signup) ---------------- */
+
+    private static $branding_option = 'qwoo_platform_branding';
+
+    /**
+     * Applies what the owner chose when signing up, after the template
+     * import: colors, logo and app icon (Branding tab), and the store name
+     * and colors (PWA tab). Then pushes every page to the content repo, which
+     * redeploys the storefront, and regenerates the app icons from the new
+     * icon. Runs once; later calls answer done.
+     *
+     * @param array $input [
+     *   'name'   => store name,
+     *   'colors' => [ 'primary' => '#hex', 'secondary' => ..., 'accent' => ..., 'text' => ... ] (any subset),
+     *   'logo'   => [ 'name' => file name, 'data' => base64 ] (optional),
+     *   'icon'   => [ 'name' => file name, 'data' => base64 ] (optional, square PNG/JPG/WebP),
+     * ]
+     * @return array [ 'done' => true, 'warnings' => [...] ] or [ 'error' => message ].
+     */
+    public static function apply_platform_branding( array $input ) {
+        $state = get_option( self::$branding_option, [] );
+        $state = is_array( $state ) ? $state : [];
+        if ( ! empty( $state['done'] ) ) {
+            return [ 'done' => true, 'warnings' => (array) ( $state['warnings'] ?? [] ) ];
+        }
+        $gh = Qwoo_Platform_Connection::github_settings();
+        if ( ! $gh ) {
+            return [ 'error' => 'No access to the content repository.' ];
+        }
+
+        $options  = (array) get_option( 'shop_builder_options', [] );
+        $branding = (array) ( $options['branding'] ?? [] );
+        $pwa      = (array) ( $options['pwa'] ?? [] );
+        $warnings = [];
+
+        // 1. Files (kept in the state, so a retry doesn't upload them twice).
+        foreach ( [ 'logo' => 'logo_id', 'icon' => 'app_icon_id' ] as $key => $field ) {
+            if ( empty( $input[ $key ]['data'] ) ) continue;
+            if ( empty( $state[ $field ] ) ) {
+                $bytes = base64_decode( (string) $input[ $key ]['data'], true );
+                $name  = sanitize_file_name( (string) ( $input[ $key ]['name'] ?? $key ) );
+                $id    = $bytes ? self::template_import_media( $gh, [ 'bytes' => $bytes, 'name' => $name ] ) : 'empty file';
+                if ( ! is_int( $id ) ) {
+                    $warnings[] = "The {$key} could not be added: {$id}";
+                    continue;
+                }
+                $state[ $field ] = $id;
+                update_option( self::$branding_option, $state, false );
+            }
+            $branding[ $field ] = $state[ $field ];
+        }
+
+        // 2. Colors and the app's name.
+        $colors = (array) ( $branding['global_colors'] ?? [] );
+        foreach ( (array) ( $input['colors'] ?? [] ) as $key => $value ) {
+            if ( isset( self::GLOBAL_COLOR_KEYS[ $key ] ) && sanitize_hex_color( $value ) ) {
+                $colors[ $key ] = $value;
+            }
+        }
+        $branding['global_colors'] = $colors;
+
+        $name = trim( (string) ( $input['name'] ?? '' ) );
+        if ( $name !== '' ) {
+            $pwa['name']       = $name;
+            $pwa['short_name'] = mb_substr( $name, 0, 12 );
+        }
+        if ( ! empty( $input['colors']['primary'] ) && sanitize_hex_color( $input['colors']['primary'] ) ) {
+            $pwa['theme_color'] = $input['colors']['primary'];
+        }
+        $pwa['background_color'] = $pwa['background_color'] ?? '#ffffff';
+
+        $clean = self::instance()->sanitize_options( [ 'branding' => $branding, 'pwa' => $pwa ] );
+        $final = array_merge( $options, $clean );
+        update_option( 'shop_builder_options', $final );
+        self::record_revision( $final );
+
+        // 3. Live: push every page, then the app icons.
+        $push = self::instance()->push_all_pages();
+        if ( isset( $push['error'] ) ) {
+            return [ 'error' => $push['error'] ];
+        }
+        if ( ! empty( $final['branding']['app_icon_id'] ) ) {
+            require_once __DIR__ . '/../class-icon-generator.php';
+            $icons = Qwoo_Icon_Generator::generate_from_attachment( (int) $final['branding']['app_icon_id'] );
+            if ( is_wp_error( $icons ) ) {
+                $warnings[] = 'App icons: ' . $icons->get_error_message();
+            } elseif ( Qwoo_Icon_Generator::sync_to_github( $icons['files'] ) === false ) {
+                $warnings[] = 'App icons could not be pushed.';
+            }
+        }
+
+        update_option( self::$branding_option, [ 'done' => true, 'warnings' => $warnings ], false );
+        return [ 'done' => true, 'warnings' => $warnings ];
+    }
+
     /* ---------------- images in the template ---------------- */
 
     /**
@@ -189,7 +284,8 @@ trait SB_Template_Import {
     }
 
     /**
-     * Adds one file to the Media Library.
+     * Adds one file to the Media Library. $source is a repo file, a URL, or
+     * [ 'bytes' => file contents, 'name' => file name ].
      *
      * @return int|string Attachment id, or a reason it failed.
      */
@@ -199,7 +295,10 @@ trait SB_Template_Import {
         require_once ABSPATH . 'wp-admin/includes/image.php';
 
         $name = $source['name'];
-        if ( isset( $source['repo'] ) ) {
+        if ( isset( $source['bytes'] ) ) {
+            $tmp = wp_tempnam( $name );
+            file_put_contents( $tmp, $source['bytes'] );
+        } elseif ( isset( $source['repo'] ) ) {
             $bytes = self::template_repo_file( $gh, $source['repo'] );
             if ( ! is_string( $bytes ) || $bytes === '' ) {
                 return "{$source['repo']}: not found in the content repository";
