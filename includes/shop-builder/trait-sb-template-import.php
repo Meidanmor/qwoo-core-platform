@@ -313,9 +313,14 @@ trait SB_Template_Import {
         }
 
         $is_svg = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) ) === 'svg';
-        if ( $is_svg && ! self::svg_is_safe( (string) file_get_contents( $tmp ) ) ) {
-            @unlink( $tmp );
-            return "{$name}: SVG contains scripts or event handlers";
+        if ( $is_svg ) {
+            // Rebuilt from a whitelist: only the safe parts of the file are kept.
+            $clean = Qwoo_Svg_Sanitizer::sanitize( (string) file_get_contents( $tmp ) );
+            if ( $clean === null ) {
+                @unlink( $tmp );
+                return "{$name}: not a usable SVG file";
+            }
+            file_put_contents( $tmp, $clean );
         }
 
         // WordPress blocks SVG uploads by default; allow them for this file only.
@@ -339,12 +344,6 @@ trait SB_Template_Import {
             return "{$name}: " . $id->get_error_message();
         }
         return (int) $id;
-    }
-
-    /** Rejects SVGs that could run code (scripts, event handlers, javascript: links). */
-    private static function svg_is_safe( $svg ) {
-        return $svg !== ''
-            && ! preg_match( '/<\s*script|<\s*foreignObject|\bon[a-z]+\s*=|javascript\s*:|<\s*iframe|<\s*embed|<\s*object/i', $svg );
     }
 
     /**
