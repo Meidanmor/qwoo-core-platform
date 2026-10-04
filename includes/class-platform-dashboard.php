@@ -42,8 +42,21 @@ class Qwoo_Platform_Dashboard {
 
     /** action => method. Anything else is refused. */
     const ACTIONS = [
-        'overview' => 'action_overview',
+        'overview'        => 'action_overview',
+        'products_list'   => 'action_products_list',
+        'product_get'     => 'action_product_get',
+        'product_save'    => 'action_product_save',
+        'product_delete'  => 'action_product_delete',
+        'categories_list' => 'action_categories_list',
+        'category_create' => 'action_category_create',
+        'image_upload'    => 'action_image_upload',
     ];
+
+    /** Product statuses the dashboard shows and sets. */
+    const PRODUCT_STATUSES = [ 'publish', 'draft' ];
+    const MAX_GALLERY      = 12;
+    const MAX_IMAGE_BYTES  = 8388608; // 8 MB
+    const MAX_IMAGE_SIDE   = 2400;
 
     public static function init() {
         add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
@@ -291,6 +304,318 @@ class Qwoo_Platform_Dashboard {
             ],
             'recent'   => $recent,
         ];
+    }
+
+    /* ---------------- products ---------------- */
+
+    /** A page of products (20), newest first: { items, total, pages, page }. */
+    private static function action_products_list( array $params ) {
+        $page   = max( 1, min( 1000, (int) ( $params['page'] ?? 1 ) ) );
+        $search = mb_substr( sanitize_text_field( (string) ( $params['search'] ?? '' ) ), 0, 100 );
+        $filter = (string) ( $params['filter'] ?? '' );
+
+        $args = [
+            'post_type'      => 'product',
+            'post_status'    => in_array( $filter, self::PRODUCT_STATUSES, true ) ? $filter : [ 'publish', 'draft', 'pending', 'private' ],
+            'posts_per_page' => 20,
+            'paged'          => $page,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+            'fields'         => 'ids',
+        ];
+        if ( $search !== '' ) {
+            $args['s'] = $search;
+        }
+        if ( $filter === 'outofstock' ) {
+            $args['meta_query'] = [ [ 'key' => '_stock_status', 'value' => 'outofstock' ] ];
+        }
+        $query = new WP_Query( $args );
+        $items = [];
+        foreach ( $query->posts as $id ) {
+            $product = wc_get_product( $id );
+            if ( $product ) {
+                $items[] = self::product_summary( $product );
+            }
+        }
+        return [
+            'items'    => $items,
+            'total'    => (int) $query->found_posts,
+            'pages'    => (int) $query->max_num_pages,
+            'page'     => $page,
+            'currency' => get_woocommerce_currency(),
+        ];
+    }
+
+    private static function action_product_get( array $params ) {
+        $product = self::find_product( $params['id'] ?? 0 );
+        return is_wp_error( $product ) ? $product : self::product_full( $product );
+    }
+
+    /**
+     * Creates (no id) or updates a simple product from params.fields:
+     * name, status, regular_price, sale_price, sku, manage_stock,
+     * stock_quantity, stock_status, description (plain text; left alone
+     * when missing), category_ids, image_ids (the first is the main photo).
+     */
+    private static function action_product_save( array $params ) {
+        $id = absint( $params['id'] ?? 0 );
+        if ( $id ) {
+            $product = self::find_product( $id );
+            if ( is_wp_error( $product ) ) {
+                return $product;
+            }
+            if ( ! $product->is_type( 'simple' ) ) {
+                return self::bad( 'This kind of product can\'t be edited here yet.' );
+            }
+        } else {
+            $product = new WC_Product_Simple();
+        }
+        $f = is_array( $params['fields'] ?? null ) ? $params['fields'] : [];
+
+        $name = trim( sanitize_text_field( (string) ( $f['name'] ?? '' ) ) );
+        if ( $name === '' || mb_strlen( $name ) > 200 ) {
+            return self::bad( 'Give the product a name (up to 200 characters).' );
+        }
+        $status  = in_array( $f['status'] ?? '', self::PRODUCT_STATUSES, true ) ? $f['status'] : 'draft';
+        $regular = self::price( $f['regular_price'] ?? '' );
+        $sale    = self::price( $f['sale_price'] ?? '' );
+        if ( $regular === null || $sale === null ) {
+            return self::bad( 'Prices must be numbers, like 24.90.' );
+        }
+        if ( $status === 'publish' && $regular === '' ) {
+            return self::bad( 'Add a price before publishing the product.' );
+        }
+        if ( $sale !== '' && ( $regular === '' || (float) $sale >= (float) $regular ) ) {
+            return self::bad( 'The sale price must be lower than the regular price.' );
+        }
+
+        $manage   = ! empty( $f['manage_stock'] );
+        $quantity = $manage ? filter_var( $f['stock_quantity'] ?? null, FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => -999999, 'max_range' => 9999999 ] ] ) : null;
+        if ( $manage && $quantity === false ) {
+            return self::bad( 'Stock must be a whole number.' );
+        }
+
+        $sku = wc_clean( (string) ( $f['sku'] ?? '' ) );
+        if ( mb_strlen( $sku ) > 100 ) {
+            return self::bad( 'The SKU can be up to 100 characters.' );
+        }
+        $description = null;
+        if ( array_key_exists( 'description', $f ) ) {
+            $description = (string) $f['description'];
+            if ( mb_strlen( $description ) > 20000 ) {
+                return self::bad( 'The description is too long (20,000 characters at most).' );
+            }
+        }
+
+        $images = array_values( array_unique( array_map( 'absint', (array) ( $f['image_ids'] ?? [] ) ) ) );
+        if ( count( $images ) > self::MAX_GALLERY + 1 ) {
+            return self::bad( 'A product can have up to ' . ( self::MAX_GALLERY + 1 ) . ' photos.' );
+        }
+        foreach ( $images as $image ) {
+            if ( ! $image || ! wp_attachment_is_image( $image ) ) {
+                return self::bad( 'One of the photos is missing. Upload it again.' );
+            }
+        }
+        $categories = array_values( array_unique( array_map( 'absint', (array) ( $f['category_ids'] ?? [] ) ) ) );
+        foreach ( $categories as $category ) {
+            $term = get_term( $category, 'product_cat' );
+            if ( ! $term || is_wp_error( $term ) ) {
+                return self::bad( 'One of the categories doesn\'t exist any more.' );
+            }
+        }
+
+        try {
+            $product->set_name( $name );
+            $product->set_status( $status );
+            $product->set_regular_price( $regular );
+            $product->set_sale_price( $sale );
+            $product->set_sku( $sku ); // throws for an SKU another product has
+            $product->set_manage_stock( $manage );
+            if ( $manage ) {
+                $product->set_stock_quantity( $quantity );
+            } else {
+                $product->set_stock_status( ( $f['stock_status'] ?? '' ) === 'outofstock' ? 'outofstock' : 'instock' );
+            }
+            if ( $description !== null ) {
+                $product->set_description( self::from_text( $description ) );
+            }
+            $product->set_category_ids( $categories );
+            $product->set_image_id( $images[0] ?? 0 );
+            $product->set_gallery_image_ids( array_slice( $images, 1 ) );
+            $product->save();
+        } catch ( WC_Data_Exception $e ) {
+            return self::bad( $e->getMessage() );
+        }
+        return self::product_full( wc_get_product( $product->get_id() ) );
+    }
+
+    /** Moves a product to the trash (restorable from wp-admin for 30 days). */
+    private static function action_product_delete( array $params ) {
+        $product = self::find_product( $params['id'] ?? 0 );
+        if ( is_wp_error( $product ) ) {
+            return $product;
+        }
+        $product->delete( false );
+        return [ 'deleted' => $product->get_id() ];
+    }
+
+    private static function action_categories_list() {
+        $default = (int) get_option( 'default_product_cat' );
+        $terms   = get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => false, 'orderby' => 'name', 'number' => 500 ] );
+        $out     = [];
+        foreach ( is_wp_error( $terms ) ? [] : $terms as $term ) {
+            $out[] = [ 'id' => (int) $term->term_id, 'name' => html_entity_decode( $term->name, ENT_QUOTES ), 'parent' => (int) $term->parent, 'count' => (int) $term->count, 'default' => (int) $term->term_id === $default ];
+        }
+        return [ 'items' => $out ];
+    }
+
+    /** { name } → the new (or existing, same name) category. */
+    private static function action_category_create( array $params ) {
+        $name = trim( sanitize_text_field( (string) ( $params['name'] ?? '' ) ) );
+        if ( $name === '' || mb_strlen( $name ) > 100 ) {
+            return self::bad( 'Give the category a name (up to 100 characters).' );
+        }
+        $existing = term_exists( $name, 'product_cat' );
+        $result   = $existing ?: wp_insert_term( $name, 'product_cat' );
+        if ( is_wp_error( $result ) ) {
+            return self::bad( $result->get_error_message() );
+        }
+        return [ 'id' => (int) $result['term_id'], 'name' => $name, 'parent' => 0, 'count' => 0, 'default' => false ];
+    }
+
+    /**
+     * { name, data (base64) } → a Media Library image { id, url }. The photo
+     * is decoded and saved again (preferably with GD), which turns it upright
+     * and drops everything else in the file: camera data, GPS location,
+     * anything hidden. Large photos are scaled to MAX_IMAGE_SIDE.
+     */
+    private static function action_image_upload( array $params ) {
+        $bytes = base64_decode( (string) ( $params['data'] ?? '' ), true );
+        if ( $bytes === false || $bytes === '' || strlen( $bytes ) > self::MAX_IMAGE_BYTES ) {
+            return self::bad( 'Photos can be up to 8 MB.' );
+        }
+        $info  = @getimagesizefromstring( $bytes );
+        $types = [ IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp' ];
+        if ( ! $info || ! isset( $types[ $info[2] ] ) ) {
+            return self::bad( 'Use a JPG, PNG or WebP photo.' );
+        }
+        if ( $info[0] * $info[1] > 40000000 ) {
+            return self::bad( 'This photo is too large. Use one under 40 megapixels.' );
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        $ext  = $types[ $info[2] ];
+        $base = substr( sanitize_file_name( pathinfo( (string) ( $params['name'] ?? '' ), PATHINFO_FILENAME ) ), 0, 60 ) ?: 'product';
+        $tmp  = wp_tempnam( $base . '.' . $ext );
+        file_put_contents( $tmp, $bytes );
+
+        $gd_only = static fn() => [ 'WP_Image_Editor_GD' ];
+        add_filter( 'wp_image_editors', $gd_only );
+        $editor = wp_get_image_editor( $tmp, [ 'mime_type' => $info['mime'] ] );
+        remove_filter( 'wp_image_editors', $gd_only );
+        if ( is_wp_error( $editor ) ) {
+            $editor = wp_get_image_editor( $tmp ); // no GD (or no WebP in GD): the site's default editor
+        }
+        if ( is_wp_error( $editor ) ) {
+            @unlink( $tmp );
+            return self::bad( 'This photo can\'t be read. Try another one.' );
+        }
+        $editor->maybe_exif_rotate();
+        $editor->resize( self::MAX_IMAGE_SIDE, self::MAX_IMAGE_SIDE, false ); // a WP_Error when it's already smaller: fine
+        $saved = $editor->save( $tmp . '-clean.' . $ext );
+        @unlink( $tmp );
+        if ( is_wp_error( $saved ) ) {
+            return self::bad( 'This photo couldn\'t be saved. Try another one.' );
+        }
+
+        $id = media_handle_sideload( [ 'name' => $base . '.' . $ext, 'tmp_name' => $saved['path'] ], 0 );
+        if ( is_wp_error( $id ) ) {
+            @unlink( $saved['path'] );
+            return self::bad( $id->get_error_message() );
+        }
+        return [ 'id' => (int) $id, 'url' => self::image_url( $id, 'woocommerce_thumbnail' ) ];
+    }
+
+    /* ---------------- product helpers ---------------- */
+
+    private static function find_product( $id ) {
+        $id      = absint( $id );
+        $product = $id && get_post_type( $id ) === 'product' ? wc_get_product( $id ) : null;
+        if ( ! $product || ! in_array( $product->get_status(), [ 'publish', 'draft', 'pending', 'private' ], true ) ) {
+            return self::error( 'qwoo_dashboard_not_found', 'This product doesn\'t exist any more.', 404 );
+        }
+        return $product;
+    }
+
+    private static function product_summary( WC_Product $p ) {
+        return [
+            'id'       => $p->get_id(),
+            'name'     => html_entity_decode( $p->get_name(), ENT_QUOTES ),
+            'status'   => $p->get_status(),
+            'type'     => $p->get_type(),
+            'price'    => (string) $p->get_price(),
+            'regular'  => (string) $p->get_regular_price(),
+            'sale'     => (string) $p->get_sale_price(),
+            'stock'    => $p->get_stock_status(),
+            'quantity' => $p->managing_stock() ? $p->get_stock_quantity() : null,
+            'image'    => self::image_url( $p->get_image_id(), 'woocommerce_thumbnail' ),
+        ];
+    }
+
+    private static function product_full( WC_Product $p ) {
+        $images = [];
+        foreach ( array_merge( [ $p->get_image_id() ], $p->get_gallery_image_ids() ) as $id ) {
+            $url = self::image_url( $id, 'woocommerce_thumbnail' );
+            if ( $url !== '' ) {
+                $images[] = [ 'id' => (int) $id, 'url' => $url ];
+            }
+        }
+        $description = (string) $p->get_description();
+        return self::product_summary( $p ) + [
+            'editable'     => $p->is_type( 'simple' ),
+            'sku'          => $p->get_sku(),
+            'manage_stock' => $p->managing_stock(),
+            'categories'   => array_map( 'intval', $p->get_category_ids() ),
+            'images'       => $images,
+            'description'  => self::to_text( $description ),
+            // Formatting beyond paragraphs (lists, bold…) would be lost if
+            // the owner edits the text here; the app says so.
+            'formatted'    => (bool) preg_match( '/<(?!\/?(p|br)\b)[a-z]/i', $description ),
+            'currency'     => get_woocommerce_currency(),
+            'decimals'     => wc_get_price_decimals(),
+        ];
+    }
+
+    private static function image_url( $id, $size ) {
+        $url = $id ? wp_get_attachment_image_url( (int) $id, $size ) : false;
+        return $url ? (string) $url : '';
+    }
+
+    /** '' stays '', "24.9" → "24.9"; null when it isn't a price. */
+    private static function price( $value ) {
+        $value = trim( (string) $value );
+        if ( $value === '' ) {
+            return '';
+        }
+        return preg_match( '/^\d{1,9}(\.\d{1,4})?$/', $value ) ? wc_format_decimal( $value ) : null;
+    }
+
+    /** The owner edits descriptions as plain text: paragraphs and line breaks. */
+    private static function to_text( $html ) {
+        $text = preg_replace( [ '/<br\s*\/?>/i', '/<\/p>\s*/i' ], [ "\n", "\n\n" ], (string) $html );
+        return trim( html_entity_decode( wp_strip_all_tags( $text, false ), ENT_QUOTES ) );
+    }
+
+    private static function from_text( $text ) {
+        $text = trim( str_replace( "\r\n", "\n", (string) $text ) );
+        return $text === '' ? '' : wpautop( esc_html( $text ) );
+    }
+
+    private static function bad( $message ) {
+        return self::error( 'qwoo_dashboard_invalid', $message, 400 );
     }
 }
 
