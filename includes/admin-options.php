@@ -237,8 +237,6 @@ function aps_github_finish_batch( $batch, $message ) {
         'force' => false,
     ] );
     if ( ! $updated_ref ) return false;
-
-    do_action( 'qwoo_github_pushed' );
     return true;
 }
 
@@ -575,8 +573,6 @@ function aps_commit_to_github($content, $path = null, $message = 'Auto-sync from
     if ($code < 200 || $code >= 300) {
         return false;
     }
-
-    do_action( 'qwoo_github_pushed' );
     return true;
 }
 

@@ -383,8 +383,6 @@ class Qwoo_Icon_Generator {
             'force' => false,
         ] );
         if ( ! $updated_ref ) return false;
-
-        do_action( 'qwoo_github_pushed' );
         return true;
     }
 }

@@ -15,8 +15,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   - publishing gets a short-lived GitHub token from the platform that
  *     only works on this store's content repo (github_settings()), instead
  *     of a token saved in Technical Settings;
- *   - after a successful push, the platform is told to redeploy the
- *     storefront;
+ *   - pushes to the content repo redeploy the storefront through a
+ *     webhook the platform added to that repo (nothing to do here);
  *   - the platform can run the starter-template import (REST route below).
  *
  * Stores without it (like the original Aura site) keep using the GitHub
@@ -34,10 +34,8 @@ class Qwoo_Platform_Connection {
 
     /** @var array|null Token for this request. */
     private static $token = null;
-    private static $notify_scheduled = false;
 
     public static function init() {
-        add_action( 'qwoo_github_pushed', [ __CLASS__, 'on_pushed' ] );
         add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
     }
 
@@ -144,20 +142,6 @@ class Qwoo_Platform_Connection {
         }
         $data = json_decode( (string) wp_remote_retrieve_body( $response ), true );
         return is_array( $data ) ? $data : [];
-    }
-
-    /** After a push: tell the platform once, at the end of the request, to redeploy. */
-    public static function on_pushed() {
-        if ( self::$notify_scheduled || ! self::is_connected() ) {
-            return;
-        }
-        self::$notify_scheduled = true;
-        add_action( 'shutdown', static function () {
-            $c = self::get();
-            if ( $c ) {
-                self::call( $c, 'published', [], 8 );
-            }
-        } );
     }
 
     /* ---------------- REST: called by the platform ---------------- */
