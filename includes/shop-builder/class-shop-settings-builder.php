@@ -19,6 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   trait-sb-github-push.php      "Push to Live Website" GitHub batch commit
  *   trait-sb-history.php          Saved versions (restore) + section templates
  *   trait-sb-template-import.php  Starter-template import from published files (platform stores)
+ *   trait-sb-platform.php         The builder for the platform's owner dashboard (Design section)
  *   trait-sb-admin-fields.php     Builder mount points + data the JS builder needs
  *   trait-sb-admin-page.php       Menu, enqueue, and settings_page_html()
  */
@@ -34,6 +35,7 @@ require_once __DIR__ . '/trait-sb-rest.php';
 require_once __DIR__ . '/trait-sb-github-push.php';
 require_once __DIR__ . '/trait-sb-history.php';
 require_once __DIR__ . '/trait-sb-template-import.php';
+require_once __DIR__ . '/trait-sb-platform.php';
 require_once __DIR__ . '/trait-sb-admin-fields.php';
 require_once __DIR__ . '/trait-sb-admin-page.php';
 
@@ -49,6 +51,7 @@ class Shop_Settings_Builder extends Shop_Builder_Constants {
     use SB_Github_Push;
     use SB_History;
     use SB_Template_Import;
+    use SB_Platform;
     use SB_Admin_Fields;
     use SB_Admin_Page;
 

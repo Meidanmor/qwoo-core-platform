@@ -65,7 +65,20 @@ class Qwoo_Platform_Dashboard {
         'zone_delete'     => 'action_zone_delete',
         'method_save'     => 'action_method_save',
         'method_delete'   => 'action_method_delete',
+        'design_get'      => 'action_design_get',
+        'design_save'     => 'action_design_save',
+        'design_publish'  => 'action_design_publish',
+        'design_search'   => 'action_design_search',
+        'design_media'    => 'action_design_media',
+        'design_versions' => 'action_design_versions',
+        'design_version'  => 'action_design_version',
+        'template_save'   => 'action_template_save',
+        'template_get'    => 'action_template_get',
+        'template_delete' => 'action_template_delete',
+        'video_upload'    => 'action_video_upload',
     ];
+
+    const MAX_VIDEO_BYTES = 20971520; // 20 MB
 
     /** Shipping methods the dashboard can add and edit. */
     const SHIPPING_METHODS = [ 'flat_rate', 'free_shipping', 'local_pickup' ];
@@ -564,7 +577,8 @@ class Qwoo_Platform_Dashboard {
             @unlink( $saved['path'] );
             return self::bad( $id->get_error_message() );
         }
-        return [ 'id' => (int) $id, 'url' => self::image_url( $id, 'woocommerce_thumbnail' ) ];
+        // url: the product-size thumbnail; media: what the Design screen shows and previews.
+        return [ 'id' => (int) $id, 'url' => self::image_url( $id, 'woocommerce_thumbnail' ), 'media' => Shop_Settings_Builder::platform_media_item( $id ) ];
     }
 
     /* ---------------- orders ---------------- */
@@ -694,6 +708,115 @@ class Qwoo_Platform_Dashboard {
             return self::bad( 'The refund didn\'t go through: ' . $refund->get_error_message() );
         }
         return self::order_full( wc_get_order( $order->get_id() ) );
+    }
+
+    /* ---------------- design (the Shop Builder) ---------------- */
+
+    private static function action_design_get() {
+        return Shop_Settings_Builder::platform_design_data();
+    }
+
+    /** { options, pages }: sanitized by the Shop Builder itself, like Save Draft. */
+    private static function action_design_save( array $params ) {
+        $options = is_array( $params['options'] ?? null ) ? $params['options'] : [];
+        $pages   = is_array( $params['pages'] ?? null ) ? $params['pages'] : [];
+        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ) );
+    }
+
+    private static function action_design_publish() {
+        $result = Shop_Settings_Builder::platform_publish();
+        if ( isset( $result['error'] ) ) {
+            $message = wp_strip_all_tags( (string) $result['error'] );
+            // Messages written for wp-admin point at Technical Settings, which owners don't have.
+            if ( stripos( $message, 'Technical Settings' ) !== false ) {
+                $message = "Publishing couldn't reach your store's content. Try again in a minute; if it keeps failing, contact support.";
+            }
+            return self::bad( $message );
+        }
+        return [
+            'summary'  => wp_strip_all_tags( (string) ( $result['summary'] ?? '' ) ),
+            'warnings' => array_map( 'wp_strip_all_tags', array_map( 'strval', (array) ( $result['warnings'] ?? [] ) ) ),
+            'failed'   => array_map( 'strval', (array) ( $result['failed_labels'] ?? [] ) ),
+            'versions' => Shop_Settings_Builder::platform_revisions(),
+        ];
+    }
+
+    /** { kind: products | categories | tags, term }. */
+    private static function action_design_search( array $params ) {
+        $kind = (string) ( $params['kind'] ?? '' );
+        if ( ! in_array( $kind, [ 'products', 'categories', 'tags' ], true ) ) {
+            return self::bad( 'Unknown search.' );
+        }
+        return [ 'items' => Shop_Settings_Builder::platform_search( $kind, $params['term'] ?? '' ) ];
+    }
+
+    /** { kind: image | video, page, search }: the Media Library. */
+    private static function action_design_media( array $params ) {
+        return Shop_Settings_Builder::platform_media( ( $params['kind'] ?? '' ) === 'video' ? 'video' : 'image', (int) ( $params['page'] ?? 1 ), $params['search'] ?? '' );
+    }
+
+    private static function action_design_versions() {
+        return [ 'items' => Shop_Settings_Builder::platform_revisions() ];
+    }
+
+    private static function action_design_version( array $params ) {
+        $id      = (string) ( $params['id'] ?? '' );
+        $version = Shop_Settings_Builder::platform_valid_id( $id ) ? Shop_Settings_Builder::platform_revision( $id ) : null;
+        return $version ?? self::error( 'qwoo_dashboard_not_found', 'That version doesn\'t exist any more.', 404 );
+    }
+
+    /** { name, section }. */
+    private static function action_template_save( array $params ) {
+        $result = Shop_Settings_Builder::platform_template_save( $params['name'] ?? '', is_array( $params['section'] ?? null ) ? self::to_arrays( $params['section'] ) : null );
+        return is_string( $result ) ? self::bad( $result ) : [ 'items' => $result ];
+    }
+
+    private static function action_template_get( array $params ) {
+        $id       = (string) ( $params['id'] ?? '' );
+        $template = Shop_Settings_Builder::platform_valid_id( $id ) ? Shop_Settings_Builder::platform_template( $id ) : null;
+        return $template ?? self::error( 'qwoo_dashboard_not_found', 'That template doesn\'t exist any more.', 404 );
+    }
+
+    private static function action_template_delete( array $params ) {
+        $id = (string) ( $params['id'] ?? '' );
+        if ( ! Shop_Settings_Builder::platform_valid_id( $id ) ) {
+            return self::bad( 'Unknown template.' );
+        }
+        return [ 'items' => Shop_Settings_Builder::platform_template_delete( $id ) ];
+    }
+
+    /** { name, data (base64) }: an MP4 or WebM for video blocks and backgrounds. */
+    private static function action_video_upload( array $params ) {
+        $bytes = base64_decode( (string) ( $params['data'] ?? '' ), true );
+        if ( $bytes === false || $bytes === '' || strlen( $bytes ) > self::MAX_VIDEO_BYTES ) {
+            return self::bad( 'Videos can be up to 20 MB. Compress it and try again.' );
+        }
+        if ( ! class_exists( 'finfo' ) ) {
+            return self::bad( 'Video uploads are not available on this server.' );
+        }
+        $mime  = ( new finfo( FILEINFO_MIME_TYPE ) )->buffer( $bytes );
+        $types = [ 'video/mp4' => 'mp4', 'video/webm' => 'webm' ];
+        if ( ! isset( $types[ $mime ] ) ) {
+            return self::bad( 'Use an MP4 or WebM video.' );
+        }
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        $base = substr( sanitize_file_name( pathinfo( (string) ( $params['name'] ?? '' ), PATHINFO_FILENAME ) ), 0, 60 ) ?: 'video';
+        $tmp  = wp_tempnam( $base . '.' . $types[ $mime ] );
+        file_put_contents( $tmp, $bytes );
+        $id = media_handle_sideload( [ 'name' => $base . '.' . $types[ $mime ], 'tmp_name' => $tmp ], 0 );
+        if ( is_wp_error( $id ) ) {
+            @unlink( $tmp );
+            return self::bad( $id->get_error_message() );
+        }
+        return [ 'id' => (int) $id ] + (array) Shop_Settings_Builder::platform_media_item( $id );
+    }
+
+    /** JSON objects arrive as arrays already; this also turns stdClass leftovers into arrays. */
+    private static function to_arrays( $value ) {
+        return json_decode( wp_json_encode( $value ), true ) ?: [];
     }
 
     /* ---------------- settings ---------------- */

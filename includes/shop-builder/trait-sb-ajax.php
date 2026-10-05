@@ -172,6 +172,15 @@ trait SB_Ajax {
             }
         }
 
+        $this->save_input( $input );
+        wp_send_json_success( 'Draft saved successfully!' );
+    }
+
+    /**
+     * Sanitizes and stores a draft (option groups + page sections), and
+     * records a version. Shared by Save Draft and the platform dashboard.
+     */
+    public function save_input( array $input ) {
         $new_options      = $this->sanitize_options( $input );
         $existing_options = get_option( 'shop_builder_options', [] );
         $updated_options  = array_replace_recursive( is_array( $existing_options ) ? $existing_options : [], $new_options );
@@ -193,7 +202,6 @@ trait SB_Ajax {
 
         update_option( 'shop_builder_options', $updated_options );
         self::record_revision( $updated_options );
-
-        wp_send_json_success( 'Draft saved successfully!' );
+        return $updated_options;
     }
 }
