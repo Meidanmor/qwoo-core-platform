@@ -55,7 +55,20 @@ class Qwoo_Platform_Dashboard {
         'order_status'    => 'action_order_status',
         'order_note'      => 'action_order_note',
         'order_refund'    => 'action_order_refund',
+        'settings_get'    => 'action_settings_get',
+        'settings_save'   => 'action_settings_save',
+        'states'          => 'action_states',
+        'tax_rate_save'   => 'action_tax_rate_save',
+        'tax_rate_delete' => 'action_tax_rate_delete',
+        'shipping_get'    => 'action_shipping_get',
+        'zone_save'       => 'action_zone_save',
+        'zone_delete'     => 'action_zone_delete',
+        'method_save'     => 'action_method_save',
+        'method_delete'   => 'action_method_delete',
     ];
+
+    /** Shipping methods the dashboard can add and edit. */
+    const SHIPPING_METHODS = [ 'flat_rate', 'free_shipping', 'local_pickup' ];
 
     /** Order statuses the owner can move an order to, from each status. */
     const ORDER_MOVES = [
@@ -681,6 +694,428 @@ class Qwoo_Platform_Dashboard {
             return self::bad( 'The refund didn\'t go through: ' . $refund->get_error_message() );
         }
         return self::order_full( wc_get_order( $order->get_id() ) );
+    }
+
+    /* ---------------- settings ---------------- */
+
+    /** Store details, checkout & emails and tax options, plus the lists the forms need. */
+    private static function action_settings_get() {
+        [ $country, $state ] = array_pad( explode( ':', (string) get_option( 'woocommerce_default_country', '' ) ), 2, '' );
+        $new_order = (array) get_option( 'woocommerce_new_order_settings', [] );
+        $currencies = [];
+        foreach ( get_woocommerce_currencies() as $code => $name ) {
+            $currencies[ $code ] = html_entity_decode( $name . ' (' . get_woocommerce_currency_symbol( $code ) . ')', ENT_QUOTES );
+        }
+        return [
+            'store'    => [
+                'name'           => html_entity_decode( get_option( 'blogname' ), ENT_QUOTES ),
+                'email'          => (string) ( $new_order['recipient'] ?? '' ) ?: (string) get_option( 'admin_email' ),
+                'address1'       => (string) get_option( 'woocommerce_store_address' ),
+                'address2'       => (string) get_option( 'woocommerce_store_address_2' ),
+                'city'           => (string) get_option( 'woocommerce_store_city' ),
+                'postcode'       => (string) get_option( 'woocommerce_store_postcode' ),
+                'country'        => $country,
+                'state'          => $state,
+                'currency'       => get_woocommerce_currency(),
+                'weight_unit'    => (string) get_option( 'woocommerce_weight_unit', 'kg' ),
+                'dimension_unit' => (string) get_option( 'woocommerce_dimension_unit', 'cm' ),
+            ],
+            'checkout' => [
+                'guest_checkout'     => get_option( 'woocommerce_enable_guest_checkout' ) === 'yes',
+                'signup_at_checkout' => get_option( 'woocommerce_enable_signup_and_login_from_checkout' ) === 'yes',
+                'signup_on_account'  => get_option( 'woocommerce_enable_myaccount_registration' ) === 'yes',
+                'from_name'          => html_entity_decode( (string) get_option( 'woocommerce_email_from_name' ), ENT_QUOTES ),
+                'from_email'         => (string) get_option( 'woocommerce_email_from_address' ),
+            ],
+            'taxes'    => [
+                'enabled'            => wc_tax_enabled(),
+                'prices_include_tax' => wc_prices_include_tax(),
+                'based_on'           => (string) get_option( 'woocommerce_tax_based_on', 'shipping' ),
+                'rates'              => self::tax_rates(),
+            ],
+            'lists'    => [
+                'countries'       => array_map( static fn( $n ) => html_entity_decode( $n, ENT_QUOTES ), WC()->countries->get_countries() ),
+                'states'          => self::states_of( $country ),
+                'currencies'      => $currencies,
+                'weight_units'    => [ 'kg', 'g', 'lbs', 'oz' ],
+                'dimension_units' => [ 'm', 'cm', 'mm', 'in', 'yd' ],
+            ],
+        ];
+    }
+
+    /** { section: store | checkout | taxes, values }. */
+    private static function action_settings_save( array $params ) {
+        $v = is_array( $params['values'] ?? null ) ? $params['values'] : [];
+        $text = static fn( $key, $max = 200 ) => mb_substr( trim( sanitize_text_field( (string) ( $v[ $key ] ?? '' ) ) ), 0, $max );
+        $yes  = static fn( $key ) => ! empty( $v[ $key ] ) ? 'yes' : 'no';
+
+        switch ( $params['section'] ?? '' ) {
+            case 'store':
+                $name    = $text( 'name', 100 );
+                $email   = sanitize_email( (string) ( $v['email'] ?? '' ) );
+                $country = strtoupper( $text( 'country', 2 ) );
+                $state   = strtoupper( $text( 'state', 10 ) );
+                if ( $name === '' ) {
+                    return self::bad( 'Enter your business name.' );
+                }
+                if ( ! is_email( $email ) ) {
+                    return self::bad( 'Enter a valid email for new-order notifications.' );
+                }
+                if ( ! isset( WC()->countries->get_countries()[ $country ] ) ) {
+                    return self::bad( 'Choose your country.' );
+                }
+                if ( ! isset( get_woocommerce_currencies()[ strtoupper( $text( 'currency', 3 ) ) ] ) ) {
+                    return self::bad( 'Choose a currency from the list.' );
+                }
+                $states = self::states_of( $country );
+                if ( $states && ! isset( $states[ $state ] ) ) {
+                    return self::bad( 'Choose your state or region.' );
+                }
+                $saved = self::wc_settings( [
+                    'general'         => [
+                        'woocommerce_store_address'   => $text( 'address1' ),
+                        'woocommerce_store_address_2' => $text( 'address2' ),
+                        'woocommerce_store_city'      => $text( 'city', 100 ),
+                        'woocommerce_store_postcode'  => $text( 'postcode', 20 ),
+                        'woocommerce_default_country' => $states ? "$country:$state" : $country,
+                        'woocommerce_currency'        => strtoupper( $text( 'currency', 3 ) ),
+                    ],
+                    'products'        => [
+                        'woocommerce_weight_unit'    => $text( 'weight_unit', 5 ),
+                        'woocommerce_dimension_unit' => $text( 'dimension_unit', 5 ),
+                    ],
+                    'email_new_order' => [ 'recipient' => $email ],
+                ] );
+                if ( is_wp_error( $saved ) ) {
+                    return $saved;
+                }
+                update_option( 'blogname', $name );
+                break;
+
+            case 'checkout':
+                $from = sanitize_email( (string) ( $v['from_email'] ?? '' ) );
+                if ( ! is_email( $from ) ) {
+                    return self::bad( 'Enter a valid sender email.' );
+                }
+                if ( $text( 'from_name', 100 ) === '' ) {
+                    return self::bad( 'Enter the sender name for customer emails.' );
+                }
+                $saved = self::wc_settings( [
+                    'account' => [
+                        'woocommerce_enable_guest_checkout'                 => $yes( 'guest_checkout' ),
+                        'woocommerce_enable_signup_and_login_from_checkout' => $yes( 'signup_at_checkout' ),
+                        'woocommerce_enable_myaccount_registration'         => $yes( 'signup_on_account' ),
+                    ],
+                    'email'   => [
+                        'woocommerce_email_from_name'    => $text( 'from_name', 100 ),
+                        'woocommerce_email_from_address' => $from,
+                    ],
+                ] );
+                if ( is_wp_error( $saved ) ) {
+                    return $saved;
+                }
+                break;
+
+            case 'taxes':
+                $saved = self::wc_settings( [ 'general' => [ 'woocommerce_calc_taxes' => $yes( 'enabled' ) ] ] );
+                if ( is_wp_error( $saved ) ) {
+                    return $saved;
+                }
+                // WooCommerce only offers its "tax" settings group while taxes are on, so these
+                // two (checked here: yes/no and a fixed list) are saved directly.
+                update_option( 'woocommerce_prices_include_tax', $yes( 'prices_include_tax' ) );
+                update_option( 'woocommerce_tax_based_on', in_array( $v['based_on'] ?? '', [ 'shipping', 'billing', 'base' ], true ) ? $v['based_on'] : 'shipping' );
+                break;
+
+            default:
+                return self::bad( 'Unknown settings section.' );
+        }
+        return self::action_settings_get();
+    }
+
+    private static function action_states( array $params ) {
+        return [ 'states' => self::states_of( strtoupper( substr( (string) ( $params['country'] ?? '' ), 0, 2 ) ) ) ];
+    }
+
+    /** { id?, country, state, rate, name, shipping } in the standard tax class. */
+    private static function action_tax_rate_save( array $params ) {
+        $country = strtoupper( substr( sanitize_text_field( (string) ( $params['country'] ?? '' ) ), 0, 2 ) );
+        $state   = strtoupper( substr( sanitize_text_field( (string) ( $params['state'] ?? '' ) ), 0, 10 ) );
+        $rate    = trim( (string) ( $params['rate'] ?? '' ) );
+        if ( $country !== '' && ! isset( WC()->countries->get_countries()[ $country ] ) ) {
+            return self::bad( 'Choose a country (or "Everywhere").' );
+        }
+        if ( ! preg_match( '/^\d{1,3}(\.\d{1,4})?$/', $rate ) || (float) $rate > 100 ) {
+            return self::bad( 'The rate must be a percentage between 0 and 100, like 17 or 7.5.' );
+        }
+        $body = [
+            'country'  => $country,
+            'state'    => $state,
+            'rate'     => $rate,
+            'name'     => mb_substr( trim( sanitize_text_field( (string) ( $params['name'] ?? '' ) ) ), 0, 50 ) ?: 'Tax',
+            'shipping' => ! empty( $params['shipping'] ),
+            'class'    => 'standard',
+        ];
+        $id     = absint( $params['id'] ?? 0 );
+        $result = $id ? self::wc_rest( 'PUT', "/wc/v3/taxes/$id", $body ) : self::wc_rest( 'POST', '/wc/v3/taxes', $body );
+        return is_wp_error( $result ) ? $result : [ 'rates' => self::tax_rates() ];
+    }
+
+    private static function action_tax_rate_delete( array $params ) {
+        $id     = absint( $params['id'] ?? 0 );
+        $result = $id ? self::wc_rest( 'DELETE', "/wc/v3/taxes/$id", [ 'force' => true ] ) : self::bad( 'Unknown tax rate.' );
+        return is_wp_error( $result ) ? $result : [ 'rates' => self::tax_rates() ];
+    }
+
+    /* ---------------- shipping ---------------- */
+
+    /** Zones (in order, "everywhere else" last) with their countries and methods. */
+    private static function action_shipping_get() {
+        $zones = [];
+        foreach ( array_merge( array_column( WC_Shipping_Zones::get_zones(), 'id' ), [ 0 ] ) as $zone_id ) {
+            $zone      = new WC_Shipping_Zone( (int) $zone_id );
+            $countries = [];
+            $other     = 0;
+            foreach ( $zone->get_zone_locations() as $location ) {
+                if ( $location->type === 'country' ) {
+                    $countries[] = $location->code;
+                } else {
+                    $other++; // states, postcodes, continents: kept as they are
+                }
+            }
+            $methods = [];
+            foreach ( $zone->get_shipping_methods( false ) as $method ) {
+                $methods[] = [
+                    'instance_id' => (int) $method->instance_id,
+                    'method_id'   => $method->id,
+                    'title'       => html_entity_decode( (string) $method->get_title(), ENT_QUOTES ),
+                    'enabled'     => $method->is_enabled(),
+                    'cost'        => (string) $method->get_instance_option( 'cost', '' ),
+                    'min_amount'  => (string) $method->get_instance_option( 'min_amount', '' ),
+                    'requires'    => (string) $method->get_instance_option( 'requires', '' ),
+                    'editable'    => in_array( $method->id, self::SHIPPING_METHODS, true ),
+                ];
+            }
+            $zones[] = [
+                'id'        => $zone->get_id(),
+                'name'      => $zone->get_id() ? html_entity_decode( $zone->get_zone_name(), ENT_QUOTES ) : 'Everywhere else',
+                'countries' => $countries,
+                'other'     => $other,
+                'methods'   => $methods,
+            ];
+        }
+        return [
+            'zones'     => $zones,
+            'countries' => array_map( static fn( $n ) => html_entity_decode( $n, ENT_QUOTES ), WC()->countries->get_countries() ),
+            'currency'  => get_woocommerce_currency(),
+        ];
+    }
+
+    /** { id?, name, countries[] }. Regions other than whole countries are kept. */
+    private static function action_zone_save( array $params ) {
+        $name = mb_substr( trim( sanitize_text_field( (string) ( $params['name'] ?? '' ) ) ), 0, 100 );
+        if ( $name === '' ) {
+            return self::bad( 'Give the shipping zone a name, like "Domestic".' );
+        }
+        $all       = WC()->countries->get_countries();
+        $countries = array_values( array_unique( array_filter(
+            array_map( static fn( $c ) => strtoupper( substr( (string) $c, 0, 2 ) ), (array) ( $params['countries'] ?? [] ) ),
+            static fn( $c ) => isset( $all[ $c ] )
+        ) ) );
+        if ( ! $countries ) {
+            return self::bad( 'Choose at least one country for this zone.' );
+        }
+        $id = absint( $params['id'] ?? 0 );
+        if ( $id && ! self::zone_exists( $id ) ) {
+            return self::error( 'qwoo_dashboard_not_found', 'This shipping zone doesn\'t exist any more.', 404 );
+        }
+        $zone = new WC_Shipping_Zone( $id ?: null );
+        $zone->set_zone_name( $name );
+        $zone->clear_locations( [ 'country' ] ); // states, postcodes… stay
+        foreach ( $countries as $code ) {
+            $zone->add_location( $code, 'country' );
+        }
+        $zone->save();
+        return self::action_shipping_get();
+    }
+
+    private static function action_zone_delete( array $params ) {
+        $id = absint( $params['id'] ?? 0 );
+        if ( ! $id || ! self::zone_exists( $id ) ) {
+            return self::bad( 'This zone can\'t be deleted.' );
+        }
+        ( new WC_Shipping_Zone( $id ) )->delete();
+        return self::action_shipping_get();
+    }
+
+    /** { zone_id, instance_id?, method_id, title, enabled, cost, min_amount }. */
+    private static function action_method_save( array $params ) {
+        $zone_id = absint( $params['zone_id'] ?? 0 );
+        if ( $zone_id && ! self::zone_exists( $zone_id ) ) {
+            return self::error( 'qwoo_dashboard_not_found', 'This shipping zone doesn\'t exist any more.', 404 );
+        }
+        $zone        = new WC_Shipping_Zone( $zone_id );
+        $instance_id = absint( $params['instance_id'] ?? 0 );
+        if ( $instance_id ) {
+            $method = self::zone_method( $zone, $instance_id );
+            if ( ! $method ) {
+                return self::error( 'qwoo_dashboard_not_found', 'This shipping method doesn\'t exist any more.', 404 );
+            }
+            $type = $method->id;
+        } else {
+            $type = (string) ( $params['method_id'] ?? '' );
+        }
+        if ( ! in_array( $type, self::SHIPPING_METHODS, true ) ) {
+            return self::bad( 'This shipping method can\'t be edited here.' );
+        }
+
+        $settings = [ 'title' => mb_substr( trim( sanitize_text_field( (string) ( $params['title'] ?? '' ) ) ), 0, 100 ) ];
+        if ( $settings['title'] === '' ) {
+            return self::bad( 'Give the method a name customers will see, like "Standard delivery".' );
+        }
+        if ( $type === 'flat_rate' || $type === 'local_pickup' ) {
+            $cost = self::price( $params['cost'] ?? '' );
+            if ( $cost === null ) {
+                return self::bad( 'The cost must be a number, like 25 or 9.90.' );
+            }
+            $settings['cost'] = $cost;
+        }
+        if ( $type === 'free_shipping' ) {
+            $min = self::price( $params['min_amount'] ?? '' );
+            if ( $min === null ) {
+                return self::bad( 'The minimum order must be a number.' );
+            }
+            $settings['requires']   = $min === '' || (float) $min <= 0 ? '' : 'min_amount';
+            $settings['min_amount'] = $min;
+        }
+
+        if ( ! $instance_id ) {
+            $instance_id = $zone->add_shipping_method( $type );
+            if ( ! $instance_id ) {
+                return self::bad( 'The shipping method couldn\'t be added.' );
+            }
+        }
+        $method = self::zone_method( new WC_Shipping_Zone( $zone_id ), $instance_id );
+        $method->init_instance_settings();
+        update_option( $method->get_instance_option_key(), array_merge( (array) $method->instance_settings, $settings ), 'yes' );
+
+        global $wpdb;
+        $enabled = ! array_key_exists( 'enabled', $params ) || ! empty( $params['enabled'] );
+        if ( $wpdb->update( "{$wpdb->prefix}woocommerce_shipping_zone_methods", [ 'is_enabled' => (int) $enabled ], [ 'instance_id' => $instance_id ] ) ) {
+            do_action( 'woocommerce_shipping_zone_method_status_toggled', $instance_id, $type, $zone_id, (int) $enabled );
+        }
+        WC_Cache_Helper::get_transient_version( 'shipping', true );
+        return self::action_shipping_get();
+    }
+
+    private static function action_method_delete( array $params ) {
+        $zone_id     = absint( $params['zone_id'] ?? 0 );
+        $instance_id = absint( $params['instance_id'] ?? 0 );
+        if ( $zone_id && ! self::zone_exists( $zone_id ) ) {
+            return self::bad( 'This shipping zone doesn\'t exist any more.' );
+        }
+        $zone = new WC_Shipping_Zone( $zone_id );
+        if ( ! self::zone_method( $zone, $instance_id ) ) {
+            return self::bad( 'This shipping method doesn\'t exist any more.' );
+        }
+        $zone->delete_shipping_method( $instance_id );
+        return self::action_shipping_get();
+    }
+
+    /* ---------------- settings helpers ---------------- */
+
+    private static function zone_exists( $id ) {
+        foreach ( WC_Shipping_Zones::get_zones() as $zone ) {
+            if ( (int) $zone['id'] === (int) $id ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static function zone_method( WC_Shipping_Zone $zone, $instance_id ) {
+        foreach ( $zone->get_shipping_methods( false ) as $method ) {
+            if ( (int) $method->instance_id === (int) $instance_id ) {
+                return $method;
+            }
+        }
+        return null;
+    }
+
+    private static function states_of( $country ) {
+        $states = $country !== '' ? WC()->countries->get_states( $country ) : [];
+        return is_array( $states ) ? array_map( static fn( $n ) => html_entity_decode( $n, ENT_QUOTES ), $states ) : [];
+    }
+
+    private static function tax_rates() {
+        $rates = [];
+        foreach ( WC_Tax::get_rates_for_tax_class( '' ) as $r ) {
+            $rates[] = [
+                'id'       => (int) $r->tax_rate_id,
+                'country'  => (string) $r->tax_rate_country,
+                'state'    => (string) $r->tax_rate_state,
+                'rate'     => rtrim( rtrim( (string) $r->tax_rate, '0' ), '.' ) ?: '0',
+                'name'     => (string) $r->tax_rate_name,
+                'shipping' => (bool) $r->tax_rate_shipping,
+            ];
+        }
+        return $rates;
+    }
+
+    /**
+     * Saves WooCommerce settings through its own settings API (which checks
+     * each value: known currencies, countries, units…). $groups:
+     * [ group => [ setting id => value ] ].
+     */
+    private static function wc_settings( array $groups ) {
+        foreach ( $groups as $group => $values ) {
+            $update = [];
+            foreach ( $values as $id => $value ) {
+                $update[] = [ 'id' => $id, 'value' => $value ];
+            }
+            $result = self::wc_rest( 'POST', "/wc/v3/settings/$group/batch", [ 'update' => $update ] );
+            if ( is_wp_error( $result ) ) {
+                return $result;
+            }
+            foreach ( (array) ( $result['update'] ?? [] ) as $item ) {
+                if ( ! empty( $item['error'] ) ) {
+                    return self::bad( 'This setting couldn\'t be saved: ' . ( $item['error']['message'] ?? $item['id'] ?? '' ) );
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Calls a WooCommerce REST route inside this request, as the site's
+     * administrator. Only used with the fixed routes in this class: the
+     * dashboard's own checks happen before, WooCommerce's validation here.
+     */
+    private static function wc_rest( $method, $route, array $body = [] ) {
+        $admins = get_users( [ 'role' => 'administrator', 'number' => 1, 'orderby' => 'ID', 'fields' => 'ID' ] );
+        if ( ! $admins ) {
+            return self::error( 'qwoo_dashboard_no_admin', 'This store has no administrator account.', 500 );
+        }
+        $previous = get_current_user_id();
+        wp_set_current_user( (int) $admins[0] );
+        try {
+            $request = new WP_REST_Request( $method, $route );
+            if ( $method === 'GET' || $method === 'DELETE' ) {
+                $request->set_query_params( $body );
+            } else {
+                $request->set_header( 'Content-Type', 'application/json' );
+                $request->set_body( wp_json_encode( $body ) );
+            }
+            $response = rest_do_request( $request );
+        } finally {
+            wp_set_current_user( $previous );
+        }
+        $data = rest_get_server()->response_to_data( $response, false );
+        if ( $response->is_error() ) {
+            $message = is_array( $data ) && ! empty( $data['message'] ) ? wp_strip_all_tags( $data['message'] ) : 'WooCommerce refused this change.';
+            return self::bad( $message );
+        }
+        return $data;
     }
 
     /* ---------------- order helpers ---------------- */
