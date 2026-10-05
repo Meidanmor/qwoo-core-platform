@@ -150,6 +150,24 @@ add_action('woocommerce_store_api_checkout_update_order_meta', function( $order 
  * Modify WooCommerce emails url to frontend url instead of the backend url
  */
 
+/**
+ * The storefront address for an email: the one the order was placed on, or
+ * the store's configured storefront (orders placed through the storefront's
+ * server carry no Origin, so most orders don't remember it).
+ */
+function qwoo_email_frontend_url( $order = null ) {
+    $url = $order instanceof WC_Order ? (string) $order->get_meta( '_qwoo_frontend_url' ) : '';
+    return $url !== '' ? $url : Qwoo_Technical_Settings::get_primary_frontend_domain();
+}
+
+// No "Get the WooCommerce app" note in new-order emails: owners manage orders in the store's dashboard.
+add_action( 'woocommerce_email', function ( $mailer ) {
+    $new_order = $mailer->emails['WC_Email_New_Order'] ?? null;
+    if ( $new_order ) {
+        remove_action( 'woocommerce_email_footer', [ $new_order, 'mobile_messaging' ], 9 );
+    }
+} );
+
 add_action( 'woocommerce_email_header', function ( $email_heading, $email ) {
     global $qwoo_email_order;
 
@@ -171,7 +189,7 @@ add_filter( 'woocommerce_email_header_image_url', function ( $url ) {
 
 
     if ( $qwoo_email_order instanceof WC_Order ) {
-        $frontend_url = $qwoo_email_order->get_meta( '_qwoo_frontend_url' );
+        $frontend_url = qwoo_email_frontend_url( $qwoo_email_order );
 
         if ( $frontend_url ) {
             return $frontend_url;
@@ -192,7 +210,7 @@ add_filter( 'bloginfo', function ( $output, $show ) {
         return $output;
     }
 
-    $frontend_url = $qwoo_email_order->get_meta( '_qwoo_frontend_url' );
+    $frontend_url = qwoo_email_frontend_url( $qwoo_email_order );
 
     if ( ! $frontend_url ) {
         return $output;
@@ -227,7 +245,7 @@ function update_woocommerce_emails_subject_url( $subject, $order ) {
         return $subject;
     }
 
-    $frontend_url = $order->get_meta( '_qwoo_frontend_url' );
+    $frontend_url = qwoo_email_frontend_url( $order );
 
     if ( ! $frontend_url ) {
         return $subject;
@@ -258,11 +276,7 @@ function update_woocommerce_emails_subject_url( $subject, $order ) {
 add_filter( 'woocommerce_email_footer_text', function ( $text ) {
     global $qwoo_email_order;
 
-    if ( ! $qwoo_email_order instanceof WC_Order ) {
-        return $text;
-    }
-
-    $frontend_url = $qwoo_email_order->get_meta( '_qwoo_frontend_url' );
+    $frontend_url = qwoo_email_frontend_url( $qwoo_email_order );
 
     if ( ! $frontend_url ) {
         return $text;

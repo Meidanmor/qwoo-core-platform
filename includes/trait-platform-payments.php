@@ -140,7 +140,9 @@ trait Qwoo_Platform_Payments {
         $type  = ( $params['type'] ?? '' ) === 'app' ? 'app' : 'connect';
         $state = (string) ( $params['state'] ?? '' );
         $code  = (string) ( $params['code'] ?? '' );
-        if ( ! preg_match( '/^[A-Za-z0-9_\-.]{8,512}$/', $state ) || ! preg_match( '/^[A-Za-z0-9_\-.]{8,512}$/', $code ) ) {
+        // Printable, no spaces: they're only compared and passed on to WooCommerce's connect server.
+        if ( ! preg_match( '/^[\x21-\x7e]{4,2048}$/', $state ) || ! preg_match( '/^[\x21-\x7e]{4,2048}$/', $code ) ) {
+            error_log( sprintf( 'qwoo: Stripe connect answer refused (state: %d chars, code: %d chars).', strlen( $state ), strlen( $code ) ) );
             return self::bad( 'The answer from Stripe is incomplete. Try connecting again.' );
         }
         $result = self::as_admin( static fn() => WC_Stripe::get_instance()->connect->connect_oauth( $state, $code, $type, $mode ) );
