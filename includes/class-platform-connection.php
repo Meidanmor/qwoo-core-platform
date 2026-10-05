@@ -18,7 +18,11 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   - pushes to the content repo redeploy the storefront through a
  *     webhook the platform added to that repo (nothing to do here);
  *   - the platform can run the starter-template import and apply the
- *     owner's branding (REST routes below).
+ *     owner's branding (REST routes below);
+ *   - emails are sent by the platform (relay_mail): this site's own mail
+ *     often can't reach inboxes (free hosting subdomains, an owner's Gmail
+ *     address as sender). If the platform can't be reached, WordPress
+ *     sends the email itself as before.
  *
  * Stores without it (like the original Aura site) keep using the GitHub
  * settings from Technical Settings, unchanged.
@@ -38,6 +42,80 @@ class Qwoo_Platform_Connection {
 
     public static function init() {
         add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
+        add_filter( 'pre_wp_mail', [ __CLASS__, 'relay_mail' ], 10, 2 );
+    }
+
+    /**
+     * Hands an email to the platform (POST /stores/{id}/mail). Returns true
+     * when the platform sent it, or null to let WordPress send it itself
+     * (not connected, attachments, the platform unreachable or refusing).
+     */
+    public static function relay_mail( $result, $atts ) {
+        if ( $result !== null || get_option( 'qwoo_platform_mail', 'yes' ) !== 'yes' || ! empty( $atts['attachments'] ) ) {
+            return $result;
+        }
+        $c = self::get();
+        if ( ! $c ) {
+            return null;
+        }
+
+        $mail = [ 'to' => self::addresses( $atts['to'] ?? [] ), 'cc' => [], 'bcc' => [], 'reply_to' => '' ];
+        $type = '';
+        $headers = $atts['headers'] ?? [];
+        foreach ( is_array( $headers ) ? $headers : explode( "\n", str_replace( "\r\n", "\n", (string) $headers ) ) as $line ) {
+            if ( strpos( (string) $line, ':' ) === false ) {
+                continue;
+            }
+            [ $name, $value ] = array_map( 'trim', explode( ':', (string) $line, 2 ) );
+            switch ( strtolower( $name ) ) {
+                case 'content-type':
+                    $type = strtolower( trim( explode( ';', $value )[0] ) );
+                    break;
+                case 'cc':
+                case 'bcc':
+                    $mail[ strtolower( $name ) ] = array_merge( $mail[ strtolower( $name ) ], self::addresses( $value ) );
+                    break;
+                case 'reply-to':
+                    $mail['reply_to'] = self::addresses( $value )[0] ?? '';
+                    break;
+            }
+        }
+        if ( ! $mail['to'] ) {
+            return null;
+        }
+        // WooCommerce sets the sender and the format with filters while it sends.
+        $type             = $type ?: (string) apply_filters( 'wp_mail_content_type', 'text/plain' );
+        $mail['html']     = $type === 'text/html';
+        $mail['from_name'] = (string) apply_filters( 'wp_mail_from_name', get_bloginfo( 'name' ) );
+        if ( $mail['reply_to'] === '' ) {
+            $from             = (string) apply_filters( 'wp_mail_from', (string) get_option( 'woocommerce_email_from_address', '' ) );
+            $mail['reply_to'] = is_email( $from ) ? $from : '';
+        }
+        $mail['subject'] = (string) ( $atts['subject'] ?? '' );
+        $mail['body']    = (string) ( $atts['message'] ?? '' );
+
+        $sent = self::call( $c, 'mail', $mail, 15 );
+        if ( $sent === null ) {
+            return null; // logged by call(); WordPress tries itself
+        }
+        do_action( 'wp_mail_succeeded', $atts );
+        return true;
+    }
+
+    /** Email addresses from "a@b.c, Name <d@e.f>" or a list of them. */
+    private static function addresses( $value ) {
+        $out = [];
+        foreach ( is_array( $value ) ? $value : explode( ',', (string) $value ) as $part ) {
+            $part = trim( (string) $part );
+            if ( preg_match( '/<([^>]+)>/', $part, $m ) ) {
+                $part = $m[1];
+            }
+            $part = sanitize_email( $part );
+            if ( is_email( $part ) ) {
+                $out[] = $part;
+            }
+        }
+        return $out;
     }
 
     /** The connection with the publish key decrypted, or null when not connected. */
