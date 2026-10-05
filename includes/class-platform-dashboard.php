@@ -86,6 +86,7 @@ class Qwoo_Platform_Dashboard {
         'stripe_keys'           => 'action_stripe_keys',
         'stripe_settings'       => 'action_stripe_settings',
         'stripe_disconnect'     => 'action_stripe_disconnect',
+        'frontend_domain_set'   => 'action_frontend_domain_set',
     ];
 
     const MAX_VIDEO_BYTES = 20971520; // 20 MB
@@ -1680,6 +1681,26 @@ class Qwoo_Platform_Dashboard {
             'notes'        => $notes,
             'refunds'      => $refunds,
         ];
+    }
+
+    /* ---------------- storefront address ---------------- */
+
+    /**
+     * { url }: the storefront's address (the owner's own domain once it's
+     * connected, or back to *.vercel.app). Used for email links, SEO
+     * addresses and the Design preview.
+     */
+    private static function action_frontend_domain_set( array $params ) {
+        $url   = esc_url_raw( (string) ( $params['url'] ?? '' ), [ 'https' ] );
+        $parts = wp_parse_url( $url );
+        if ( ! $url || empty( $parts['host'] ) || ! empty( $parts['path'] ) && $parts['path'] !== '/' || isset( $parts['query'] ) || isset( $parts['user'] ) || isset( $parts['port'] ) ) {
+            return self::bad( 'Invalid storefront address.' );
+        }
+        $settings                    = get_option( 'qwoo_technical_settings', [] );
+        $settings                    = is_array( $settings ) ? $settings : [];
+        $settings['frontend_domain'] = 'https://' . strtolower( $parts['host'] );
+        update_option( 'qwoo_technical_settings', $settings );
+        return [ 'frontend' => $settings['frontend_domain'] ];
     }
 
     /* ---------------- product helpers ---------------- */
