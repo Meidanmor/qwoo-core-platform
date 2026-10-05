@@ -48,6 +48,22 @@ function get_dynamic_seo_meta($request) {
     }
 
     // -----------------------------
+    // Homepage: the store's name and tagline
+    // -----------------------------
+    if ($path === '') {
+        $name = html_entity_decode(get_bloginfo('name'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $tagline = html_entity_decode(get_bloginfo('description'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return [
+            'title'       => $tagline !== '' ? "$name – $tagline" : $name,
+            'description' => $tagline,
+            'canonical'   => $frontend_url ? trailingslashit($frontend_url) : '',
+            'robots'      => qwoo_format_robots(['index' => 'index', 'follow' => 'follow']),
+            'og_image'    => '',
+            'type'        => 'website',
+        ];
+    }
+
+    // -----------------------------
     // Try singular post/page/product
     // -----------------------------
     $post_id = url_to_postid($url);

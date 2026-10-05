@@ -207,7 +207,8 @@ class Qwoo_Icon_Generator {
     }
 
     /**
-     * @param array  $files         Files array from generate_from_attachment().
+     * @param array  $files         Files array from generate_from_attachment(); none
+     *                              removes the icons and favicon.ico.
      * @param string $icon_folder   Repo path for files with 'location' => 'icons'.
      * @param string $public_root   Repo path for files with 'location' => 'root'
      *                              (e.g. favicon.ico, which must sit outside icon_folder).
@@ -298,7 +299,7 @@ class Qwoo_Icon_Generator {
             // either inside the icon folder, or it's one of our known root-level
             // filenames directly under $public_root (e.g. favicon.ico).
             $in_icon_folder = strpos( $entry['path'], $icon_folder . '/' ) === 0;
-            $is_managed_root_file = in_array( $entry['path'], $expected_paths, true )
+            $is_managed_root_file = ( in_array( $entry['path'], $expected_paths, true ) || $entry['path'] === "{$public_root}/favicon.ico" )
                 && strpos( $entry['path'], $public_root . '/' ) === 0
                 && strpos( $entry['path'], $icon_folder . '/' ) !== 0;
 

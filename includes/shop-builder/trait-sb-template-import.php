@@ -197,14 +197,10 @@ trait SB_Template_Import {
         if ( isset( $push['error'] ) ) {
             return [ 'error' => $push['error'] ];
         }
-        if ( ! empty( $final['branding']['app_icon_id'] ) ) {
-            require_once __DIR__ . '/../class-icon-generator.php';
-            $icons = Qwoo_Icon_Generator::generate_from_attachment( (int) $final['branding']['app_icon_id'] );
-            if ( is_wp_error( $icons ) ) {
-                $warnings[] = 'App icons: ' . $icons->get_error_message();
-            } elseif ( Qwoo_Icon_Generator::sync_to_github( $icons['files'] ) === false ) {
-                $warnings[] = 'App icons could not be pushed.';
-            }
+        // The owner's icon (or logo); without either, the template's icons are removed.
+        $icon_warning = self::platform_sync_icons( $final );
+        if ( $icon_warning !== '' ) {
+            $warnings[] = $icon_warning;
         }
 
         update_option( self::$branding_option, [ 'done' => true, 'warnings' => $warnings ], false );

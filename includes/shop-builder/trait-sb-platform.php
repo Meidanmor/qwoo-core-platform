@@ -143,20 +143,40 @@ trait SB_Platform {
             return $result;
         }
 
-        $options = get_option( 'shop_builder_options', [] );
-        $icon    = (int) ( $options['branding']['app_icon_id'] ?? 0 );
-        if ( $icon && (int) get_option( 'qwoo_platform_icons_from' ) !== $icon ) {
-            require_once __DIR__ . '/../class-icon-generator.php';
-            $icons = Qwoo_Icon_Generator::generate_from_attachment( $icon );
-            if ( is_wp_error( $icons ) ) {
-                $result['warnings'][] = 'App icons: ' . $icons->get_error_message();
-            } elseif ( Qwoo_Icon_Generator::sync_to_github( $icons['files'] ) === false ) {
-                $result['warnings'][] = 'The app icons couldn\'t be published. Try again.';
-            } else {
-                update_option( 'qwoo_platform_icons_from', $icon, false );
-            }
+        $warning = self::platform_sync_icons( (array) get_option( 'shop_builder_options', [] ) );
+        if ( $warning !== '' ) {
+            $result['warnings'][] = $warning;
         }
         return $result;
+    }
+
+    /**
+     * The storefront's app icons and favicon: made from the app icon, or the
+     * logo when there's no app icon. With neither, the icons are removed (a
+     * new store's content starts with the template's icons), so the
+     * storefront shows none. Only does work when the source changed.
+     * Returns '' or a warning.
+     */
+    public static function platform_sync_icons( array $options ) {
+        $source = (int) ( $options['branding']['app_icon_id'] ?? 0 ) ?: (int) ( $options['branding']['logo_id'] ?? 0 );
+        $key    = $source ? (string) $source : 'none';
+        if ( (string) get_option( 'qwoo_platform_icons_from', '' ) === $key ) {
+            return '';
+        }
+        require_once __DIR__ . '/../class-icon-generator.php';
+        $files = [];
+        if ( $source ) {
+            $icons = Qwoo_Icon_Generator::generate_from_attachment( $source );
+            if ( is_wp_error( $icons ) ) {
+                return 'App icons: ' . $icons->get_error_message();
+            }
+            $files = $icons['files'];
+        }
+        if ( Qwoo_Icon_Generator::sync_to_github( $files ) === false ) {
+            return 'The app icons couldn\'t be published. Try again.';
+        }
+        update_option( 'qwoo_platform_icons_from', $key, false );
+        return '';
     }
 
     /** Products, categories or tags for the pickers: [ { id, text, thumb } ]. */
