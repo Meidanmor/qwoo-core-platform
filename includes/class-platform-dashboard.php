@@ -1702,6 +1702,10 @@ class Qwoo_Platform_Dashboard {
             'type'         => $p->get_type(),
             'price'        => (string) $p->get_price(),
             'price_max'    => $variable ? (string) $p->get_variation_price( 'max' ) : (string) $p->get_price(),
+            // Before the sale (a range for products with options), when on sale.
+            'on_sale'      => $p->is_on_sale(),
+            'regular_min'  => $variable ? (string) $p->get_variation_regular_price( 'min' ) : (string) $p->get_regular_price(),
+            'regular_max'  => $variable ? (string) $p->get_variation_regular_price( 'max' ) : (string) $p->get_regular_price(),
             'regular'      => (string) $p->get_regular_price(),
             'sale'         => (string) $p->get_sale_price(),
             'stock'        => $p->get_stock_status(),
