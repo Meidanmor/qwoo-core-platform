@@ -33,6 +33,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class Qwoo_Platform_Dashboard {
 
+    use Qwoo_Platform_Payments;
+
     const KEY_OPTION   = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
     const CONTEXT      = 'qwoo-dashboard-v1.';
@@ -76,6 +78,14 @@ class Qwoo_Platform_Dashboard {
         'template_get'    => 'action_template_get',
         'template_delete' => 'action_template_delete',
         'video_upload'    => 'action_video_upload',
+        'payments_get'          => 'action_payments_get',
+        'payment_save'          => 'action_payment_save',
+        'stripe_install'        => 'action_stripe_install',
+        'stripe_connect_start'  => 'action_stripe_connect_start',
+        'stripe_connect_finish' => 'action_stripe_connect_finish',
+        'stripe_keys'           => 'action_stripe_keys',
+        'stripe_settings'       => 'action_stripe_settings',
+        'stripe_disconnect'     => 'action_stripe_disconnect',
     ];
 
     const MAX_VIDEO_BYTES = 20971520; // 20 MB
@@ -96,6 +106,10 @@ class Qwoo_Platform_Dashboard {
     /** Product statuses the dashboard shows and sets. */
     const PRODUCT_STATUSES = [ 'publish', 'draft' ];
     const MAX_GALLERY      = 12;
+    const EDITABLE_TYPES   = [ 'simple', 'variable' ];
+    const MAX_ATTRIBUTES   = 5;   // options per product (Size, Color…)
+    const MAX_OPTIONS      = 40;  // choices per option
+    const MAX_VARIATIONS   = 150; // combinations per product
     const MAX_IMAGE_BYTES  = 8388608; // 8 MB
     const MAX_IMAGE_SIDE   = 2400;
 
@@ -109,6 +123,12 @@ class Qwoo_Platform_Dashboard {
             'methods'             => 'POST',
             'callback'            => [ __CLASS__, 'rest_dashboard' ],
             'permission_callback' => '__return_true', // checked in the callback: the token covers the body
+        ] );
+        // The storefront's checkout (public values only; the proxy secret still applies).
+        register_rest_route( 'qwoo/v1', '/payment-config', [
+            'methods'             => 'GET',
+            'callback'            => [ __CLASS__, 'rest_payment_config' ],
+            'permission_callback' => '__return_true',
         ] );
         register_rest_route( 'qwoo/v1', '/platform/trust-key', [
             'methods'             => 'POST',
@@ -393,49 +413,88 @@ class Qwoo_Platform_Dashboard {
     }
 
     /**
-     * Creates (no id) or updates a simple product from params.fields:
-     * name, status, regular_price, sale_price, sku, manage_stock,
-     * stock_quantity, stock_status, description (plain text; left alone
-     * when missing), category_ids, image_ids (the first is the main photo).
+     * Creates (no id) or updates a product from params.fields:
+     * type (simple | variable), name, status, description (plain text; left
+     * alone when missing), sku, category_ids, image_ids (the first is the
+     * main photo), and for simple products regular_price, sale_price,
+     * manage_stock, stock_quantity, stock_status.
+     *
+     * Products with options (type variable) take attributes and variations
+     * instead of prices and stock (see variable_plan). Everything is checked
+     * before anything changes, so a refused save leaves the product as it was.
      */
     private static function action_product_save( array $params ) {
-        $id = absint( $params['id'] ?? 0 );
+        $f       = is_array( $params['fields'] ?? null ) ? $params['fields'] : [];
+        $type    = ( $f['type'] ?? 'simple' ) === 'variable' ? 'variable' : 'simple';
+        $id      = absint( $params['id'] ?? 0 );
+        $product = null;
         if ( $id ) {
             $product = self::find_product( $id );
             if ( is_wp_error( $product ) ) {
                 return $product;
             }
-            if ( ! $product->is_type( 'simple' ) ) {
+            if ( ! $product->is_type( self::EDITABLE_TYPES ) ) {
                 return self::bad( 'This kind of product can\'t be edited here yet.' );
             }
-        } else {
-            $product = new WC_Product_Simple();
         }
-        $f = is_array( $params['fields'] ?? null ) ? $params['fields'] : [];
 
+        $common = self::common_fields( $f );
+        if ( is_wp_error( $common ) ) {
+            return $common;
+        }
+        if ( $type === 'variable' ) {
+            $plan = self::variable_plan( $product, $f, $common['status'], $common['sku'] );
+            if ( is_wp_error( $plan ) ) {
+                return $plan;
+            }
+        } else {
+            $stock = self::stock_fields( $f );
+            if ( is_wp_error( $stock ) ) {
+                return $stock;
+            }
+            if ( $common['status'] === 'publish' && $stock['regular'] === '' ) {
+                return self::bad( 'Add a price before publishing the product.' );
+            }
+        }
+
+        try {
+            if ( $type === 'variable' ) {
+                if ( ! $product || ! $product->is_type( 'variable' ) ) {
+                    $product = self::change_type( $id, 'variable' );
+                }
+                self::apply_common( $product, $common );
+                $product->set_attributes( self::build_attributes( $plan ) );
+                // Prices and stock are on the combinations.
+                $product->set_regular_price( '' );
+                $product->set_sale_price( '' );
+                $product->set_manage_stock( false );
+                $product->save();
+                self::save_variations( $product, $plan );
+                WC_Product_Variable::sync( $product->get_id() );
+            } else {
+                if ( $product && $product->is_type( 'variable' ) ) {
+                    $product = self::change_type( $id, 'simple' );
+                    $product->set_attributes( [] );
+                } elseif ( ! $product ) {
+                    $product = new WC_Product_Simple();
+                }
+                self::apply_common( $product, $common );
+                self::apply_stock( $product, $stock );
+                $product->save();
+            }
+        } catch ( WC_Data_Exception $e ) {
+            return self::bad( $e->getMessage() );
+        }
+        wc_delete_product_transients( $product->get_id() );
+        return self::product_full( wc_get_product( $product->get_id() ) );
+    }
+
+    /** Name, status, SKU, description, photos and categories: checked, not yet applied. */
+    private static function common_fields( array $f ) {
         $name = trim( sanitize_text_field( (string) ( $f['name'] ?? '' ) ) );
         if ( $name === '' || mb_strlen( $name ) > 200 ) {
             return self::bad( 'Give the product a name (up to 200 characters).' );
         }
-        $status  = in_array( $f['status'] ?? '', self::PRODUCT_STATUSES, true ) ? $f['status'] : 'draft';
-        $regular = self::price( $f['regular_price'] ?? '' );
-        $sale    = self::price( $f['sale_price'] ?? '' );
-        if ( $regular === null || $sale === null ) {
-            return self::bad( 'Prices must be numbers, like 24.90.' );
-        }
-        if ( $status === 'publish' && $regular === '' ) {
-            return self::bad( 'Add a price before publishing the product.' );
-        }
-        if ( $sale !== '' && ( $regular === '' || (float) $sale >= (float) $regular ) ) {
-            return self::bad( 'The sale price must be lower than the regular price.' );
-        }
-
-        $manage   = ! empty( $f['manage_stock'] );
-        $quantity = $manage ? filter_var( $f['stock_quantity'] ?? null, FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => -999999, 'max_range' => 9999999 ] ] ) : null;
-        if ( $manage && $quantity === false ) {
-            return self::bad( 'Stock must be a whole number.' );
-        }
-
         $sku = wc_clean( (string) ( $f['sku'] ?? '' ) );
         if ( mb_strlen( $sku ) > 100 ) {
             return self::bad( 'The SKU can be up to 100 characters.' );
@@ -447,7 +506,6 @@ class Qwoo_Platform_Dashboard {
                 return self::bad( 'The description is too long (20,000 characters at most).' );
             }
         }
-
         $images = array_values( array_unique( array_map( 'absint', (array) ( $f['image_ids'] ?? [] ) ) ) );
         if ( count( $images ) > self::MAX_GALLERY + 1 ) {
             return self::bad( 'A product can have up to ' . ( self::MAX_GALLERY + 1 ) . ' photos.' );
@@ -464,30 +522,322 @@ class Qwoo_Platform_Dashboard {
                 return self::bad( 'One of the categories doesn\'t exist any more.' );
             }
         }
+        return [
+            'name'        => $name,
+            'status'      => in_array( $f['status'] ?? '', self::PRODUCT_STATUSES, true ) ? $f['status'] : 'draft',
+            'sku'         => $sku,
+            'description' => $description,
+            'images'      => $images,
+            'categories'  => $categories,
+        ];
+    }
 
-        try {
-            $product->set_name( $name );
-            $product->set_status( $status );
-            $product->set_regular_price( $regular );
-            $product->set_sale_price( $sale );
-            $product->set_sku( $sku ); // throws for an SKU another product has
-            $product->set_manage_stock( $manage );
-            if ( $manage ) {
-                $product->set_stock_quantity( $quantity );
-            } else {
-                $product->set_stock_status( ( $f['stock_status'] ?? '' ) === 'outofstock' ? 'outofstock' : 'instock' );
-            }
-            if ( $description !== null ) {
-                $product->set_description( self::from_text( $description ) );
-            }
-            $product->set_category_ids( $categories );
-            $product->set_image_id( $images[0] ?? 0 );
-            $product->set_gallery_image_ids( array_slice( $images, 1 ) );
-            $product->save();
-        } catch ( WC_Data_Exception $e ) {
-            return self::bad( $e->getMessage() );
+    private static function apply_common( WC_Product $product, array $c ) {
+        $product->set_name( $c['name'] );
+        $product->set_status( $c['status'] );
+        $product->set_sku( $c['sku'] ); // throws for an SKU another product has
+        if ( $c['description'] !== null ) {
+            $product->set_description( self::from_text( $c['description'] ) );
         }
-        return self::product_full( wc_get_product( $product->get_id() ) );
+        $product->set_category_ids( $c['categories'] );
+        $product->set_image_id( $c['images'][0] ?? 0 );
+        $product->set_gallery_image_ids( array_slice( $c['images'], 1 ) );
+    }
+
+    /**
+     * Prices and stock of a simple product or of one combination:
+     * regular_price, sale_price, manage_stock, stock_quantity, stock_status.
+     * $label names the combination in messages.
+     */
+    private static function stock_fields( array $f, $label = '' ) {
+        $of      = $label === '' ? '' : " ($label)";
+        $regular = self::price( $f['regular_price'] ?? '' );
+        $sale    = self::price( $f['sale_price'] ?? '' );
+        if ( $regular === null || $sale === null ) {
+            return self::bad( "Prices must be numbers, like 24.90$of." );
+        }
+        if ( $sale !== '' && ( $regular === '' || (float) $sale >= (float) $regular ) ) {
+            return self::bad( "The sale price must be lower than the regular price$of." );
+        }
+        $manage   = ! empty( $f['manage_stock'] );
+        $quantity = $manage ? filter_var( $f['stock_quantity'] ?? null, FILTER_VALIDATE_INT, [ 'options' => [ 'min_range' => -999999, 'max_range' => 9999999 ] ] ) : null;
+        if ( $manage && $quantity === false ) {
+            return self::bad( "Stock must be a whole number$of." );
+        }
+        return [
+            'regular'  => $regular,
+            'sale'     => $sale,
+            'manage'   => $manage,
+            'quantity' => $quantity,
+            'status'   => ( $f['stock_status'] ?? '' ) === 'outofstock' ? 'outofstock' : 'instock',
+        ];
+    }
+
+    private static function apply_stock( WC_Product $product, array $s ) {
+        $product->set_regular_price( $s['regular'] );
+        $product->set_sale_price( $s['sale'] );
+        $product->set_manage_stock( $s['manage'] );
+        if ( $s['manage'] ) {
+            $product->set_stock_quantity( $s['quantity'] );
+        } else {
+            $product->set_stock_status( $s['status'] );
+        }
+    }
+
+    /**
+     * Switches an existing product between simple and variable (a new
+     * product just starts as the right class). Going back to simple deletes
+     * the combinations.
+     */
+    private static function change_type( $id, $type ) {
+        if ( ! $id ) {
+            return $type === 'variable' ? new WC_Product_Variable() : new WC_Product_Simple();
+        }
+        if ( $type === 'simple' ) {
+            $old = wc_get_product( $id );
+            foreach ( $old ? $old->get_children() : [] as $child ) {
+                $variation = wc_get_product( $child );
+                if ( $variation ) {
+                    $variation->delete( true );
+                }
+            }
+        }
+        wp_set_object_terms( $id, $type, 'product_type' );
+        WC_Cache_Helper::invalidate_cache_group( 'product_' . $id ); // the cached product type
+        return $type === 'variable' ? new WC_Product_Variable( $id ) : new WC_Product_Simple( $id );
+    }
+
+    /**
+     * Checks the options and combinations of a product with options:
+     *
+     *   attributes  [ { name: "Size", options: [ "S", "M" ] } ] (in order)
+     *   variations  [ { id (existing combinations only), options: { "Size": "S" },
+     *                   regular_price, sale_price, manage_stock, stock_quantity,
+     *                   stock_status, sku, image_id, enabled } ]
+     *
+     * New options are kept on the product itself. Options that come from the
+     * store's shared attributes (pa_…) stay shared. Attributes the product
+     * has that aren't options (only shown as details) are kept as they are.
+     */
+    private static function variable_plan( $product, array $f, $status, $parent_sku = '' ) {
+        $existing = $product ? $product->get_attributes() : [];
+        $input    = array_values( array_filter( (array) ( $f['attributes'] ?? [] ), 'is_array' ) );
+        if ( ! $input ) {
+            return self::bad( 'Add at least one option, like Size or Color.' );
+        }
+        if ( count( $input ) > self::MAX_ATTRIBUTES ) {
+            return self::bad( 'A product can have up to ' . self::MAX_ATTRIBUTES . ' options.' );
+        }
+
+        // lower-case name => { name, key, taxonomy, values: [ lower-case choice => [ name, stored value ] ] }
+        $attributes = [];
+        foreach ( $input as $a ) {
+            $name = trim( sanitize_text_field( (string) ( $a['name'] ?? '' ) ) );
+            if ( $name === '' || mb_strlen( $name ) > 50 ) {
+                return self::bad( 'Give each option a name, like Size (up to 50 characters).' );
+            }
+            $lower = mb_strtolower( $name );
+            if ( isset( $attributes[ $lower ] ) ) {
+                return self::bad( "\"$name\" is there twice." );
+            }
+            $taxonomy = '';
+            foreach ( $existing as $attr ) {
+                if ( $attr->is_taxonomy() && mb_strtolower( wc_attribute_label( $attr->get_name() ) ) === $lower ) {
+                    $taxonomy = $attr->get_name();
+                }
+            }
+            $values = [];
+            foreach ( (array) ( $a['options'] ?? [] ) as $option ) {
+                $option = trim( sanitize_text_field( is_scalar( $option ) ? (string) $option : '' ) );
+                if ( $option === '' ) {
+                    continue;
+                }
+                if ( mb_strlen( $option ) > 100 ) {
+                    return self::bad( "Choices can be up to 100 characters ($name)." );
+                }
+                if ( strpos( $option, WC_DELIMITER ) !== false ) {
+                    return self::bad( 'Choices can\'t contain "' . WC_DELIMITER . "\" ($name)." );
+                }
+                $key = mb_strtolower( $option );
+                if ( isset( $values[ $key ] ) ) {
+                    continue;
+                }
+                $stored = $option; // kept on the product: the combination stores the text itself
+                if ( $taxonomy !== '' ) {
+                    $term   = get_term_by( 'name', $option, $taxonomy );
+                    $stored = $term ? $term->slug : null; // a new shared choice: created when saving
+                }
+                $values[ $key ] = [ $option, $stored ];
+            }
+            if ( ! $values ) {
+                return self::bad( "Add at least one choice to \"$name\"." );
+            }
+            if ( count( $values ) > self::MAX_OPTIONS ) {
+                return self::bad( "\"$name\" can have up to " . self::MAX_OPTIONS . ' choices.' );
+            }
+            $attributes[ $lower ] = [
+                'name'     => $name,
+                'key'      => $taxonomy !== '' ? $taxonomy : sanitize_title( $name ),
+                'taxonomy' => $taxonomy,
+                'values'   => $values,
+            ];
+        }
+
+        $details = [];
+        foreach ( $existing as $key => $attr ) {
+            if ( ! $attr->get_variation() ) {
+                $label = mb_strtolower( $attr->is_taxonomy() ? wc_attribute_label( $attr->get_name() ) : $attr->get_name() );
+                if ( isset( $attributes[ $label ] ) ) {
+                    return self::bad( "\"{$attributes[ $label ]['name']}\" is already a product detail. Use another name." );
+                }
+                $details[ $key ] = $attr;
+            }
+        }
+
+        $children = $product && $product->is_type( 'variable' ) ? array_map( 'intval', $product->get_children() ) : [];
+        $input    = array_values( array_filter( (array) ( $f['variations'] ?? [] ), 'is_array' ) );
+        if ( ! $input ) {
+            return self::bad( 'There are no variants to sell. Add choices to the options.' );
+        }
+        if ( count( $input ) > self::MAX_VARIATIONS ) {
+            return self::bad( 'A product can have up to ' . self::MAX_VARIATIONS . ' variants. Use fewer choices.' );
+        }
+
+        $variations = [];
+        $seen       = [];
+        $skus       = $parent_sku === '' ? [] : [ $parent_sku => true ];
+        $sold       = 0;
+        foreach ( $input as $v ) {
+            $vid = absint( $v['id'] ?? 0 );
+            if ( $vid && ! in_array( $vid, $children, true ) ) {
+                return self::bad( 'One of the variants doesn\'t exist any more. Reload the product and try again.' );
+            }
+            $chosen = is_array( $v['options'] ?? null ) ? $v['options'] : [];
+            $picked = []; // lower-case option name => lower-case choice ('' = any)
+            foreach ( $chosen as $attr_name => $option ) {
+                $attr_lower = mb_strtolower( trim( (string) $attr_name ) );
+                if ( ! isset( $attributes[ $attr_lower ] ) ) {
+                    return self::bad( 'A variant uses an option that isn\'t on the product. Reload the product and try again.' );
+                }
+                $option_lower = mb_strtolower( trim( is_scalar( $option ) ? (string) $option : '' ) );
+                if ( $option_lower !== '' && ! isset( $attributes[ $attr_lower ]['values'][ $option_lower ] ) ) {
+                    return self::bad( '"' . sanitize_text_field( (string) $option ) . "\" isn't one of the choices of \"{$attributes[ $attr_lower ]['name']}\"." );
+                }
+                $picked[ $attr_lower ] = $option_lower;
+            }
+            $labels = [];
+            foreach ( $attributes as $attr_lower => $a ) {
+                $picked += [ $attr_lower => '' ];
+                $labels[] = $picked[ $attr_lower ] === '' ? 'Any ' . $a['name'] : $a['values'][ $picked[ $attr_lower ] ][0];
+            }
+            ksort( $picked );
+            $label = implode( ' / ', $labels );
+            $sig   = wp_json_encode( $picked );
+            if ( isset( $seen[ $sig ] ) ) {
+                return self::bad( "\"$label\" is there twice." );
+            }
+            $seen[ $sig ] = true;
+
+            $stock = self::stock_fields( $v, $label );
+            if ( is_wp_error( $stock ) ) {
+                return $stock;
+            }
+            $enabled = ! array_key_exists( 'enabled', $v ) || ! empty( $v['enabled'] );
+            if ( $enabled && $status === 'publish' && $stock['regular'] === '' ) {
+                return self::bad( "Add a price to \"$label\", or turn it off." );
+            }
+            $sold += $enabled ? 1 : 0;
+            $sku   = wc_clean( (string) ( $v['sku'] ?? '' ) );
+            if ( mb_strlen( $sku ) > 100 ) {
+                return self::bad( "The SKU can be up to 100 characters ($label)." );
+            }
+            if ( $sku !== '' ) {
+                if ( isset( $skus[ $sku ] ) || ! wc_product_has_unique_sku( $vid, $sku ) ) {
+                    return self::bad( "The SKU \"$sku\" is already used ($label)." );
+                }
+                $skus[ $sku ] = true;
+            }
+            $image = absint( $v['image_id'] ?? 0 );
+            if ( $image && ! wp_attachment_is_image( $image ) ) {
+                return self::bad( "The photo of \"$label\" is missing. Choose it again." );
+            }
+            $variations[] = [ 'id' => $vid, 'picked' => $picked, 'label' => $label, 'stock' => $stock, 'enabled' => $enabled, 'sku' => $sku, 'image' => $image ];
+        }
+        if ( $status === 'publish' && ! $sold ) {
+            return self::bad( 'Turn on at least one variant before publishing the product.' );
+        }
+        return [ 'attributes' => $attributes, 'details' => $details, 'variations' => $variations, 'children' => $children ];
+    }
+
+    /** The product's attributes from a plan: its options (in order), then its other details. */
+    private static function build_attributes( array &$plan ) {
+        $list     = [];
+        $position = 0;
+        foreach ( $plan['attributes'] as &$a ) {
+            $attr = new WC_Product_Attribute();
+            $attr->set_position( $position++ );
+            $attr->set_visible( true );
+            $attr->set_variation( true );
+            if ( $a['taxonomy'] !== '' ) {
+                $ids = [];
+                foreach ( $a['values'] as &$value ) {
+                    if ( $value[1] === null ) {
+                        $term = wp_insert_term( $value[0], $a['taxonomy'] );
+                        if ( is_wp_error( $term ) ) {
+                            throw new WC_Data_Exception( 'qwoo_term', "\"{$value[0]}\" couldn't be added to \"{$a['name']}\"." );
+                        }
+                        $value[1] = get_term( $term['term_id'], $a['taxonomy'] )->slug;
+                    }
+                    $ids[] = (int) get_term_by( 'slug', $value[1], $a['taxonomy'] )->term_id;
+                }
+                unset( $value );
+                $attr->set_id( wc_attribute_taxonomy_id_by_name( $a['taxonomy'] ) );
+                $attr->set_name( $a['taxonomy'] );
+                $attr->set_options( $ids );
+            } else {
+                $attr->set_id( 0 );
+                $attr->set_name( $a['name'] );
+                $attr->set_options( array_values( array_column( $a['values'], 0 ) ) );
+            }
+            $list[] = $attr;
+        }
+        unset( $a );
+        foreach ( $plan['details'] as $attr ) {
+            $attr->set_position( $position++ );
+            $list[] = $attr;
+        }
+        return $list;
+    }
+
+    /** Saves the combinations of a plan and deletes the ones that are gone. */
+    private static function save_variations( WC_Product_Variable $product, array $plan ) {
+        $keep = array_filter( array_column( $plan['variations'], 'id' ) );
+        foreach ( array_diff( $plan['children'], $keep ) as $gone ) {
+            $variation = wc_get_product( $gone );
+            if ( $variation ) {
+                $variation->delete( true );
+            }
+        }
+        foreach ( $plan['variations'] as $order => $v ) {
+            $variation = new WC_Product_Variation( $v['id'] );
+            $variation->set_parent_id( $product->get_id() );
+            $values = [];
+            foreach ( $v['picked'] as $attr_lower => $option_lower ) {
+                $a                   = $plan['attributes'][ $attr_lower ];
+                $values[ $a['key'] ] = $option_lower === '' ? '' : $a['values'][ $option_lower ][1];
+            }
+            $variation->set_attributes( $values );
+            $variation->set_status( $v['enabled'] ? 'publish' : 'private' );
+            $variation->set_menu_order( $order );
+            $variation->set_image_id( $v['image'] );
+            self::apply_stock( $variation, $v['stock'] );
+            try {
+                $variation->set_sku( $v['sku'] );
+                $variation->save();
+            } catch ( WC_Data_Exception $e ) {
+                throw new WC_Data_Exception( $e->getErrorCode(), $e->getMessage() . " ({$v['label']})" );
+            }
+        }
     }
 
     /** Moves a product to the trash (restorable from wp-admin for 30 days). */
@@ -1344,18 +1694,80 @@ class Qwoo_Platform_Dashboard {
     }
 
     private static function product_summary( WC_Product $p ) {
+        $variable = $p->is_type( 'variable' );
         return [
-            'id'       => $p->get_id(),
-            'name'     => html_entity_decode( $p->get_name(), ENT_QUOTES ),
-            'status'   => $p->get_status(),
-            'type'     => $p->get_type(),
-            'price'    => (string) $p->get_price(),
-            'regular'  => (string) $p->get_regular_price(),
-            'sale'     => (string) $p->get_sale_price(),
-            'stock'    => $p->get_stock_status(),
-            'quantity' => $p->managing_stock() ? $p->get_stock_quantity() : null,
-            'image'    => self::image_url( $p->get_image_id(), 'woocommerce_thumbnail' ),
+            'id'           => $p->get_id(),
+            'name'         => html_entity_decode( $p->get_name(), ENT_QUOTES ),
+            'status'       => $p->get_status(),
+            'type'         => $p->get_type(),
+            'price'        => (string) $p->get_price(),
+            'price_max'    => $variable ? (string) $p->get_variation_price( 'max' ) : (string) $p->get_price(),
+            'regular'      => (string) $p->get_regular_price(),
+            'sale'         => (string) $p->get_sale_price(),
+            'stock'        => $p->get_stock_status(),
+            'quantity'     => $p->managing_stock() ? $p->get_stock_quantity() : null,
+            'combinations' => $variable ? count( $p->get_children() ) : 0,
+            'image'        => self::image_url( $p->get_image_id(), 'woocommerce_thumbnail' ),
         ];
+    }
+
+    /**
+     * The options of a product with options, as the editor uses them:
+     * attributes [ { name, options: [ choice names ], shared } ] and
+     * variations [ { id, options: { name: choice name ('' = any) }, regular,
+     * sale, sku, manage_stock, quantity, stock, image_id, enabled } ].
+     */
+    private static function product_options( WC_Product $p ) {
+        if ( ! $p->is_type( 'variable' ) ) {
+            return [ 'attributes' => [], 'variations' => [] ];
+        }
+        $attributes = [];
+        $lookup     = []; // attribute key => [ name, [ stored value (sanitized) => choice name ] ]
+        foreach ( $p->get_attributes() as $key => $attr ) {
+            if ( ! $attr->get_variation() ) {
+                continue;
+            }
+            $choices = [];
+            if ( $attr->is_taxonomy() ) {
+                $name = wc_attribute_label( $attr->get_name() );
+                foreach ( $attr->get_terms() ?: [] as $term ) {
+                    $choices[ $term->slug ] = html_entity_decode( $term->name, ENT_QUOTES );
+                }
+            } else {
+                $name = $attr->get_name();
+                foreach ( $attr->get_options() as $option ) {
+                    $choices[ sanitize_title( $option ) ] = $option;
+                }
+            }
+            $attributes[]   = [ 'name' => $name, 'options' => array_values( $choices ), 'shared' => $attr->is_taxonomy() ];
+            $lookup[ $key ] = [ $name, $choices ];
+        }
+        $variations = [];
+        foreach ( $p->get_children() as $child ) {
+            $v = wc_get_product( $child );
+            if ( ! $v ) {
+                continue;
+            }
+            $options = [];
+            foreach ( $lookup as $key => [ $name, $choices ] ) {
+                $stored           = (string) ( $v->get_attributes( 'edit' )[ $key ] ?? '' );
+                $options[ $name ] = $stored === '' ? '' : ( $choices[ $stored ] ?? $choices[ sanitize_title( $stored ) ] ?? $stored );
+            }
+            $variations[] = [
+                'id'           => $v->get_id(),
+                'options'      => $options,
+                'regular'      => (string) $v->get_regular_price( 'edit' ),
+                'sale'         => (string) $v->get_sale_price( 'edit' ),
+                'sku'          => (string) $v->get_sku( 'edit' ),
+                'manage_stock' => $v->get_manage_stock( 'edit' ) === true,
+                'quantity'     => $v->get_manage_stock( 'edit' ) === true ? $v->get_stock_quantity() : null,
+                'stock'        => $v->get_stock_status( 'edit' ),
+                'image_id'     => (int) $v->get_image_id( 'edit' ),
+                'image'        => self::image_url( $v->get_image_id( 'edit' ), 'woocommerce_thumbnail' ),
+                'enabled'      => $v->get_status( 'edit' ) === 'publish',
+            ];
+        }
+        return [ 'attributes' => $attributes, 'variations' => $variations ];
     }
 
     private static function product_full( WC_Product $p ) {
@@ -1367,8 +1779,8 @@ class Qwoo_Platform_Dashboard {
             }
         }
         $description = (string) $p->get_description();
-        return self::product_summary( $p ) + [
-            'editable'     => $p->is_type( 'simple' ),
+        return self::product_summary( $p ) + self::product_options( $p ) + [
+            'editable'     => $p->is_type( self::EDITABLE_TYPES ),
             'sku'          => $p->get_sku(),
             'manage_stock' => $p->managing_stock(),
             'categories'   => array_map( 'intval', $p->get_category_ids() ),

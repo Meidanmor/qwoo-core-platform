@@ -645,42 +645,46 @@ class Qwoo_Technical_Settings {
         if ( ! current_user_can( 'install_plugins' ) || ! current_user_can( 'activate_plugins' ) ) {
             wp_send_json_error( 'Unauthorized' );
         }
+        $result = self::install_stripe_gateway();
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+        wp_send_json_success( [ 'status' => 'active', 'message' => $result ] );
+    }
 
+    /**
+     * Installs (from WordPress.org) and activates WooCommerce's official
+     * Stripe gateway. Returns a short message, or a WP_Error. Callers check
+     * permissions first (wp-admin AJAX above, the platform dashboard).
+     */
+    public static function install_stripe_gateway() {
         $plugin_file = 'woocommerce-gateway-stripe/woocommerce-gateway-stripe.php';
 
         require_once ABSPATH . 'wp-admin/includes/plugin.php';
 
-        // Already active — nothing to do.
         if ( is_plugin_active( $plugin_file ) ) {
-            wp_send_json_success( [ 'status' => 'active', 'message' => 'Stripe gateway is already active.' ] );
+            return 'Stripe gateway is already active.';
         }
 
         // Downloaded but not active — just activate it.
         if ( array_key_exists( $plugin_file, get_plugins() ) ) {
             $result = activate_plugin( $plugin_file );
-            if ( is_wp_error( $result ) ) {
-                wp_send_json_error( 'Could not activate: ' . $result->get_error_message() );
-            }
-            wp_send_json_success( [ 'status' => 'active', 'message' => 'Stripe gateway activated.' ] );
-        }
-
-        // Not installed — download and install. This needs direct filesystem
-        // access; hosts requiring FTP credentials can't complete this over
-        // AJAX (there's no UI here to collect them), so fall back to
-        // pointing the admin at the manual install screen instead of hanging.
-        if ( 'direct' !== get_filesystem_method() ) {
-            wp_send_json_error(
-                    'Your server requires FTP credentials to install plugins. ' .
-                    'Please install "WooCommerce Stripe Gateway" manually from Plugins → Add New.'
-            );
+            return is_wp_error( $result ) ? new WP_Error( 'qwoo_stripe', 'Could not activate: ' . $result->get_error_message() ) : 'Stripe gateway activated.';
         }
 
         require_once ABSPATH . 'wp-admin/includes/file.php';
+
+        // Not installed — download and install. This needs direct filesystem
+        // access; hosts requiring FTP credentials can't complete this here.
+        if ( 'direct' !== get_filesystem_method() ) {
+            return new WP_Error( 'qwoo_stripe', 'Your server requires FTP credentials to install plugins. Please install "WooCommerce Stripe Gateway" manually from Plugins → Add New.' );
+        }
+
         require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
         require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
         if ( ! WP_Filesystem() ) {
-            wp_send_json_error( 'Could not access the filesystem to install the plugin.' );
+            return new WP_Error( 'qwoo_stripe', 'Could not access the filesystem to install the plugin.' );
         }
 
         $api = plugins_api( 'plugin_information', [
@@ -689,28 +693,27 @@ class Qwoo_Technical_Settings {
         ] );
 
         if ( is_wp_error( $api ) ) {
-            wp_send_json_error( 'Could not reach WordPress.org: ' . $api->get_error_message() );
+            return new WP_Error( 'qwoo_stripe', 'Could not reach WordPress.org: ' . $api->get_error_message() );
         }
 
         $upgrader  = new Plugin_Upgrader( new Automatic_Upgrader_Skin() );
         $installed = $upgrader->install( $api->download_link );
 
         if ( is_wp_error( $installed ) || ! $installed ) {
-            wp_send_json_error( 'Installation failed. Please install "WooCommerce Stripe Gateway" manually from Plugins → Add New.' );
+            return new WP_Error( 'qwoo_stripe', 'Installation failed. Please install "WooCommerce Stripe Gateway" manually from Plugins → Add New.' );
         }
 
         $result = activate_plugin( $plugin_file );
         if ( is_wp_error( $result ) ) {
-            wp_send_json_error( 'Installed but could not activate: ' . $result->get_error_message() );
+            return new WP_Error( 'qwoo_stripe', 'Installed but could not activate: ' . $result->get_error_message() );
         }
-
-        wp_send_json_success( [ 'status' => 'active', 'message' => 'Stripe gateway installed and activated.' ] );
+        return 'Stripe gateway installed and activated.';
     }
 
     /**
      * Current install state of the Stripe gateway, for the settings page.
      */
-    private static function stripe_gateway_status() {
+    public static function stripe_gateway_status() {
         if ( ! function_exists( 'is_plugin_active' ) ) {
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
         }
