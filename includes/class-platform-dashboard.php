@@ -516,7 +516,11 @@ class Qwoo_Platform_Dashboard {
                 return self::bad( 'One of the photos is missing. Upload it again.' );
             }
         }
-        $categories = array_values( array_unique( array_map( 'absint', (array) ( $f['category_ids'] ?? [] ) ) ) );
+        $categories = array_values( array_filter( array_unique( array_map( 'absint', (array) ( $f['category_ids'] ?? [] ) ) ) ) );
+        // Every product is in a category: without one, the store's default ("Uncategorized").
+        if ( ! $categories && (int) get_option( 'default_product_cat' ) ) {
+            $categories = [ (int) get_option( 'default_product_cat' ) ];
+        }
         foreach ( $categories as $category ) {
             $term = get_term( $category, 'product_cat' );
             if ( ! $term || is_wp_error( $term ) ) {
