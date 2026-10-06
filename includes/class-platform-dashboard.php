@@ -1262,11 +1262,18 @@ class Qwoo_Platform_Dashboard {
         return Shop_Settings_Builder::platform_design_data();
     }
 
-    /** { options, pages }: sanitized by the Shop Builder itself, like Save Draft. */
+    /** { options, pages, custom_pages }: sanitized by the Shop Builder itself, like Save Draft. */
     private static function action_design_save( array $params ) {
         $options = is_array( $params['options'] ?? null ) ? $params['options'] : [];
         $pages   = is_array( $params['pages'] ?? null ) ? $params['pages'] : [];
-        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ) );
+        $custom  = is_array( $params['custom_pages'] ?? null ) ? self::to_arrays( $params['custom_pages'] ) : null;
+        if ( $custom !== null ) {
+            $problem = Shop_Settings_Builder::platform_check_pages( $custom );
+            if ( $problem !== '' ) {
+                return self::bad( $problem );
+            }
+        }
+        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom );
     }
 
     private static function action_design_publish() {

@@ -24,6 +24,7 @@ trait SB_Platform {
             $pages[ $page_slug ] = array_values( (array) ( $options[ $page_slug ]['sections'] ?? [] ) );
             self::collect_sections_refs( $pages[ $page_slug ], $refs );
         }
+        $custom_pages = self::platform_pages_data( $options, $refs );
         foreach ( [ $options['home']['hero_image_id'] ?? 0, $options['branding']['logo_id'] ?? 0, $options['branding']['app_icon_id'] ?? 0 ] as $id ) {
             if ( (int) $id ) $refs['media'][ (int) $id ] = true;
         }
@@ -39,6 +40,7 @@ trait SB_Platform {
         return [
             'options'       => self::platform_options( $options ),
             'pages'         => (object) $pages,
+            'custom_pages'  => $custom_pages,
             'schema'        => [
                 'blocks'           => self::BLOCK_SCHEMA,
                 'section_style'    => self::SECTION_STYLE_FIELDS,
@@ -121,8 +123,11 @@ trait SB_Platform {
      * Saves the dashboard's draft: the option groups and every page's
      * sections go through sanitize_options(), exactly like Save Draft.
      */
-    public static function platform_save( array $options, array $pages ) {
+    public static function platform_save( array $options, array $pages, ?array $custom_pages = null ) {
         $input = array_intersect_key( $options, array_flip( self::$platform_option_groups ) );
+        if ( $custom_pages !== null ) {
+            $input['custom_pages'] = $custom_pages;
+        }
         foreach ( self::sectionable_pages() as $page_slug ) {
             if ( isset( $pages[ $page_slug ] ) && is_array( $pages[ $page_slug ] ) ) {
                 $input[ $page_slug ]             = is_array( $input[ $page_slug ] ?? null ) ? $input[ $page_slug ] : [];

@@ -139,6 +139,15 @@ trait SB_Github_Push {
         // Every public/sections/ file referenced by any page in this push.
         $kept_section_images = [];
 
+        // The owner's pages in the header and footer menus.
+        $menus = self::custom_page_menus( $options );
+        foreach ( [ 'header', 'footer' ] as $slot ) {
+            if ( $menus[ $slot ] || isset( $options[ $slot ] ) ) {
+                $options[ $slot ]          = is_array( $options[ $slot ] ?? null ) ? $options[ $slot ] : [];
+                $options[ $slot ]['pages'] = $menus[ $slot ];
+            }
+        }
+
         foreach ( $allowed_pages as $page_slug ) {
             if ( ! isset( $options[ $page_slug ] ) ) continue;
 
@@ -220,6 +229,8 @@ trait SB_Github_Push {
             aps_github_batch_put_file( $batch, $path, $content );
         }
 
+        $this->stage_custom_pages( $batch, $options, $path_to_label, $kept_section_images );
+
         if ( ! empty( $batch['failed'] ) ) {
             return [ 'error' => 'Failed to push to GitHub: could not upload ' . implode( ', ', $batch['failed'] )
                     . '. Check the PHP error log for details.' ];
@@ -251,6 +262,7 @@ trait SB_Github_Push {
 
         // The version now on the live site (Versions list shows it).
         self::mark_revision_pushed();
+        self::remember_published_pages( $options );
 
         if ( $result === 'no_changes' || ( empty( $updated_labels ) && empty( $skipped_labels ) ) ) {
             return [

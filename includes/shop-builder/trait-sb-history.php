@@ -47,6 +47,10 @@ trait SB_History {
         foreach ( self::sectionable_pages() as $page_slug ) {
             $pages[ $page_slug ] = array_values( (array) ( $options[ $page_slug ]['sections'] ?? [] ) );
         }
+        // The owner's pages, by page id.
+        foreach ( self::custom_pages_of( $options ) as $page ) {
+            $pages[ $page['id'] ] = array_values( (array) ( $page['sections'] ?? [] ) );
+        }
         return $pages;
     }
 

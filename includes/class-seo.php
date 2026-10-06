@@ -205,6 +205,41 @@ class Qwoo_Seo {
         if ( preg_match( '#^product-category/([^/]+)$#u', $path, $m ) ) {
             return self::category( $m[1] ) ?? self::moved( 'product_cat', $m[1] );
         }
+        // The owner's own pages (/about, /shipping…).
+        if ( strpos( $path, '/' ) === false ) {
+            return self::page( $path );
+        }
+        return null;
+    }
+
+    /** A published page of the owner's (or { redirect } for one of its old addresses), or null. */
+    private static function page( string $slug ): ?array {
+        $slug = sanitize_title( $slug );
+        if ( $slug === '' || ! class_exists( 'Shop_Settings_Builder' ) ) {
+            return null;
+        }
+        $pages = Shop_Settings_Builder::published_pages();
+        foreach ( $pages as $page ) {
+            if ( ( $page['slug'] ?? '' ) !== $slug ) {
+                continue;
+            }
+            $seo = (array) ( $page['seo'] ?? [] );
+            return [
+                'title'       => trim( (string) ( $seo['title'] ?? '' ) ) ?: self::with_pattern( self::plain( $page['title'] ?? '' ) ),
+                'description' => trim( (string) ( $seo['description'] ?? '' ) ),
+                'canonical'   => self::url( '/' . $slug ),
+                'robots'      => self::robots( empty( $seo['noindex'] ) ),
+                'og_image'    => self::image_url( absint( $seo['image_id'] ?? 0 ) ) ?: self::image_url( absint( self::settings()['image_id'] ) ),
+                'og_type'     => 'website',
+                'type'        => 'page',
+                'page_id'     => (string) ( $page['id'] ?? '' ),
+            ];
+        }
+        foreach ( $pages as $page ) {
+            if ( in_array( $slug, (array) ( $page['old_slugs'] ?? [] ), true ) ) {
+                return [ 'redirect' => '/' . $page['slug'] ];
+            }
+        }
         return null;
     }
 
@@ -354,6 +389,15 @@ class Qwoo_Seo {
             $urls[]  = [ 'path' => '/product/' . $post->post_name, 'lastmod' => $lastmod ];
         }
         $urls[1]['lastmod'] = $newest;
+
+        // The owner's published pages, unless hidden from search engines.
+        if ( class_exists( 'Shop_Settings_Builder' ) ) {
+            foreach ( Shop_Settings_Builder::published_pages() as $page ) {
+                if ( empty( $page['seo']['noindex'] ) && ! empty( $page['slug'] ) ) {
+                    $urls[] = [ 'path' => '/' . $page['slug'], 'lastmod' => ! empty( $page['time'] ) ? gmdate( 'c', (int) $page['time'] ) : '' ];
+                }
+            }
+        }
 
         // (No meta_query here: WooCommerce's category ordering joins term meta
         // too, and the two together match nothing.)
