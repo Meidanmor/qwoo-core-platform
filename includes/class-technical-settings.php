@@ -81,6 +81,12 @@ class Qwoo_Technical_Settings {
         // server-config equivalent to keep in sync anymore.
         add_filter( 'rest_pre_dispatch', [ $this, 'enforce_proxy_secret' ], 10, 3 );
 
+        // Hosts like Hostinger stamp every response with a week-long public
+        // cache unless PHP says otherwise, and WordPress only does for
+        // logged-in users. Browsers then kept old products (and errors) for
+        // days: every REST answer says "don't keep me".
+        add_filter( 'rest_send_nocache_headers', '__return_true' );
+
         // Auto-attach the secret to any request WordPress itself makes
         // to its own protected REST routes (cron jobs, internal
         // wp_remote_* calls, etc.) so nothing internal breaks silently.
