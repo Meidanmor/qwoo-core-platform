@@ -51,6 +51,11 @@ class Qwoo_Platform_Dashboard {
         'product_delete'  => 'action_product_delete',
         'categories_list' => 'action_categories_list',
         'category_create' => 'action_category_create',
+        'category_get'    => 'action_category_get',
+        'category_save'   => 'action_category_save',
+        'category_delete' => 'action_category_delete',
+        'seo_get'         => 'action_seo_get',
+        'seo_save'        => 'action_seo_save',
         'image_upload'    => 'action_image_upload',
         'orders_list'     => 'action_orders_list',
         'order_get'       => 'action_order_get',
@@ -486,6 +491,9 @@ class Qwoo_Platform_Dashboard {
         } catch ( WC_Data_Exception $e ) {
             return self::bad( $e->getMessage() );
         }
+        if ( $common['seo'] !== null ) {
+            Qwoo_Seo::save( $product->get_id(), 'post', $common['seo'] );
+        }
         wc_delete_product_transients( $product->get_id() );
         return self::product_full( wc_get_product( $product->get_id() ) );
     }
@@ -499,6 +507,19 @@ class Qwoo_Platform_Dashboard {
         $sku = wc_clean( (string) ( $f['sku'] ?? '' ) );
         if ( mb_strlen( $sku ) > 100 ) {
             return self::bad( 'The SKU can be up to 100 characters.' );
+        }
+        // The address (/product/<slug>): left alone when missing.
+        $slug = null;
+        if ( array_key_exists( 'slug', $f ) ) {
+            $slug = sanitize_title( mb_substr( (string) $f['slug'], 0, 190 ) );
+        }
+        // Search engine listing: left alone when missing.
+        $seo = null;
+        if ( array_key_exists( 'seo', $f ) ) {
+            $seo = Qwoo_Seo::clean_input( $f['seo'] );
+            if ( is_wp_error( $seo ) ) {
+                return $seo;
+            }
         }
         $description = null;
         if ( array_key_exists( 'description', $f ) ) {
@@ -534,6 +555,8 @@ class Qwoo_Platform_Dashboard {
             'description' => $description,
             'images'      => $images,
             'categories'  => $categories,
+            'slug'        => $slug,
+            'seo'         => $seo,
         ];
     }
 
@@ -545,6 +568,10 @@ class Qwoo_Platform_Dashboard {
             $product->set_description( self::from_text( $c['description'] ) );
         }
         $product->set_category_ids( $c['categories'] );
+        if ( $c['slug'] ) {
+            // WordPress keeps the old one (_wp_old_slug): the old address redirects.
+            $product->set_slug( $c['slug'] );
+        }
         $product->set_image_id( $c['images'][0] ?? 0 );
         $product->set_gallery_image_ids( array_slice( $c['images'], 1 ) );
     }
@@ -860,9 +887,173 @@ class Qwoo_Platform_Dashboard {
         $terms   = get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => false, 'orderby' => 'name', 'number' => 500 ] );
         $out     = [];
         foreach ( is_wp_error( $terms ) ? [] : $terms as $term ) {
-            $out[] = [ 'id' => (int) $term->term_id, 'name' => html_entity_decode( $term->name, ENT_QUOTES ), 'parent' => (int) $term->parent, 'count' => (int) $term->count, 'default' => (int) $term->term_id === $default ];
+            $out[] = [ 'id' => (int) $term->term_id, 'name' => html_entity_decode( $term->name, ENT_QUOTES ), 'slug' => urldecode( $term->slug ), 'parent' => (int) $term->parent, 'count' => (int) $term->count, 'default' => (int) $term->term_id === $default ];
         }
         return [ 'items' => $out ];
+    }
+
+    private static function find_category( $id ) {
+        $term = get_term( absint( $id ), 'product_cat' );
+        if ( ! $term || is_wp_error( $term ) ) {
+            return self::error( 'qwoo_dashboard_not_found', 'This category doesn\'t exist any more.', 404 );
+        }
+        return $term;
+    }
+
+    private static function category_full( WP_Term $term ) {
+        $image = absint( get_term_meta( $term->term_id, 'thumbnail_id', true ) );
+        return [
+            'id'           => (int) $term->term_id,
+            'name'         => html_entity_decode( $term->name, ENT_QUOTES ),
+            'slug'         => urldecode( $term->slug ),
+            'description'  => self::to_text( $term->description ),
+            'count'        => (int) $term->count,
+            'default'      => (int) $term->term_id === (int) get_option( 'default_product_cat' ),
+            'image_id'     => $image,
+            'image'        => self::image_url( $image, 'medium' ),
+            'url'          => Qwoo_Seo::url( '/product-category/' . $term->slug ),
+            'seo'          => Qwoo_Seo::for_editor( (int) $term->term_id, 'term' ),
+            'seo_defaults' => Qwoo_Seo::term_defaults( $term ),
+        ];
+    }
+
+    private static function action_category_get( array $params ) {
+        $term = self::find_category( $params['id'] ?? 0 );
+        return is_wp_error( $term ) ? $term : self::category_full( $term );
+    }
+
+    /**
+     * Updates a category from params.fields: name, slug, description (plain
+     * text), image_id (its photo) and seo (search engine listing). A changed
+     * slug keeps the old address working (it redirects).
+     */
+    private static function action_category_save( array $params ) {
+        $term = self::find_category( $params['id'] ?? 0 );
+        if ( is_wp_error( $term ) ) {
+            return $term;
+        }
+        $f    = is_array( $params['fields'] ?? null ) ? $params['fields'] : [];
+        $name = trim( sanitize_text_field( (string) ( $f['name'] ?? '' ) ) );
+        if ( $name === '' || mb_strlen( $name ) > 100 ) {
+            return self::bad( 'Give the category a name (up to 100 characters).' );
+        }
+        $description = (string) ( $f['description'] ?? '' );
+        if ( mb_strlen( $description ) > 5000 ) {
+            return self::bad( 'The description is too long (5,000 characters at most).' );
+        }
+        $slug  = sanitize_title( mb_substr( (string) ( $f['slug'] ?? '' ), 0, 190 ) ) ?: $term->slug;
+        $other = get_term_by( 'slug', $slug, 'product_cat' );
+        if ( $other && (int) $other->term_id !== (int) $term->term_id ) {
+            return self::bad( 'Another category already uses this address. Choose a different one.' );
+        }
+        $image = absint( $f['image_id'] ?? 0 );
+        if ( $image && ! wp_attachment_is_image( $image ) ) {
+            return self::bad( 'The photo is missing. Upload it again.' );
+        }
+        $seo = Qwoo_Seo::clean_input( $f['seo'] ?? [] );
+        if ( is_wp_error( $seo ) ) {
+            return $seo;
+        }
+
+        $old    = $term->slug;
+        $result = wp_update_term( $term->term_id, 'product_cat', [
+            'name'        => $name,
+            'slug'        => $slug,
+            'description' => self::from_text( $description ),
+        ] );
+        if ( is_wp_error( $result ) ) {
+            return self::bad( $result->get_error_message() );
+        }
+        $term = get_term( $term->term_id, 'product_cat' );
+        if ( $term->slug !== $old ) {
+            Qwoo_Seo::remember_term_slug( (int) $term->term_id, $old );
+        }
+        $image ? update_term_meta( $term->term_id, 'thumbnail_id', $image ) : delete_term_meta( $term->term_id, 'thumbnail_id' );
+        Qwoo_Seo::save( (int) $term->term_id, 'term', $seo );
+        return self::category_full( $term );
+    }
+
+    /** Deletes a category; its products without another category move to the default one. */
+    private static function action_category_delete( array $params ) {
+        $term = self::find_category( $params['id'] ?? 0 );
+        if ( is_wp_error( $term ) ) {
+            return $term;
+        }
+        $default = (int) get_option( 'default_product_cat' );
+        if ( (int) $term->term_id === $default ) {
+            return self::bad( 'This is the default category: products without another category are in it. It can\'t be deleted.' );
+        }
+        $products = get_objects_in_term( $term->term_id, 'product_cat' );
+        $result   = wp_delete_term( $term->term_id, 'product_cat' );
+        if ( ! $result || is_wp_error( $result ) ) {
+            return self::bad( 'The category couldn\'t be deleted. Please try again.' );
+        }
+        foreach ( is_wp_error( $products ) ? [] : $products as $id ) {
+            if ( $default && ! wp_get_object_terms( (int) $id, 'product_cat', [ 'fields' => 'ids' ] ) ) {
+                wp_set_object_terms( (int) $id, [ $default ], 'product_cat' );
+            }
+        }
+        return [ 'deleted' => (int) $term->term_id ];
+    }
+
+    /* ---------------- SEO: store-wide ---------------- */
+
+    private static function seo_answer() {
+        $s     = Qwoo_Seo::settings();
+        $image = absint( $s['image_id'] );
+        return [
+            'home_title'          => (string) $s['home_title'],
+            'home_description'    => (string) $s['home_description'],
+            'title_pattern'       => (string) $s['title_pattern'],
+            'image_id'            => $image,
+            'image'               => self::image_url( $image, 'medium' ),
+            'google_verification' => (string) $s['google_verification'],
+            'store_name'          => Qwoo_Seo::store_name(),
+            'url'                 => Qwoo_Seo::url( '/' ),
+            'defaults'            => Qwoo_Seo::home_defaults(),
+        ];
+    }
+
+    private static function action_seo_get() {
+        return self::seo_answer();
+    }
+
+    /**
+     * Store-wide SEO: home_title, home_description, title_pattern (with
+     * {title}, may have {store}), image_id (the default share image) and
+     * google_verification (Search Console's code or its whole meta tag).
+     */
+    private static function action_seo_save( array $params ) {
+        $f    = is_array( $params['fields'] ?? null ) ? $params['fields'] : [];
+        $home = Qwoo_Seo::clean_input( [
+            'title'       => $f['home_title'] ?? '',
+            'description' => $f['home_description'] ?? '',
+            'image_id'    => $f['image_id'] ?? 0,
+        ] );
+        if ( is_wp_error( $home ) ) {
+            return $home;
+        }
+        $pattern = trim( sanitize_text_field( (string) ( $f['title_pattern'] ?? '' ) ) ) ?: '{title} | {store}';
+        if ( strpos( $pattern, '{title}' ) === false || mb_strlen( $pattern ) > 100 ) {
+            return self::bad( 'The title pattern needs {title} (where the product or category name goes).' );
+        }
+        // Search Console gives a whole tag: <meta name="google-site-verification" content="…" />.
+        $code = (string) ( $f['google_verification'] ?? '' );
+        if ( preg_match( '/content=["\']([^"\']+)["\']/', $code, $m ) ) {
+            $code = $m[1];
+        }
+        $code = trim( $code );
+        if ( $code !== '' && ! preg_match( '/^[A-Za-z0-9_-]{10,100}$/', $code ) ) {
+            return self::bad( 'That doesn\'t look like a Google verification code. Paste the code (or the whole tag) from Search Console.' );
+        }
+        update_option( Qwoo_Seo::OPTION, [
+            'home_title'          => $home['title'],
+            'home_description'    => $home['description'],
+            'title_pattern'       => $pattern,
+            'image_id'            => $home['image_id'],
+            'google_verification' => $code,
+        ] );
+        return self::seo_answer();
     }
 
     /** { name } → the new (or existing, same name) category. */
@@ -1820,6 +2011,12 @@ class Qwoo_Platform_Dashboard {
             'formatted'    => (bool) preg_match( '/<(?!\/?(p|br)\b)[a-z]/i', $description ),
             'currency'     => get_woocommerce_currency(),
             'decimals'     => wc_get_price_decimals(),
+            // The address on the storefront, shown decoded ("טבעת-זהב").
+            'slug'         => urldecode( (string) get_post_field( 'post_name', $p->get_id() ) ),
+            // Drafts get their address when first published.
+            'url'          => get_post_field( 'post_name', $p->get_id() ) !== '' ? Qwoo_Seo::url( '/product/' . get_post_field( 'post_name', $p->get_id() ) ) : '',
+            'seo'          => Qwoo_Seo::for_editor( $p->get_id(), 'post' ),
+            'seo_defaults' => Qwoo_Seo::product_defaults( $p ),
         ];
     }
 

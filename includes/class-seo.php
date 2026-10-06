@@ -68,7 +68,7 @@ class Qwoo_Seo {
         ], is_array( $saved ) ? $saved : [] );
     }
 
-    /** What the owner set for a product (post) or category (term): { title, description, image_id }. */
+    /** What the owner set for a product (post) or category (term): { title, description, image_id, keyphrase }. */
     public static function custom( int $id, string $kind = 'post' ): array {
         $saved = $kind === 'term' ? get_term_meta( $id, self::META, true ) : get_post_meta( $id, self::META, true );
         $saved = is_array( $saved ) ? $saved : [];
@@ -76,12 +76,102 @@ class Qwoo_Seo {
             'title'       => trim( (string) ( $saved['title'] ?? '' ) ),
             'description' => trim( (string) ( $saved['description'] ?? '' ) ),
             'image_id'    => absint( $saved['image_id'] ?? 0 ),
+            'keyphrase'   => trim( (string) ( $saved['keyphrase'] ?? '' ) ),
         ];
     }
 
     public static function is_noindex( int $id, string $kind = 'post' ): bool {
         $value = $kind === 'term' ? get_term_meta( $id, self::NOINDEX_META, true ) : get_post_meta( $id, self::NOINDEX_META, true );
         return $value === '1';
+    }
+
+    /* ---------------- owner editing (dashboard) ---------------- */
+
+    /** Longest values the owner can save (search results show ~60 and ~155 characters). */
+    const MAX_TITLE       = 120;
+    const MAX_DESCRIPTION = 320;
+
+    /**
+     * The owner's SEO fields { title, description, image_id, noindex, keyphrase },
+     * checked. Returns them cleaned, or a WP_Error naming the problem.
+     */
+    public static function clean_input( $in ) {
+        $in    = is_array( $in ) ? $in : [];
+        $text  = static fn( $v ) => trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( is_scalar( $v ) ? (string) $v : '' ) ) );
+        $title = $text( $in['title'] ?? '' );
+        $desc  = $text( $in['description'] ?? '' );
+        if ( mb_strlen( $title ) > self::MAX_TITLE ) {
+            return new WP_Error( 'qwoo_seo', 'The search title can be up to ' . self::MAX_TITLE . ' characters.', [ 'status' => 400 ] );
+        }
+        if ( mb_strlen( $desc ) > self::MAX_DESCRIPTION ) {
+            return new WP_Error( 'qwoo_seo', 'The search description can be up to ' . self::MAX_DESCRIPTION . ' characters.', [ 'status' => 400 ] );
+        }
+        $image = absint( $in['image_id'] ?? 0 );
+        if ( $image && ! wp_attachment_is_image( $image ) ) {
+            return new WP_Error( 'qwoo_seo', 'The share image is missing. Upload it again.', [ 'status' => 400 ] );
+        }
+        return [
+            'title'       => $title,
+            'description' => $desc,
+            'image_id'    => $image,
+            'keyphrase'   => mb_substr( $text( $in['keyphrase'] ?? '' ), 0, 100 ),
+            'noindex'     => ! empty( $in['noindex'] ),
+        ];
+    }
+
+    /** Saves cleaned fields (from clean_input) on a product or category. */
+    public static function save( int $id, string $kind, array $c ): void {
+        $meta = array_filter( [
+            'title'       => $c['title'],
+            'description' => $c['description'],
+            'image_id'    => $c['image_id'],
+            'keyphrase'   => $c['keyphrase'],
+        ] );
+        $update = $kind === 'term' ? 'update_term_meta' : 'update_post_meta';
+        $delete = $kind === 'term' ? 'delete_term_meta' : 'delete_post_meta';
+        $meta ? $update( $id, self::META, $meta ) : $delete( $id, self::META );
+        $c['noindex'] ? $update( $id, self::NOINDEX_META, '1' ) : $delete( $id, self::NOINDEX_META );
+    }
+
+    /** The owner's fields as the dashboard edits them, plus the share image's address. */
+    public static function for_editor( int $id, string $kind ): array {
+        $c = self::custom( $id, $kind );
+        return $c + [
+            'image'   => $c['image_id'] ? (string) wp_get_attachment_image_url( $c['image_id'], 'medium' ) : '',
+            'noindex' => self::is_noindex( $id, $kind ),
+        ];
+    }
+
+    /** What search engines get when the owner leaves a field empty: { title, description }. */
+    public static function product_defaults( WC_Product $product ): array {
+        return [
+            'title'       => self::with_pattern( self::plain( $product->get_name() ) ),
+            'description' => self::shorten( self::plain( $product->get_short_description() ?: $product->get_description() ) ),
+        ];
+    }
+
+    public static function term_defaults( WP_Term $term ): array {
+        return [
+            'title'       => self::with_pattern( self::plain( $term->name ) ),
+            'description' => self::shorten( self::plain( $term->description ) ),
+        ];
+    }
+
+    /** The homepage's automatic title and description. */
+    public static function home_defaults(): array {
+        $name    = self::store_name();
+        $tagline = self::plain( get_bloginfo( 'description' ) );
+        return [
+            'title'       => $tagline !== '' ? "$name – $tagline" : $name,
+            'description' => self::shorten( $tagline ),
+        ];
+    }
+
+    /** Remembers a category's old slug, so its old address keeps working (redirects). */
+    public static function remember_term_slug( int $term_id, string $old_slug ): void {
+        if ( $old_slug !== '' && ! in_array( $old_slug, (array) get_term_meta( $term_id, '_qwoo_old_slug' ), true ) ) {
+            add_term_meta( $term_id, '_qwoo_old_slug', $old_slug );
+        }
     }
 
     /* ---------------- qwoo/v1/seo ---------------- */
@@ -110,12 +200,41 @@ class Qwoo_Seo {
             return self::shop();
         }
         if ( preg_match( '#^product/([^/]+)$#u', $path, $m ) ) {
-            return self::product( $m[1] );
+            return self::product( $m[1] ) ?? self::moved( 'product', $m[1] );
         }
         if ( preg_match( '#^product-category/([^/]+)$#u', $path, $m ) ) {
-            return self::category( $m[1] );
+            return self::category( $m[1] ) ?? self::moved( 'product_cat', $m[1] );
         }
         return null;
+    }
+
+    /**
+     * An old address of a product or category whose slug the owner changed:
+     * { redirect: new path } (the storefront answers 301), or null.
+     */
+    private static function moved( string $type, string $slug ): ?array {
+        global $wpdb;
+        $old = sanitize_title( $slug );
+        if ( $old === '' ) {
+            return null;
+        }
+        if ( $type === 'product' ) {
+            // WordPress keeps a product's earlier slugs in _wp_old_slug.
+            $id = (int) $wpdb->get_var( $wpdb->prepare(
+                "SELECT p.ID FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id
+                 WHERE m.meta_key = '_wp_old_slug' AND m.meta_value = %s AND p.post_type = 'product' AND p.post_status = 'publish'
+                 ORDER BY p.post_modified_gmt DESC LIMIT 1",
+                $old
+            ) );
+            $post = $id ? get_post( $id ) : null;
+            return $post && $post->post_name !== $old && self::product( $post->post_name ) ? [ 'redirect' => '/product/' . $post->post_name ] : null;
+        }
+        $id   = (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT term_id FROM {$wpdb->termmeta} WHERE meta_key = '_qwoo_old_slug' AND meta_value = %s ORDER BY meta_id DESC LIMIT 1",
+            $old
+        ) );
+        $term = $id ? get_term( $id, 'product_cat' ) : null;
+        return $term && ! is_wp_error( $term ) && $term->slug !== $old ? [ 'redirect' => '/product-category/' . $term->slug ] : null;
     }
 
     /** Fields every answer carries. */
@@ -127,13 +246,11 @@ class Qwoo_Seo {
     }
 
     private static function homepage(): array {
-        $s       = self::settings();
-        $name    = self::store_name();
-        $tagline = self::plain( get_bloginfo( 'description' ) );
-        $title   = $s['home_title'] !== '' ? $s['home_title'] : ( $tagline !== '' ? "$name – $tagline" : $name );
+        $s        = self::settings();
+        $defaults = self::home_defaults();
         return [
-            'title'               => $title,
-            'description'         => $s['home_description'] !== '' ? $s['home_description'] : self::shorten( $tagline ),
+            'title'               => $s['home_title'] !== '' ? $s['home_title'] : $defaults['title'],
+            'description'         => $s['home_description'] !== '' ? $s['home_description'] : $defaults['description'],
             'canonical'           => self::url( '/' ),
             'robots'              => self::robots( true ),
             'og_image'            => self::image_url( absint( $s['image_id'] ) ),
