@@ -27,7 +27,8 @@ trait Qwoo_Platform_Payments {
     /* ---------------- dashboard actions ---------------- */
 
     private static function action_payments_get() {
-        $out = [ 'currency' => get_woocommerce_currency(), 'https' => wp_is_using_https(), 'stripe' => self::stripe_state() ];
+        // country: the platform offers local payment providers by the store's country.
+        $out = [ 'currency' => get_woocommerce_currency(), 'country' => WC()->countries->get_base_country(), 'https' => wp_is_using_https(), 'stripe' => self::stripe_state() ];
         foreach ( self::$offline_gateways as $id ) {
             $out[ $id ] = self::offline_gateway( $id );
         }
