@@ -76,6 +76,7 @@ require_once QWOO_PATH . 'includes/security.php';
 require_once QWOO_PATH . 'includes/rate-limiter.php';
 require_once QWOO_PATH . 'includes/auth.php';
 require_once QWOO_PATH . 'includes/rest-api.php';
+require_once QWOO_PATH . 'includes/class-seo.php';
 require_once QWOO_PATH . 'includes/woocommerce-headless.php';
 require_once QWOO_PATH . 'includes/push-notifications.php';
 require_once QWOO_PATH . 'includes/admin-options.php';

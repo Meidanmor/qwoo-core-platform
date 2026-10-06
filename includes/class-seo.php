@@ -1,0 +1,312 @@
+<?php
+/**
+ * The store's SEO: what search engines and link previews see for each
+ * storefront address, and the list of addresses for the sitemap.
+ *
+ * GET qwoo/v1/seo?path=…   { title, description, canonical, robots, og_image,
+ *                            og_type, site_name, locale, … }
+ * GET qwoo/v1/sitemap      { urls: [ { path, lastmod } ] }
+ *
+ * Both sit behind the proxy secret (the qwoo namespace): the storefront
+ * asks for them, nobody else.
+ *
+ * Every value has an automatic default, so a store that never touches SEO
+ * still gets a sensible title, description and image everywhere. What the
+ * owner sets wins:
+ *   post meta  _qwoo_seo          { title, description, image_id } (products)
+ *   term meta  _qwoo_seo          the same (product categories)
+ *   meta       _qwoo_seo_noindex  '1' keeps the item out of search engines
+ *   option     qwoo_seo           store-wide: title_pattern, home_title,
+ *                                 home_description, image_id, google_verification
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
+class Qwoo_Seo {
+
+    const META         = '_qwoo_seo';
+    const NOINDEX_META = '_qwoo_seo_noindex';
+    const OPTION       = 'qwoo_seo';
+
+    /** Search results cut descriptions at about this many characters. */
+    const DESCRIPTION_LENGTH = 155;
+
+    /** The sitemap lists at most this many products (a sitemap file holds 50,000). */
+    const SITEMAP_PRODUCTS = 20000;
+
+    public static function init(): void {
+        add_action( 'rest_api_init', [ __CLASS__, 'routes' ] );
+    }
+
+    public static function routes(): void {
+        register_rest_route( 'qwoo/v1', '/seo', [
+            'methods'             => 'GET',
+            'callback'            => [ __CLASS__, 'rest_seo' ],
+            'permission_callback' => '__return_true',
+            'args'                => [ 'path' => [ 'required' => true, 'type' => 'string' ] ],
+        ] );
+        register_rest_route( 'qwoo/v1', '/sitemap', [
+            'methods'             => 'GET',
+            'callback'            => [ __CLASS__, 'rest_sitemap' ],
+            'permission_callback' => '__return_true',
+        ] );
+    }
+
+    /* ---------------- settings ---------------- */
+
+    /** The store-wide settings, with defaults filled in. */
+    public static function settings(): array {
+        $saved = get_option( self::OPTION, [] );
+        return array_merge( [
+            'title_pattern'       => '{title} | {store}',
+            'home_title'          => '',
+            'home_description'    => '',
+            'image_id'            => 0,
+            'google_verification' => '',
+        ], is_array( $saved ) ? $saved : [] );
+    }
+
+    /** What the owner set for a product (post) or category (term): { title, description, image_id }. */
+    public static function custom( int $id, string $kind = 'post' ): array {
+        $saved = $kind === 'term' ? get_term_meta( $id, self::META, true ) : get_post_meta( $id, self::META, true );
+        $saved = is_array( $saved ) ? $saved : [];
+        return [
+            'title'       => trim( (string) ( $saved['title'] ?? '' ) ),
+            'description' => trim( (string) ( $saved['description'] ?? '' ) ),
+            'image_id'    => absint( $saved['image_id'] ?? 0 ),
+        ];
+    }
+
+    public static function is_noindex( int $id, string $kind = 'post' ): bool {
+        $value = $kind === 'term' ? get_term_meta( $id, self::NOINDEX_META, true ) : get_post_meta( $id, self::NOINDEX_META, true );
+        return $value === '1';
+    }
+
+    /* ---------------- qwoo/v1/seo ---------------- */
+
+    public static function rest_seo( WP_REST_Request $request ) {
+        // The router hands over the path as the browser has it (Hebrew and
+        // other non-Latin slugs percent-encoded): decode it before WordPress
+        // looks it up — sanitize_text_field() would strip the encoded bytes.
+        $path = rawurldecode( (string) $request['path'] );
+        $path = trim( wp_check_invalid_utf8( wp_strip_all_tags( $path ) ), "/ \t\n\r" );
+        $path = strtok( $path, '?#' ) ?: '';
+
+        $answer = self::for_path( $path );
+        if ( ! $answer ) {
+            return new WP_Error( 'not_found', 'Nothing at this address.', [ 'status' => 404 ] );
+        }
+        return rest_ensure_response( array_merge( self::common(), $answer ) );
+    }
+
+    /** The answer for a storefront path ('' is the homepage), or null when nothing lives there. */
+    public static function for_path( string $path ): ?array {
+        if ( $path === '' || $path === 'homepage' ) {
+            return self::homepage();
+        }
+        if ( $path === 'shop' || $path === 'products' ) {
+            return self::shop();
+        }
+        if ( preg_match( '#^product/([^/]+)$#u', $path, $m ) ) {
+            return self::product( $m[1] );
+        }
+        if ( preg_match( '#^product-category/([^/]+)$#u', $path, $m ) ) {
+            return self::category( $m[1] );
+        }
+        return null;
+    }
+
+    /** Fields every answer carries. */
+    private static function common(): array {
+        return [
+            'site_name' => self::store_name(),
+            'locale'    => str_replace( '-', '_', get_locale() ),
+        ];
+    }
+
+    private static function homepage(): array {
+        $s       = self::settings();
+        $name    = self::store_name();
+        $tagline = self::plain( get_bloginfo( 'description' ) );
+        $title   = $s['home_title'] !== '' ? $s['home_title'] : ( $tagline !== '' ? "$name – $tagline" : $name );
+        return [
+            'title'               => $title,
+            'description'         => $s['home_description'] !== '' ? $s['home_description'] : self::shorten( $tagline ),
+            'canonical'           => self::url( '/' ),
+            'robots'              => self::robots( true ),
+            'og_image'            => self::image_url( absint( $s['image_id'] ) ),
+            'og_type'             => 'website',
+            'type'                => 'home',
+            'google_verification' => (string) $s['google_verification'],
+        ];
+    }
+
+    private static function shop(): array {
+        $shop_id = function_exists( 'wc_get_page_id' ) ? wc_get_page_id( 'shop' ) : 0;
+        $name    = $shop_id > 0 ? self::plain( get_the_title( $shop_id ) ) : '';
+        return [
+            'title'       => self::with_pattern( $name !== '' ? $name : 'Shop' ),
+            'description' => self::shorten( self::plain( get_bloginfo( 'description' ) ) ),
+            'canonical'   => self::url( '/products' ),
+            'robots'      => self::robots( true ),
+            'og_image'    => self::image_url( absint( self::settings()['image_id'] ) ),
+            'og_type'     => 'website',
+            'type'        => 'product_archive',
+        ];
+    }
+
+    private static function product( string $slug ): ?array {
+        $post = get_page_by_path( $slug, OBJECT, 'product' );
+        if ( ! $post || $post->post_status !== 'publish' ) {
+            return null;
+        }
+        $product = wc_get_product( $post );
+        if ( ! $product || $product->get_catalog_visibility() === 'hidden' ) {
+            return null;
+        }
+        $custom      = self::custom( $post->ID );
+        $description = $custom['description'] !== ''
+            ? $custom['description']
+            : self::shorten( self::plain( $product->get_short_description() ?: $product->get_description() ) );
+        $image       = $custom['image_id'] ?: (int) $product->get_image_id();
+        return [
+            'title'       => $custom['title'] !== '' ? $custom['title'] : self::with_pattern( self::plain( $product->get_name() ) ),
+            'description' => $description,
+            'canonical'   => self::url( '/product/' . $post->post_name ),
+            'robots'      => self::robots( ! self::is_noindex( $post->ID ) ),
+            'og_image'    => self::image_url( $image ) ?: self::image_url( absint( self::settings()['image_id'] ) ),
+            'og_type'     => 'product',
+            'type'        => 'product',
+            'modified'    => mysql2date( 'c', $post->post_modified_gmt, false ),
+        ];
+    }
+
+    private static function category( string $slug ): ?array {
+        $term = get_term_by( 'slug', $slug, 'product_cat' );
+        if ( ! $term || is_wp_error( $term ) ) {
+            return null;
+        }
+        $custom = self::custom( (int) $term->term_id, 'term' );
+        $image  = $custom['image_id'] ?: absint( get_term_meta( $term->term_id, 'thumbnail_id', true ) );
+        return [
+            'title'       => $custom['title'] !== '' ? $custom['title'] : self::with_pattern( self::plain( $term->name ) ),
+            'description' => $custom['description'] !== '' ? $custom['description'] : self::shorten( self::plain( $term->description ) ),
+            'canonical'   => self::url( '/product-category/' . $term->slug ),
+            // An empty category is a thin page: keep it out of search until it has products.
+            'robots'      => self::robots( ! self::is_noindex( (int) $term->term_id, 'term' ) && (int) $term->count > 0 ),
+            'og_image'    => self::image_url( $image ) ?: self::image_url( absint( self::settings()['image_id'] ) ),
+            'og_type'     => 'website',
+            'type'        => 'product_cat',
+        ];
+    }
+
+    /* ---------------- qwoo/v1/sitemap ---------------- */
+
+    public static function rest_sitemap() {
+        $urls = [
+            [ 'path' => '/', 'lastmod' => '' ],
+            [ 'path' => '/products', 'lastmod' => '' ],
+        ];
+
+        // Hidden products ("Catalog visibility: hidden") carry both exclude terms.
+        $hidden = [];
+        if ( function_exists( 'wc_get_product_visibility_term_ids' ) ) {
+            $terms  = wc_get_product_visibility_term_ids();
+            $hidden = array_intersect(
+                array_map( 'intval', (array) get_objects_in_term( (int) ( $terms['exclude-from-catalog'] ?? 0 ), 'product_visibility' ) ),
+                array_map( 'intval', (array) get_objects_in_term( (int) ( $terms['exclude-from-search'] ?? 0 ), 'product_visibility' ) )
+            );
+        }
+        $posts = get_posts( [
+            'post_type'              => 'product',
+            'post_status'            => 'publish',
+            'posts_per_page'         => self::SITEMAP_PRODUCTS,
+            'orderby'                => 'modified',
+            'order'                  => 'DESC',
+            'post__not_in'           => $hidden,
+            'meta_query'             => [ [ 'key' => self::NOINDEX_META, 'compare' => 'NOT EXISTS' ] ],
+            'no_found_rows'          => true,
+            'update_post_term_cache' => false,
+        ] );
+        $newest = '';
+        foreach ( $posts as $post ) {
+            $lastmod = mysql2date( 'c', $post->post_modified_gmt, false );
+            $newest  = $newest ?: $lastmod;
+            $urls[]  = [ 'path' => '/product/' . $post->post_name, 'lastmod' => $lastmod ];
+        }
+        $urls[1]['lastmod'] = $newest;
+
+        // (No meta_query here: WooCommerce's category ordering joins term meta
+        // too, and the two together match nothing.)
+        $terms = get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => true, 'number' => 2000 ] );
+        foreach ( is_wp_error( $terms ) ? [] : $terms as $term ) {
+            if ( ! self::is_noindex( (int) $term->term_id, 'term' ) ) {
+                $urls[] = [ 'path' => '/product-category/' . $term->slug, 'lastmod' => '' ];
+            }
+        }
+
+        // base: the store's main address, so every alias lists the same URLs.
+        return rest_ensure_response( [ 'base' => Qwoo_Technical_Settings::get_primary_frontend_domain(), 'urls' => $urls ] );
+    }
+
+    /* ---------------- helpers ---------------- */
+
+    /** A full storefront address for a path ("" when no frontend domain is set yet). */
+    public static function url( string $path ): string {
+        $front = Qwoo_Technical_Settings::get_primary_frontend_domain();
+        if ( $front === '' ) {
+            return '';
+        }
+        return $path === '/' ? $front . '/' : $front . $path;
+    }
+
+    public static function store_name(): string {
+        return self::plain( get_bloginfo( 'name' ) );
+    }
+
+    /** "{title} | {store}" filled in. */
+    private static function with_pattern( string $title ): string {
+        $pattern = (string) self::settings()['title_pattern'];
+        if ( strpos( $pattern, '{title}' ) === false ) {
+            $pattern = '{title} | {store}';
+        }
+        return preg_replace( '/^[\s|–-]+|[\s|–-]+$/u', '', strtr( $pattern, [ '{title}' => $title, '{store}' => self::store_name() ] ) );
+    }
+
+    private static function robots( bool $index ): string {
+        return $index
+            ? 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'
+            : 'noindex, follow';
+    }
+
+    private static function image_url( int $id ): string {
+        if ( ! $id ) {
+            return '';
+        }
+        $url = wp_get_attachment_image_url( $id, 'large' );
+        return $url ? (string) $url : '';
+    }
+
+    /** Text without tags, entities or extra spaces. */
+    public static function plain( $text ): string {
+        $text = html_entity_decode( wp_strip_all_tags( strip_shortcodes( (string) $text ) ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+        return trim( preg_replace( '/\s+/u', ' ', $text ) );
+    }
+
+    /** Cut at a word boundary to what search results show. */
+    public static function shorten( string $text, int $max = self::DESCRIPTION_LENGTH ): string {
+        if ( mb_strlen( $text ) <= $max ) {
+            return $text;
+        }
+        $cut   = mb_substr( $text, 0, $max - 1 );
+        $space = mb_strrpos( $cut, ' ' );
+        if ( $space !== false && $space > $max * 0.6 ) {
+            $cut = mb_substr( $cut, 0, $space );
+        }
+        return preg_replace( '/[\s,.;:–-]+$/u', '', $cut ) . '…';
+    }
+}
+
+Qwoo_Seo::init();

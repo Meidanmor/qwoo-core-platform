@@ -321,19 +321,3 @@ add_filter( 'woocommerce_rest_prepare_product_object', function( $response, $pro
     $response->set_data( $data );
     return $response;
 }, 10, 3 );
-
-
-add_filter( 'wpseo_canonical', function ( $canonical ) {
-    $frontend_url = Qwoo_Technical_Settings::get_primary_frontend_domain();
-    if ( empty( $canonical ) || empty( $frontend_url ) ) {
-        return $canonical;
-    }
-
-    $backend_url = home_url();
-
-    return str_replace(
-        untrailingslashit( $backend_url ),
-        untrailingslashit( $frontend_url ),
-        $canonical
-    );
-} );
