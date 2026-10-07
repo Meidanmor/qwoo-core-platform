@@ -143,27 +143,62 @@ class Qwoo_Seo {
     }
 
     /** What search engines get when the owner leaves a field empty: { title, description }. */
+    /**
+     * A product's automatic title and description. The description is the
+     * product's own text; a product without any gets "Name · Category · Store",
+     * so no page goes out without one.
+     */
     public static function product_defaults( WC_Product $product ): array {
+        $text = self::plain( $product->get_short_description() ?: $product->get_description() );
+        if ( $text === '' ) {
+            $category = '';
+            foreach ( $product->get_category_ids() as $id ) {
+                $term = get_term( $id, 'product_cat' );
+                if ( $term && ! is_wp_error( $term ) && (int) $term->term_id !== (int) get_option( 'default_product_cat' ) ) {
+                    $category = self::plain( $term->name );
+                    break;
+                }
+            }
+            $text = implode( ' · ', array_filter( [ self::plain( $product->get_name() ), $category, self::store_name() ] ) );
+        }
         return [
             'title'       => self::with_pattern( self::plain( $product->get_name() ) ),
-            'description' => self::shorten( self::plain( $product->get_short_description() ?: $product->get_description() ) ),
+            'description' => self::shorten( $text ),
         ];
     }
 
+    /**
+     * A category's automatic title and description: its own description, or
+     * its name and a few of its products ("Rings: Gold hoop, Silver band…").
+     */
     public static function term_defaults( WP_Term $term ): array {
+        $text = self::plain( $term->description );
+        if ( $text === '' ) {
+            $names = function_exists( 'wc_get_products' ) ? wc_get_products( [
+                'status'   => 'publish',
+                'limit'    => 4,
+                'category' => [ $term->slug ],
+                'orderby'  => 'popularity',
+                'return'   => 'objects',
+            ] ) : [];
+            $names = array_map( static fn( $p ) => self::plain( $p->get_name() ), $names );
+            $text  = self::plain( $term->name ) . ( $names ? ': ' . implode( ', ', $names ) . '…' : ' · ' . self::store_name() );
+        }
         return [
             'title'       => self::with_pattern( self::plain( $term->name ) ),
-            'description' => self::shorten( self::plain( $term->description ) ),
+            'description' => self::shorten( $text ),
         ];
     }
 
-    /** The homepage's automatic title and description. */
+    /** The homepage's automatic title and description: the tagline, else the homepage's hero text. */
     public static function home_defaults(): array {
         $name    = self::store_name();
         $tagline = self::plain( get_bloginfo( 'description' ) );
+        $options = get_option( 'shop_builder_options', [] );
+        $hero    = self::plain( implode( ' ', array_filter( [ $options['home']['hero_title'] ?? '', $options['home']['hero_description'] ?? '' ], 'is_string' ) ) );
         return [
             'title'       => $tagline !== '' ? "$name – $tagline" : $name,
-            'description' => self::shorten( $tagline ),
+            'description' => self::shorten( $tagline !== '' ? $tagline : ( $hero !== '' ? $hero : $name ) ),
         ];
     }
 
@@ -205,29 +240,33 @@ class Qwoo_Seo {
         if ( preg_match( '#^product-category/([^/]+)$#u', $path, $m ) ) {
             return self::category( $m[1] ) ?? self::moved( 'product_cat', $m[1] );
         }
-        // The owner's own pages (/about, /shipping…).
-        if ( strpos( $path, '/' ) === false ) {
-            return self::page( $path );
-        }
-        return null;
+        // The owner's own pages (/about, /about/team…).
+        return self::page( $path );
+    }
+
+    /** "About Us/Team" → "about-us/team", each part like WordPress makes slugs. */
+    private static function page_path( string $path ): string {
+        $parts = array_filter( array_map( 'sanitize_title', explode( '/', $path ) ), 'strlen' );
+        return implode( '/', $parts );
     }
 
     /** A published page of the owner's (or { redirect } for one of its old addresses), or null. */
-    private static function page( string $slug ): ?array {
-        $slug = sanitize_title( $slug );
-        if ( $slug === '' || ! class_exists( 'Shop_Settings_Builder' ) ) {
+    private static function page( string $path ): ?array {
+        $path = self::page_path( $path );
+        if ( $path === '' || ! class_exists( 'Shop_Settings_Builder' ) ) {
             return null;
         }
         $pages = Shop_Settings_Builder::published_pages();
         foreach ( $pages as $page ) {
-            if ( ( $page['slug'] ?? '' ) !== $slug ) {
+            if ( ( $page['path'] ?? $page['slug'] ?? '' ) !== $path ) {
                 continue;
             }
             $seo = (array) ( $page['seo'] ?? [] );
             return [
                 'title'       => trim( (string) ( $seo['title'] ?? '' ) ) ?: self::with_pattern( self::plain( $page['title'] ?? '' ) ),
-                'description' => trim( (string) ( $seo['description'] ?? '' ) ),
-                'canonical'   => self::url( '/' . $slug ),
+                // The page's own words when the owner didn't write a description.
+                'description' => trim( (string) ( $seo['description'] ?? '' ) ) ?: self::shorten( self::plain( $page['excerpt'] ?? '' ) ),
+                'canonical'   => self::url( '/' . $path ),
                 'robots'      => self::robots( empty( $seo['noindex'] ) ),
                 'og_image'    => self::image_url( absint( $seo['image_id'] ?? 0 ) ) ?: self::image_url( absint( self::settings()['image_id'] ) ),
                 'og_type'     => 'website',
@@ -236,8 +275,9 @@ class Qwoo_Seo {
             ];
         }
         foreach ( $pages as $page ) {
-            if ( in_array( $slug, (array) ( $page['old_slugs'] ?? [] ), true ) ) {
-                return [ 'redirect' => '/' . $page['slug'] ];
+            $old = array_merge( (array) ( $page['old_paths'] ?? [] ), (array) ( $page['old_slugs'] ?? [] ) );
+            if ( in_array( $path, $old, true ) ) {
+                return [ 'redirect' => '/' . ( $page['path'] ?? $page['slug'] ) ];
             }
         }
         return null;
@@ -300,7 +340,7 @@ class Qwoo_Seo {
         $name    = $shop_id > 0 ? self::plain( get_the_title( $shop_id ) ) : '';
         return [
             'title'       => self::with_pattern( $name !== '' ? $name : 'Shop' ),
-            'description' => self::shorten( self::plain( get_bloginfo( 'description' ) ) ),
+            'description' => self::home_defaults()['description'],
             'canonical'   => self::url( '/products' ),
             'robots'      => self::robots( true ),
             'og_image'    => self::image_url( absint( self::settings()['image_id'] ) ),
@@ -318,14 +358,12 @@ class Qwoo_Seo {
         if ( ! $product || $product->get_catalog_visibility() === 'hidden' ) {
             return null;
         }
-        $custom      = self::custom( $post->ID );
-        $description = $custom['description'] !== ''
-            ? $custom['description']
-            : self::shorten( self::plain( $product->get_short_description() ?: $product->get_description() ) );
-        $image       = $custom['image_id'] ?: (int) $product->get_image_id();
+        $custom   = self::custom( $post->ID );
+        $defaults = self::product_defaults( $product );
+        $image    = $custom['image_id'] ?: (int) $product->get_image_id();
         return [
-            'title'       => $custom['title'] !== '' ? $custom['title'] : self::with_pattern( self::plain( $product->get_name() ) ),
-            'description' => $description,
+            'title'       => $custom['title'] !== '' ? $custom['title'] : $defaults['title'],
+            'description' => $custom['description'] !== '' ? $custom['description'] : $defaults['description'],
             'canonical'   => self::url( '/product/' . $post->post_name ),
             'robots'      => self::robots( ! self::is_noindex( $post->ID ) ),
             'og_image'    => self::image_url( $image ) ?: self::image_url( absint( self::settings()['image_id'] ) ),
@@ -340,17 +378,149 @@ class Qwoo_Seo {
         if ( ! $term || is_wp_error( $term ) ) {
             return null;
         }
-        $custom = self::custom( (int) $term->term_id, 'term' );
-        $image  = $custom['image_id'] ?: absint( get_term_meta( $term->term_id, 'thumbnail_id', true ) );
+        $custom   = self::custom( (int) $term->term_id, 'term' );
+        $defaults = self::term_defaults( $term );
+        $image    = $custom['image_id'] ?: absint( get_term_meta( $term->term_id, 'thumbnail_id', true ) );
         return [
-            'title'       => $custom['title'] !== '' ? $custom['title'] : self::with_pattern( self::plain( $term->name ) ),
-            'description' => $custom['description'] !== '' ? $custom['description'] : self::shorten( self::plain( $term->description ) ),
+            'title'       => $custom['title'] !== '' ? $custom['title'] : $defaults['title'],
+            'description' => $custom['description'] !== '' ? $custom['description'] : $defaults['description'],
             'canonical'   => self::url( '/product-category/' . $term->slug ),
             // An empty category is a thin page: keep it out of search until it has products.
             'robots'      => self::robots( ! self::is_noindex( (int) $term->term_id, 'term' ) && (int) $term->count > 0 ),
             'og_image'    => self::image_url( $image ) ?: self::image_url( absint( self::settings()['image_id'] ) ),
             'og_type'     => 'website',
             'type'        => 'product_cat',
+        ];
+    }
+
+    /* ---------------- SEO check (dashboard) ---------------- */
+
+    /** Products the check looks at (the newest ones first). */
+    const AUDIT_PRODUCTS = 300;
+
+    /**
+     * What's missing or weak, page by page, as search engines would see it
+     * (the same titles and descriptions the storefront sends):
+     *   { counts: { error, warn, tip }, checked: { products, categories, pages },
+     *     items: [ { kind: home|product|category|page, id, name, issues: [ { level, text } ] } ] }
+     * Only pages with something to say are listed.
+     */
+    public static function audit(): array {
+        $entries = []; // [ kind, id, name, title, description, custom description?, extra issues ]
+
+        // The homepage.
+        $s    = self::settings();
+        $home = self::homepage();
+        $more = [];
+        if ( self::plain( get_bloginfo( 'description' ) ) === '' && $s['home_description'] === '' ) {
+            $more[] = [ 'warn', 'No description of your store: write one here (it also helps your other pages).' ];
+        }
+        if ( ! absint( $s['image_id'] ) ) {
+            $more[] = [ 'tip', 'No image for shares: links to your store on WhatsApp or Facebook show without a picture.' ];
+        }
+        if ( $s['google_verification'] === '' ) {
+            $more[] = [ 'tip', 'Connect Google Search Console (below) to see how your store does on Google.' ];
+        }
+        $entries[] = [ 'home', 0, 'Homepage', $home['title'], $home['description'], $s['home_description'] !== '', false, $more ];
+
+        // Products.
+        $products = function_exists( 'wc_get_products' ) ? wc_get_products( [ 'status' => 'publish', 'limit' => self::AUDIT_PRODUCTS, 'orderby' => 'date', 'order' => 'DESC' ] ) : [];
+        foreach ( $products as $product ) {
+            if ( $product->get_catalog_visibility() === 'hidden' ) continue;
+            $custom   = self::custom( $product->get_id() );
+            $defaults = self::product_defaults( $product );
+            $more     = [];
+            if ( $custom['description'] === '' && self::plain( $product->get_short_description() ?: $product->get_description() ) === '' ) {
+                $more[] = [ 'warn', 'No description: add one to the product, or write one in its search listing.' ];
+            }
+            if ( ! $product->get_image_id() && ! $custom['image_id'] ) {
+                $more[] = [ 'warn', 'No photo: products without a photo rarely get clicks.' ];
+            }
+            $entries[] = [ 'product', $product->get_id(), self::plain( $product->get_name() ), $custom['title'] ?: $defaults['title'], $custom['description'] ?: $defaults['description'], $custom['description'] !== '', self::is_noindex( $product->get_id() ), $more ];
+        }
+
+        // Categories.
+        $terms = get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => false, 'number' => 500 ] );
+        foreach ( is_wp_error( $terms ) ? [] : $terms as $term ) {
+            $custom   = self::custom( (int) $term->term_id, 'term' );
+            $defaults = self::term_defaults( $term );
+            $more     = [];
+            if ( (int) $term->count === 0 ) {
+                $more[] = [ 'tip', 'No products yet: it stays out of search engines until it has some.' ];
+            }
+            $entries[] = [ 'category', (int) $term->term_id, self::plain( $term->name ), $custom['title'] ?: $defaults['title'], $custom['description'] ?: $defaults['description'], $custom['description'] !== '', self::is_noindex( (int) $term->term_id, 'term' ), $more ];
+        }
+
+        // The owner's published pages (as saved: what the next Publish puts live).
+        $pages = 0;
+        if ( class_exists( 'Shop_Settings_Builder' ) ) {
+            $options = get_option( 'shop_builder_options', [] );
+            foreach ( (array) ( $options['custom_pages'] ?? [] ) as $page ) {
+                if ( ! is_array( $page ) || ( $page['status'] ?? '' ) !== 'publish' ) continue;
+                $pages++;
+                $seo     = (array) ( $page['seo'] ?? [] );
+                $excerpt = Shop_Settings_Builder::platform_page_excerpt( (array) ( $page['sections'] ?? [] ) );
+                $more    = [];
+                if ( ! array_filter( (array) ( $page['sections'] ?? [] ), static fn( $s ) => ! empty( $s['enabled'] ) ) ) {
+                    $more[] = [ 'warn', 'The page is empty: add sections to it.' ];
+                } elseif ( ( $seo['description'] ?? '' ) === '' && $excerpt === '' ) {
+                    $more[] = [ 'warn', 'No description: the page has no text to describe it. Write one in its search listing.' ];
+                }
+                $title       = trim( (string) ( $seo['title'] ?? '' ) ) ?: self::with_pattern( self::plain( $page['title'] ?? '' ) );
+                $description = trim( (string) ( $seo['description'] ?? '' ) ) ?: self::shorten( $excerpt );
+                $entries[]   = [ 'page', (string) $page['id'], self::plain( $page['title'] ?? '' ), $title, $description, ( $seo['description'] ?? '' ) !== '', ! empty( $seo['noindex'] ), $more ];
+            }
+        }
+
+        // Titles used more than once (Google may show only one of them).
+        $titles = [];
+        foreach ( $entries as $e ) {
+            if ( ! $e[6] ) $titles[ mb_strtolower( $e[3] ) ][] = $e[2];
+        }
+
+        $items  = [];
+        $counts = [ 'error' => 0, 'warn' => 0, 'tip' => 0 ];
+        foreach ( $entries as [ $kind, $id, $name, $title, $description, $own_description, $noindex, $more ] ) {
+            $issues = [];
+            foreach ( $more as [ $level, $text ] ) {
+                $issues[] = [ 'level' => $level, 'text' => $text ];
+            }
+            if ( $noindex ) {
+                $issues[] = [ 'level' => 'tip', 'text' => 'Hidden from search engines (your choice in its search listing).' ];
+            } else {
+                $length = mb_strlen( $title );
+                if ( $length > 60 ) {
+                    $issues[] = [ 'level' => 'warn', 'text' => "The title is $length characters: Google shows about 60, the rest is cut off." ];
+                } elseif ( $length < 15 ) {
+                    $issues[] = [ 'level' => 'tip', 'text' => 'The title is very short: say what the page is about, in the words shoppers search for.' ];
+                }
+                $others = array_diff( $titles[ mb_strtolower( $title ) ] ?? [], [ $name ] );
+                if ( count( $titles[ mb_strtolower( $title ) ] ?? [] ) > 1 ) {
+                    $issues[] = [ 'level' => 'warn', 'text' => 'Same title as ' . ( $others ? '"' . implode( '", "', array_slice( $others, 0, 2 ) ) . '"' : 'another page' ) . ': give each page its own title.' ];
+                }
+                if ( $description === '' ) {
+                    $issues[] = [ 'level' => 'error', 'text' => 'No description: search engines and PageSpeed will flag it.' ];
+                } elseif ( $own_description && mb_strlen( $description ) > 160 ) {
+                    $issues[] = [ 'level' => 'warn', 'text' => 'The description is ' . mb_strlen( $description ) . ' characters: Google shows about 155.' ];
+                } elseif ( mb_strlen( $description ) < 50 ) {
+                    $issues[] = [ 'level' => 'tip', 'text' => 'The description is short: a sentence or two about the page usually gets more clicks.' ];
+                }
+            }
+            if ( ! $issues ) continue;
+            foreach ( $issues as $issue ) {
+                $counts[ $issue['level'] ]++;
+            }
+            // The most important first.
+            usort( $issues, static fn( $a, $b ) => array_search( $a['level'], [ 'error', 'warn', 'tip' ], true ) <=> array_search( $b['level'], [ 'error', 'warn', 'tip' ], true ) );
+            $items[] = [ 'kind' => $kind, 'id' => $id, 'name' => $name, 'issues' => $issues ];
+        }
+        $rank = static fn( $item ) => array_search( $item['issues'][0]['level'], [ 'error', 'warn', 'tip' ], true );
+        usort( $items, static fn( $a, $b ) => $rank( $a ) <=> $rank( $b ) );
+
+        return [
+            'counts'  => $counts,
+            'checked' => [ 'products' => count( $products ), 'categories' => is_wp_error( $terms ) ? 0 : count( $terms ), 'pages' => $pages ],
+            'items'   => $items,
         ];
     }
 
@@ -393,8 +563,9 @@ class Qwoo_Seo {
         // The owner's published pages, unless hidden from search engines.
         if ( class_exists( 'Shop_Settings_Builder' ) ) {
             foreach ( Shop_Settings_Builder::published_pages() as $page ) {
-                if ( empty( $page['seo']['noindex'] ) && ! empty( $page['slug'] ) ) {
-                    $urls[] = [ 'path' => '/' . $page['slug'], 'lastmod' => ! empty( $page['time'] ) ? gmdate( 'c', (int) $page['time'] ) : '' ];
+                $path = (string) ( $page['path'] ?? $page['slug'] ?? '' );
+                if ( empty( $page['seo']['noindex'] ) && $path !== '' ) {
+                    $urls[] = [ 'path' => '/' . $path, 'lastmod' => ! empty( $page['time'] ) ? gmdate( 'c', (int) $page['time'] ) : '' ];
                 }
             }
         }

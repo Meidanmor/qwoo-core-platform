@@ -37,6 +37,7 @@ require_once __DIR__ . '/trait-sb-history.php';
 require_once __DIR__ . '/trait-sb-template-import.php';
 require_once __DIR__ . '/trait-sb-platform.php';
 require_once __DIR__ . '/trait-sb-pages.php';
+require_once __DIR__ . '/trait-sb-menus.php';
 require_once __DIR__ . '/trait-sb-admin-fields.php';
 require_once __DIR__ . '/trait-sb-admin-page.php';
 
@@ -54,6 +55,7 @@ class Shop_Settings_Builder extends Shop_Builder_Constants {
     use SB_Template_Import;
     use SB_Platform;
     use SB_Pages;
+    use SB_Menus;
     use SB_Admin_Fields;
     use SB_Admin_Page;
 

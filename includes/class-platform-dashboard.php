@@ -56,6 +56,7 @@ class Qwoo_Platform_Dashboard {
         'category_delete' => 'action_category_delete',
         'seo_get'         => 'action_seo_get',
         'seo_save'        => 'action_seo_save',
+        'seo_audit'       => 'action_seo_audit',
         'image_upload'    => 'action_image_upload',
         'orders_list'     => 'action_orders_list',
         'order_get'       => 'action_order_get',
@@ -908,6 +909,7 @@ class Qwoo_Platform_Dashboard {
             'slug'         => urldecode( $term->slug ),
             'description'  => self::to_text( $term->description ),
             'count'        => (int) $term->count,
+            'parent'       => (int) $term->parent,
             'default'      => (int) $term->term_id === (int) get_option( 'default_product_cat' ),
             'image_id'     => $image,
             'image'        => self::image_url( $image, 'medium' ),
@@ -954,11 +956,16 @@ class Qwoo_Platform_Dashboard {
         if ( is_wp_error( $seo ) ) {
             return $seo;
         }
+        $parent = self::category_parent( $f['parent'] ?? 0, (int) $term->term_id );
+        if ( is_wp_error( $parent ) ) {
+            return $parent;
+        }
 
         $old    = $term->slug;
         $result = wp_update_term( $term->term_id, 'product_cat', [
             'name'        => $name,
             'slug'        => $slug,
+            'parent'      => $parent,
             'description' => self::from_text( $description ),
         ] );
         if ( is_wp_error( $result ) ) {
@@ -1018,6 +1025,11 @@ class Qwoo_Platform_Dashboard {
         return self::seo_answer();
     }
 
+    /** The SEO check: what's missing or weak on each page (Qwoo_Seo::audit). */
+    private static function action_seo_audit() {
+        return Qwoo_Seo::audit();
+    }
+
     /**
      * Store-wide SEO: home_title, home_description, title_pattern (with
      * {title}, may have {store}), image_id (the default share image) and
@@ -1062,12 +1074,36 @@ class Qwoo_Platform_Dashboard {
         if ( $name === '' || mb_strlen( $name ) > 100 ) {
             return self::bad( 'Give the category a name (up to 100 characters).' );
         }
-        $existing = term_exists( $name, 'product_cat' );
-        $result   = $existing ?: wp_insert_term( $name, 'product_cat' );
+        $parent = self::category_parent( $params['parent'] ?? 0, 0 );
+        if ( is_wp_error( $parent ) ) {
+            return $parent;
+        }
+        $existing = term_exists( $name, 'product_cat', $parent );
+        $result   = $existing ?: wp_insert_term( $name, 'product_cat', [ 'parent' => $parent ] );
         if ( is_wp_error( $result ) ) {
             return self::bad( $result->get_error_message() );
         }
-        return [ 'id' => (int) $result['term_id'], 'name' => $name, 'parent' => 0, 'count' => 0, 'default' => false ];
+        $term = get_term( (int) $result['term_id'], 'product_cat' );
+        return [ 'id' => (int) $result['term_id'], 'name' => $name, 'slug' => urldecode( (string) ( $term->slug ?? '' ) ), 'parent' => $parent, 'count' => 0, 'default' => false ];
+    }
+
+    /**
+     * A category's parent: 0 (top level) or an existing category that isn't
+     * the category itself or one of its own subcategories. WP_Error otherwise.
+     */
+    private static function category_parent( $value, int $term_id ) {
+        $parent = absint( $value );
+        if ( ! $parent ) {
+            return 0;
+        }
+        $term = get_term( $parent, 'product_cat' );
+        if ( ! $term || is_wp_error( $term ) ) {
+            return self::bad( 'The parent category doesn\'t exist any more.' );
+        }
+        if ( $term_id && ( $parent === $term_id || in_array( $term_id, get_ancestors( $parent, 'product_cat', 'taxonomy' ), true ) ) ) {
+            return self::bad( 'A category can\'t be inside itself or one of its own subcategories.' );
+        }
+        return $parent;
     }
 
     /**
@@ -1262,7 +1298,7 @@ class Qwoo_Platform_Dashboard {
         return Shop_Settings_Builder::platform_design_data();
     }
 
-    /** { options, pages, custom_pages }: sanitized by the Shop Builder itself, like Save Draft. */
+    /** { options, pages, custom_pages, menus }: sanitized by the Shop Builder itself, like Save Draft. */
     private static function action_design_save( array $params ) {
         $options = is_array( $params['options'] ?? null ) ? $params['options'] : [];
         $pages   = is_array( $params['pages'] ?? null ) ? $params['pages'] : [];
@@ -1273,7 +1309,8 @@ class Qwoo_Platform_Dashboard {
                 return self::bad( $problem );
             }
         }
-        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom );
+        $menus = is_array( $params['menus'] ?? null ) ? self::to_arrays( $params['menus'] ) : null;
+        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus );
     }
 
     private static function action_design_publish() {

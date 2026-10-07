@@ -202,6 +202,9 @@ trait SB_Ajax {
         if ( isset( $new_options['custom_pages'] ) ) {
             $updated_options['custom_pages'] = $new_options['custom_pages'];
         }
+        if ( isset( $new_options['menus'] ) ) {
+            $updated_options['menus'] = $new_options['menus'];
+        }
 
         update_option( 'shop_builder_options', $updated_options );
         self::record_revision( $updated_options );

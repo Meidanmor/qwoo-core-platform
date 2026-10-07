@@ -41,6 +41,7 @@ trait SB_Platform {
             'options'       => self::platform_options( $options ),
             'pages'         => (object) $pages,
             'custom_pages'  => $custom_pages,
+            'menus'         => self::platform_menus_data( $options ),
             'schema'        => [
                 'blocks'           => self::BLOCK_SCHEMA,
                 'section_style'    => self::SECTION_STYLE_FIELDS,
@@ -123,10 +124,13 @@ trait SB_Platform {
      * Saves the dashboard's draft: the option groups and every page's
      * sections go through sanitize_options(), exactly like Save Draft.
      */
-    public static function platform_save( array $options, array $pages, ?array $custom_pages = null ) {
+    public static function platform_save( array $options, array $pages, ?array $custom_pages = null, ?array $menus = null ) {
         $input = array_intersect_key( $options, array_flip( self::$platform_option_groups ) );
         if ( $custom_pages !== null ) {
             $input['custom_pages'] = $custom_pages;
+        }
+        if ( $menus !== null ) {
+            $input['menus'] = $menus;
         }
         foreach ( self::sectionable_pages() as $page_slug ) {
             if ( isset( $pages[ $page_slug ] ) && is_array( $pages[ $page_slug ] ) ) {
@@ -190,13 +194,13 @@ trait SB_Platform {
         $out  = [];
         if ( $kind === 'products' ) {
             foreach ( wc_get_products( [ 'limit' => 20, 'status' => 'publish', 's' => $term ] ) as $p ) {
-                $out[] = [ 'id' => $p->get_id(), 'text' => html_entity_decode( $p->get_name(), ENT_QUOTES ), 'thumb' => (string) wp_get_attachment_image_url( $p->get_image_id(), 'thumbnail' ) ];
+                $out[] = [ 'id' => $p->get_id(), 'text' => html_entity_decode( $p->get_name(), ENT_QUOTES ), 'thumb' => (string) wp_get_attachment_image_url( $p->get_image_id(), 'thumbnail' ), 'href' => '/product/' . get_post_field( 'post_name', $p->get_id() ) ];
             }
         } elseif ( $kind === 'categories' || $kind === 'tags' ) {
             $terms = get_terms( [ 'taxonomy' => $kind === 'tags' ? 'product_tag' : 'product_cat', 'hide_empty' => false, 'name__like' => $term, 'number' => 20 ] );
             foreach ( is_wp_error( $terms ) ? [] : $terms as $t ) {
                 $thumb = $kind === 'categories' ? get_term_meta( $t->term_id, 'thumbnail_id', true ) : 0;
-                $out[] = [ 'id' => (int) $t->term_id, 'text' => html_entity_decode( $t->name, ENT_QUOTES ), 'thumb' => $thumb ? (string) wp_get_attachment_image_url( $thumb, 'thumbnail' ) : '' ];
+                $out[] = [ 'id' => (int) $t->term_id, 'text' => html_entity_decode( $t->name, ENT_QUOTES ), 'thumb' => $thumb ? (string) wp_get_attachment_image_url( $thumb, 'thumbnail' ) : '', 'href' => $kind === 'categories' ? '/product-category/' . $t->slug : '' ];
             }
         }
         return $out;

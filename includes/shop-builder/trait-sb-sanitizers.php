@@ -621,9 +621,12 @@ trait SB_Sanitizers {
             $clean[ $page_slug ] = ( $clean[ $page_slug ] ?? [] ) + [ 'sections' => $sections ];
         }
 
-        // The owner's own pages (trait-sb-pages.php).
+        // The owner's own pages (trait-sb-pages.php) and the menus (trait-sb-menus.php).
         if ( isset( $input['custom_pages'] ) ) {
             $clean['custom_pages'] = $this->sanitize_custom_pages( $input['custom_pages'], self::custom_pages_of( $existing ) );
+        }
+        if ( isset( $input['menus'] ) ) {
+            $clean['menus'] = $this->sanitize_menus( $input['menus'] );
         }
 
         // Checkout

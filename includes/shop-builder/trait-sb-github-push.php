@@ -139,13 +139,12 @@ trait SB_Github_Push {
         // Every public/sections/ file referenced by any page in this push.
         $kept_section_images = [];
 
-        // The owner's pages in the header and footer menus.
-        $menus = self::custom_page_menus( $options );
-        foreach ( [ 'header', 'footer' ] as $slot ) {
-            if ( $menus[ $slot ] || isset( $options[ $slot ] ) ) {
-                $options[ $slot ]          = is_array( $options[ $slot ] ?? null ) ? $options[ $slot ] : [];
-                $options[ $slot ]['pages'] = $menus[ $slot ];
-            }
+        // The menus (Design → Menus): header.json "menu", footer.json "columns".
+        $menus = self::published_menus( $options );
+        foreach ( [ 'header' => 'menu', 'footer' => 'columns' ] as $slot => $key ) {
+            $options[ $slot ]         = is_array( $options[ $slot ] ?? null ) ? $options[ $slot ] : [];
+            $options[ $slot ][ $key ] = $menus[ $slot ];
+            unset( $options[ $slot ]['pages'] );
         }
 
         foreach ( $allowed_pages as $page_slug ) {
