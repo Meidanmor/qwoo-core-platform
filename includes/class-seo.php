@@ -627,9 +627,10 @@ class Qwoo_Seo {
         return $url ? (string) $url : '';
     }
 
-    /** Text without tags, entities or extra spaces. */
+    /** Text without tags, entities or extra spaces (paragraphs, list items and line breaks become spaces). */
     public static function plain( $text ): string {
-        $text = html_entity_decode( wp_strip_all_tags( strip_shortcodes( (string) $text ) ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+        $text = preg_replace( '#<(br|/p|/li|/h[1-6]|/div|/blockquote)\b[^>]*>#i', '$0 ', strip_shortcodes( (string) $text ) );
+        $text = html_entity_decode( wp_strip_all_tags( $text ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
         return trim( preg_replace( '/\s+/u', ' ', $text ) );
     }
 

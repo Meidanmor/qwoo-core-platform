@@ -262,6 +262,17 @@ function send_order_push_notification($order_id) {
 
 add_action('woocommerce_store_api_checkout_order_processed', 'send_order_push_notification', 10, 1);
 
+/**
+ * "<name> is now on sale for <price>", with the price in the store's own
+ * currency and format (plain text: push notifications don't show HTML).
+ */
+function qwoo_sale_push_text($product)
+{
+    $name  = html_entity_decode(wp_strip_all_tags($product->get_name()), ENT_QUOTES, 'UTF-8');
+    $price = html_entity_decode(wp_strip_all_tags(wc_price($product->get_sale_price())), ENT_QUOTES, 'UTF-8');
+    return sprintf('%s is now on sale for %s', $name, str_replace("\u{00A0}", ' ', $price));
+}
+
 function send_sale_push_notification_web($sub, $product)
 {
     $primary_domain = Qwoo_Technical_Settings::get_primary_frontend_domain();
@@ -282,7 +293,7 @@ function send_sale_push_notification_web($sub, $product)
     $payload = json_encode([
         'product_id' => $product_id,
         'title' => '🔥 Sale Alert!',
-        'body' => "$product_name is now on sale for ₪" . $product->get_sale_price(),
+        'body' => qwoo_sale_push_text($product),
         'data' => [
             'url' => $product_url,
         ],
@@ -341,7 +352,7 @@ function send_sale_push_notification_native($sub, $product)
     $payload = json_encode([
             'product_id' => $product_id,
         'title' => '🔥 Sale Alert!',
-        'body'  => "$product_name is now on sale for ₪" . $product->get_sale_price(),
+        'body'  => qwoo_sale_push_text($product),
         'data' => [
             'url' => $product_url,
         ]
@@ -352,7 +363,7 @@ function send_sale_push_notification_native($sub, $product)
             'token' => $sub['endpoint'], // FCM token
             'notification' => [
                 'title' => '🔥 Sale Alert!',
-                'body' => $product_name .'is now on sale for ₪' . $product->get_sale_price(),
+                'body' => qwoo_sale_push_text($product),
             ],
             'android' => [
                 'notification' => [

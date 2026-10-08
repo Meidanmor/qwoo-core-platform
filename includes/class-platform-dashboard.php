@@ -35,6 +35,7 @@ class Qwoo_Platform_Dashboard {
 
     use Qwoo_Platform_Payments;
     use Qwoo_Platform_Coupons;
+    use Qwoo_Platform_Product_Tools;
 
     const KEY_OPTION   = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
@@ -50,6 +51,11 @@ class Qwoo_Platform_Dashboard {
         'product_get'     => 'action_product_get',
         'product_save'    => 'action_product_save',
         'product_delete'  => 'action_product_delete',
+        'product_duplicate'     => 'action_product_duplicate',
+        'products_bulk'         => 'action_products_bulk',
+        'products_export'       => 'action_products_export',
+        'products_import_check' => 'action_products_import_check',
+        'products_import_run'   => 'action_products_import_run',
         'categories_list' => 'action_categories_list',
         'category_create' => 'action_category_create',
         'category_get'    => 'action_category_get',
@@ -127,8 +133,36 @@ class Qwoo_Platform_Dashboard {
     const MAX_IMAGE_BYTES  = 8388608; // 8 MB
     const MAX_IMAGE_SIDE   = 2400;
 
+    /** Formatting a product description can have: what the storefront shows. */
+    const DESCRIPTION_TAGS = [
+        'p'      => [],
+        'br'     => [],
+        'strong' => [],
+        'b'      => [],
+        'em'     => [],
+        'i'      => [],
+        'h3'     => [],
+        'h4'     => [],
+        'ul'     => [],
+        'ol'     => [],
+        'li'     => [],
+        'a'      => [ 'href' => [], 'title' => [] ],
+    ];
+
+    /** The product list's orders: [ orderby, order ], or null for the ones from the lookup table (list_order). */
+    const PRODUCT_SORTS = [
+        'newest'     => [ 'date', 'DESC' ],
+        'oldest'     => [ 'date', 'ASC' ],
+        'name'       => [ 'title', 'ASC' ],
+        'name_desc'  => [ 'title', 'DESC' ],
+        'price'      => null,
+        'price_desc' => null,
+        'stock'      => null,
+    ];
+
     public static function init() {
         add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
+        add_action( 'rest_api_init', [ __CLASS__, 'run_scheduled_sales' ] );
     }
 
     public static function register_routes() {
@@ -420,18 +454,25 @@ class Qwoo_Platform_Dashboard {
     /* ---------------- products ---------------- */
 
     /** A page of products (20), newest first: { items, total, pages, page }. */
+    /**
+     * { page, search, filter: '' | publish | draft | outofstock | onsale,
+     * category (id, with its subcategories), sort: a PRODUCT_SORTS key }.
+     * 20 a page.
+     */
     private static function action_products_list( array $params ) {
-        $page   = max( 1, min( 1000, (int) ( $params['page'] ?? 1 ) ) );
-        $search = mb_substr( sanitize_text_field( (string) ( $params['search'] ?? '' ) ), 0, 100 );
-        $filter = (string) ( $params['filter'] ?? '' );
+        $page     = max( 1, min( 1000, (int) ( $params['page'] ?? 1 ) ) );
+        $search   = mb_substr( sanitize_text_field( (string) ( $params['search'] ?? '' ) ), 0, 100 );
+        $filter   = (string) ( $params['filter'] ?? '' );
+        $sort     = array_key_exists( (string) ( $params['sort'] ?? '' ), self::PRODUCT_SORTS ) ? (string) $params['sort'] : 'newest';
+        $category = absint( $params['category'] ?? 0 );
 
         $args = [
             'post_type'      => 'product',
             'post_status'    => in_array( $filter, self::PRODUCT_STATUSES, true ) ? $filter : [ 'publish', 'draft', 'pending', 'private' ],
             'posts_per_page' => 20,
             'paged'          => $page,
-            'orderby'        => 'date',
-            'order'          => 'DESC',
+            'orderby'        => self::PRODUCT_SORTS[ $sort ][0] ?? 'date',
+            'order'          => self::PRODUCT_SORTS[ $sort ][1] ?? 'DESC',
             'fields'         => 'ids',
         ];
         if ( $search !== '' ) {
@@ -440,7 +481,22 @@ class Qwoo_Platform_Dashboard {
         if ( $filter === 'outofstock' ) {
             $args['meta_query'] = [ [ 'key' => '_stock_status', 'value' => 'outofstock' ] ];
         }
+        if ( $filter === 'onsale' ) {
+            $args['post__in'] = array_merge( [ 0 ], wc_get_product_ids_on_sale() );
+        }
+        if ( $category ) {
+            $args['tax_query'] = [ [ 'taxonomy' => 'product_cat', 'field' => 'term_id', 'terms' => $category, 'include_children' => true ] ];
+        }
+        $order = self::PRODUCT_SORTS[ $sort ] === null ? static function ( $clauses ) use ( $sort ) {
+            return self::list_order( $clauses, $sort );
+        } : null;
+        if ( $order ) {
+            add_filter( 'posts_clauses', $order );
+        }
         $query = new WP_Query( $args );
+        if ( $order ) {
+            remove_filter( 'posts_clauses', $order );
+        }
         $items = [];
         foreach ( $query->posts as $id ) {
             $product = wc_get_product( $id );
@@ -457,6 +513,24 @@ class Qwoo_Platform_Dashboard {
         ];
     }
 
+    /**
+     * Price and stock orders, from WooCommerce's product lookup table (kept
+     * for every product, drafts too): products without a price or tracked
+     * quantity come last.
+     */
+    private static function list_order( array $clauses, $sort ) {
+        global $wpdb;
+        $clauses['join'] .= " LEFT JOIN {$wpdb->wc_product_meta_lookup} qwoo_lookup ON qwoo_lookup.product_id = {$wpdb->posts}.ID";
+        $orders           = [
+            'price'      => 'qwoo_lookup.min_price IS NULL, qwoo_lookup.min_price ASC',
+            'price_desc' => 'qwoo_lookup.max_price IS NULL, qwoo_lookup.max_price DESC',
+            // Out of stock first, then the lowest tracked quantities.
+            'stock'      => "qwoo_lookup.stock_status = 'outofstock' DESC, qwoo_lookup.stock_quantity IS NULL, qwoo_lookup.stock_quantity ASC",
+        ];
+        $clauses['orderby'] = $orders[ $sort ] . ", {$wpdb->posts}.ID DESC";
+        return $clauses;
+    }
+
     private static function action_product_get( array $params ) {
         $product = self::find_product( $params['id'] ?? 0 );
         return is_wp_error( $product ) ? $product : self::product_full( $product );
@@ -464,9 +538,11 @@ class Qwoo_Platform_Dashboard {
 
     /**
      * Creates (no id) or updates a product from params.fields:
-     * type (simple | variable), name, status, description (plain text; left
-     * alone when missing), sku, category_ids, image_ids (the first is the
-     * main photo), and for simple products regular_price, sale_price,
+     * type (simple | variable), name, status, description_html (formatted:
+     * DESCRIPTION_TAGS) or description (plain text; both left alone when
+     * missing), sku, category_ids, image_ids (the first is the main photo),
+     * sale_from / sale_to (YYYY-MM-DD, a scheduled sale; left alone when
+     * missing), and for simple products regular_price, sale_price,
      * manage_stock, stock_quantity, stock_status.
      *
      * Products with options (type variable) take attributes and variations
@@ -492,11 +568,26 @@ class Qwoo_Platform_Dashboard {
         if ( is_wp_error( $common ) ) {
             return $common;
         }
+        $dates = self::sale_dates( $f );
+        if ( $dates === false ) {
+            return self::bad( 'Pick the sale dates from the calendar.' );
+        }
+        if ( $dates && $dates['from'] !== '' && $dates['to'] !== '' && $dates['to'] < $dates['from'] ) {
+            return self::bad( 'The sale must end after it starts.' );
+        }
+        if ( $dates && $dates['to'] !== '' && $dates['to'] < current_time( 'Y-m-d' ) ) {
+            return self::bad( 'The sale\'s end date has passed. Change it or clear it.' );
+        }
+        $scheduled = $dates && ( $dates['from'] !== '' || $dates['to'] !== '' );
         if ( $type === 'variable' ) {
             $plan = self::variable_plan( $product, $f, $common['status'], $common['sku'] );
             if ( is_wp_error( $plan ) ) {
                 return $plan;
             }
+            if ( $scheduled && ! array_filter( $plan['variations'], static fn( $v ) => $v['stock']['sale'] !== '' ) ) {
+                return self::bad( 'Add a sale price to at least one variant to schedule the sale.' );
+            }
+            $plan['dates'] = $dates;
         } else {
             $stock = self::stock_fields( $f );
             if ( is_wp_error( $stock ) ) {
@@ -504,6 +595,9 @@ class Qwoo_Platform_Dashboard {
             }
             if ( $common['status'] === 'publish' && $stock['regular'] === '' ) {
                 return self::bad( 'Add a price before publishing the product.' );
+            }
+            if ( $scheduled && $stock['sale'] === '' ) {
+                return self::bad( 'Add a sale price to schedule the sale.' );
             }
         }
 
@@ -530,6 +624,7 @@ class Qwoo_Platform_Dashboard {
                 }
                 self::apply_common( $product, $common );
                 self::apply_stock( $product, $stock );
+                self::apply_sale_dates( $product, $dates );
                 $product->save();
             }
         } catch ( WC_Data_Exception $e ) {
@@ -566,7 +661,13 @@ class Qwoo_Platform_Dashboard {
             }
         }
         $description = null;
-        if ( array_key_exists( 'description', $f ) ) {
+        if ( array_key_exists( 'description_html', $f ) ) {
+            $html = (string) $f['description_html'];
+            if ( mb_strlen( $html ) > 40000 ) {
+                return self::bad( 'The description is too long. Shorten it a little.' );
+            }
+            $description = [ 'html' => self::clean_description( $html ) ];
+        } elseif ( array_key_exists( 'description', $f ) ) {
             $description = (string) $f['description'];
             if ( mb_strlen( $description ) > 20000 ) {
                 return self::bad( 'The description is too long (20,000 characters at most).' );
@@ -621,7 +722,9 @@ class Qwoo_Platform_Dashboard {
         $product->set_name( $c['name'] );
         $product->set_status( $c['status'] );
         $product->set_sku( $c['sku'] ); // throws for an SKU another product has
-        if ( $c['description'] !== null ) {
+        if ( is_array( $c['description'] ) ) {
+            $product->set_description( $c['description']['html'] );
+        } elseif ( $c['description'] !== null ) {
             $product->set_description( self::from_text( $c['description'] ) );
         }
         $product->set_category_ids( $c['categories'] );
@@ -926,6 +1029,7 @@ class Qwoo_Platform_Dashboard {
             $variation->set_menu_order( $order );
             $variation->set_image_id( $v['image'] );
             self::apply_stock( $variation, $v['stock'] );
+            self::apply_sale_dates( $variation, $plan['dates'] ?? null );
             try {
                 $variation->set_sku( $v['sku'] );
                 $variation->save();
@@ -2127,16 +2231,20 @@ class Qwoo_Platform_Dashboard {
             }
         }
         $description = (string) $p->get_description();
-        return self::product_summary( $p ) + self::product_options( $p ) + [
+        return self::product_summary( $p ) + self::product_options( $p ) + self::sale_dates_of( $p ) + [
             'editable'     => $p->is_type( self::EDITABLE_TYPES ),
+            // For the formatted editor: what it can show (anything else is dropped when saving).
+            'description_html' => self::clean_description( wpautop( $description ) ),
             'sku'          => $p->get_sku(),
             'manage_stock' => $p->managing_stock(),
             'categories'   => array_map( 'intval', $p->get_category_ids() ),
             'images'       => $images,
             'description'  => self::to_text( $description ),
             // Formatting beyond paragraphs (lists, bold…) would be lost if
-            // the owner edits the text here; the app says so.
+            // the owner edits the text in an older dashboard; it says so.
             'formatted'    => (bool) preg_match( '/<(?!\/?(p|br)\b)[a-z]/i', $description ),
+            // Formatting the editor can't keep (tables, images, colors…): it warns before it's lost.
+            'formatting_lost' => self::formatting_lost( $description ),
             'currency'     => get_woocommerce_currency(),
             'decimals'     => wc_get_price_decimals(),
             // The address on the storefront, shown decoded ("טבעת-זהב").
@@ -2179,6 +2287,28 @@ class Qwoo_Platform_Dashboard {
     private static function from_text( $text ) {
         $text = trim( str_replace( "\r\n", "\n", (string) $text ) );
         return $text === '' ? '' : wpautop( esc_html( $text ) );
+    }
+
+    /** A formatted description: DESCRIPTION_TAGS only, http(s)/mailto/tel links, no empty paragraphs. */
+    private static function clean_description( $html ) {
+        $html = preg_replace( '#<(script|style)\b[^>]*>.*?</\1\s*>#is', '', (string) $html );
+        $html = wp_kses( $html, self::DESCRIPTION_TAGS, [ 'http', 'https', 'mailto', 'tel' ] );
+        $html = preg_replace( '#<p>(\s|&nbsp;|<br\s*/?>)*</p>#i', '', $html );
+        return trim( $html );
+    }
+
+    /** Whether a description has tags or attributes the formatted editor drops. */
+    private static function formatting_lost( $description ) {
+        $description = (string) $description;
+        if ( ! preg_match( '/<[a-z]/i', $description ) ) {
+            return false;
+        }
+        $plain = static fn( $html ) => preg_replace( '/\s+/', '', wp_strip_all_tags( $html ) );
+        $kept  = wp_kses( wpautop( $description ), self::DESCRIPTION_TAGS, [ 'http', 'https', 'mailto', 'tel' ] );
+        // Tags with attributes (style, class…) or other tags (img, table…) are gone; the text stays.
+        return (bool) preg_match( '/<(?!\/?(p|br|strong|b|em|i|h3|h4|ul|ol|li|a)[\s>\/])[a-z]/i', $description )
+            || (bool) preg_match( '/<(p|strong|b|em|i|h3|h4|ul|ol|li)\s[^>]*>/i', $description )
+            || $plain( $kept ) !== $plain( wpautop( $description ) );
     }
 
     private static function bad( $message ) {
