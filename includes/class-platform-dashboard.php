@@ -36,6 +36,7 @@ class Qwoo_Platform_Dashboard {
     use Qwoo_Platform_Payments;
     use Qwoo_Platform_Coupons;
     use Qwoo_Platform_Product_Tools;
+    use Qwoo_Platform_Customers;
 
     const KEY_OPTION   = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
@@ -56,6 +57,10 @@ class Qwoo_Platform_Dashboard {
         'products_export'       => 'action_products_export',
         'products_import_check' => 'action_products_import_check',
         'products_import_run'   => 'action_products_import_run',
+        'customers_list'        => 'action_customers_list',
+        'customer_get'          => 'action_customer_get',
+        'customer_save'         => 'action_customer_save',
+        'customer_delete'       => 'action_customer_delete',
         'categories_list' => 'action_categories_list',
         'category_create' => 'action_category_create',
         'category_get'    => 'action_category_get',
@@ -2100,6 +2105,8 @@ class Qwoo_Platform_Dashboard {
             'online_refund' => self::can_refund_online( $o ),
             'shipping_via' => $o->get_shipping_method(),
             'email'        => $o->get_billing_email(),
+            // The Customers screen: by email (an account with it is found from there), else the account.
+            'customer_key' => $o->get_billing_email() !== '' ? 'g' . $o->get_id() : ( $o->get_customer_id() ? 'u' . $o->get_customer_id() : '' ),
             'phone'        => $o->get_billing_phone(),
             'billing'      => $address( $o->get_address( 'billing' ) ),
             'ship_to'      => $o->has_shipping_address() ? $address( $o->get_address( 'shipping' ) ) : '',
