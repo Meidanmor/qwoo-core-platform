@@ -42,7 +42,7 @@ trait SB_Pages {
         'forgot-password', 'reset-password', 'auth', 'login', 'account', 'search', 'wp-json', 'wp-admin',
         'wp-content', 'wp-includes', 'api', 'config', 'data', 'sections', 'branding', 'homepage-hero',
         'js', 'css', 'fonts', 'icons', 'assets', 'img', 'images', '_quasar', 'sitemap', 'robots', 'llms',
-        'manifest', 'offline', 'home', 'index', 'shop', 'page', 'pages', 'review',
+        'manifest', 'offline', 'home', 'index', 'shop', 'page', 'pages', 'review', 'blog',
     ];
 
     const PUBLISHED_PAGES_OPTION = 'qwoo_published_pages';

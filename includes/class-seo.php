@@ -7,6 +7,9 @@
  *                            og_type, site_name, locale, … }
  * GET qwoo/v1/sitemap      { urls: [ { path, lastmod } ] }
  *
+ * Addresses: the homepage, /products, /product/…, /product-category/…,
+ * /blog, /blog/<post>, /blog/category/<category>, and the owner's pages.
+ *
  * Both sit behind the proxy secret (the qwoo namespace): the storefront
  * asks for them, nobody else.
  *
@@ -190,6 +193,15 @@ class Qwoo_Seo {
         ];
     }
 
+    /** A blog post's automatic title and description: its title, and its summary or first words. */
+    public static function post_defaults( WP_Post $post ): array {
+        $text = class_exists( 'Qwoo_Blog' ) ? Qwoo_Blog::excerpt( $post ) : self::plain( $post->post_content );
+        return [
+            'title'       => self::with_pattern( self::plain( get_the_title( $post ) ) ),
+            'description' => self::shorten( self::plain( $text ) ),
+        ];
+    }
+
     /** The homepage's automatic title and description: the tagline, else the homepage's hero text. */
     public static function home_defaults(): array {
         $name    = self::store_name();
@@ -246,6 +258,15 @@ class Qwoo_Seo {
         if ( preg_match( '#^product-category/([^/]+)$#u', $path, $m ) ) {
             return self::category( $m[1] ) ?? self::moved( 'product_cat', $m[1] );
         }
+        if ( $path === 'blog' ) {
+            return self::blog();
+        }
+        if ( preg_match( '#^blog/category/([^/]+)$#u', $path, $m ) ) {
+            return self::blog_category( $m[1] );
+        }
+        if ( preg_match( '#^blog/([^/]+)$#u', $path, $m ) ) {
+            return self::post( $m[1] ) ?? self::moved( 'post', $m[1] );
+        }
         // The owner's own pages (/about, /about/team…).
         return self::page( $path );
     }
@@ -299,16 +320,23 @@ class Qwoo_Seo {
         if ( $old === '' ) {
             return null;
         }
-        if ( $type === 'product' ) {
-            // WordPress keeps a product's earlier slugs in _wp_old_slug.
+        if ( $type === 'product' || $type === 'post' ) {
+            // WordPress keeps a product's or post's earlier slugs in _wp_old_slug.
             $id = (int) $wpdb->get_var( $wpdb->prepare(
                 "SELECT p.ID FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id
-                 WHERE m.meta_key = '_wp_old_slug' AND m.meta_value = %s AND p.post_type = 'product' AND p.post_status = 'publish'
+                 WHERE m.meta_key = '_wp_old_slug' AND m.meta_value = %s AND p.post_type = %s AND p.post_status = 'publish'
                  ORDER BY p.post_modified_gmt DESC LIMIT 1",
-                $old
+                $old,
+                $type
             ) );
             $post = $id ? get_post( $id ) : null;
-            return $post && $post->post_name !== $old && self::product( $post->post_name ) ? [ 'redirect' => '/product/' . $post->post_name ] : null;
+            if ( ! $post || $post->post_name === $old ) {
+                return null;
+            }
+            if ( $type === 'post' ) {
+                return self::post( $post->post_name ) ? [ 'redirect' => '/blog/' . $post->post_name ] : null;
+            }
+            return self::product( $post->post_name ) ? [ 'redirect' => '/product/' . $post->post_name ] : null;
         }
         $id   = (int) $wpdb->get_var( $wpdb->prepare(
             "SELECT term_id FROM {$wpdb->termmeta} WHERE meta_key = '_qwoo_old_slug' AND meta_value = %s ORDER BY meta_id DESC LIMIT 1",
@@ -396,6 +424,58 @@ class Qwoo_Seo {
             'og_image'    => self::image_url( $image ) ?: self::image_url( absint( self::settings()['image_id'] ) ),
             'og_type'     => 'website',
             'type'        => 'product_cat',
+        ];
+    }
+
+    /** The blog's list: its own title, the store's description. Kept out of search until it has posts. */
+    private static function blog(): array {
+        $has_posts = (bool) get_posts( [ 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => 1, 'fields' => 'ids' ] );
+        return [
+            'title'       => self::with_pattern( 'Blog' ),
+            'description' => self::home_defaults()['description'],
+            'canonical'   => self::url( '/blog' ),
+            'robots'      => self::robots( $has_posts ),
+            'og_image'    => self::image_url( absint( self::settings()['image_id'] ) ),
+            'og_type'     => 'website',
+            'type'        => 'blog',
+        ];
+    }
+
+    private static function blog_category( string $slug ): ?array {
+        $term = get_term_by( 'slug', sanitize_title( $slug ), 'category' );
+        if ( ! $term || is_wp_error( $term ) || (int) $term->term_id === (int) get_option( 'default_category' ) ) {
+            return null;
+        }
+        $text = self::plain( $term->description );
+        return [
+            'title'       => self::with_pattern( self::plain( $term->name ) ),
+            'description' => self::shorten( $text !== '' ? $text : self::plain( $term->name ) . ' · ' . self::store_name() ),
+            'canonical'   => self::url( '/blog/category/' . $term->slug ),
+            'robots'      => self::robots( (int) $term->count > 0 ),
+            'og_image'    => self::image_url( absint( self::settings()['image_id'] ) ),
+            'og_type'     => 'website',
+            'type'        => 'blog_category',
+        ];
+    }
+
+    private static function post( string $slug ): ?array {
+        $post = get_page_by_path( sanitize_title( $slug ), OBJECT, 'post' );
+        if ( ! $post || $post->post_status !== 'publish' ) {
+            return null;
+        }
+        $custom   = self::custom( $post->ID );
+        $defaults = self::post_defaults( $post );
+        $image    = $custom['image_id'] ?: (int) get_post_thumbnail_id( $post );
+        return [
+            'title'       => $custom['title'] !== '' ? $custom['title'] : $defaults['title'],
+            'description' => $custom['description'] !== '' ? $custom['description'] : $defaults['description'],
+            'canonical'   => self::url( '/blog/' . $post->post_name ),
+            'robots'      => self::robots( ! self::is_noindex( $post->ID ) ),
+            'og_image'    => self::image_url( $image ) ?: self::image_url( absint( self::settings()['image_id'] ) ),
+            'og_type'     => 'article',
+            'type'        => 'post',
+            'published'   => mysql2date( 'c', $post->post_date_gmt, false ),
+            'modified'    => mysql2date( 'c', $post->post_modified_gmt, false ),
         ];
     }
 
@@ -582,6 +662,27 @@ class Qwoo_Seo {
         foreach ( is_wp_error( $terms ) ? [] : $terms as $term ) {
             if ( ! self::is_noindex( (int) $term->term_id, 'term' ) ) {
                 $urls[] = [ 'path' => '/product-category/' . $term->slug, 'lastmod' => '' ];
+            }
+        }
+
+        // The blog: its list, its posts, and categories with posts.
+        $posts = get_posts( [
+            'post_type'      => 'post',
+            'post_status'    => 'publish',
+            'posts_per_page' => 5000,
+            'orderby'        => 'modified',
+            'order'          => 'DESC',
+            'meta_query'     => [ [ 'key' => self::NOINDEX_META, 'compare' => 'NOT EXISTS' ] ],
+            'no_found_rows'  => true,
+        ] );
+        if ( $posts ) {
+            $urls[] = [ 'path' => '/blog', 'lastmod' => mysql2date( 'c', $posts[0]->post_modified_gmt, false ) ];
+            foreach ( $posts as $post ) {
+                $urls[] = [ 'path' => '/blog/' . $post->post_name, 'lastmod' => mysql2date( 'c', $post->post_modified_gmt, false ) ];
+            }
+            $cats = get_terms( [ 'taxonomy' => 'category', 'hide_empty' => true, 'exclude' => [ (int) get_option( 'default_category' ) ], 'number' => 500 ] );
+            foreach ( is_wp_error( $cats ) ? [] : $cats as $term ) {
+                $urls[] = [ 'path' => '/blog/category/' . $term->slug, 'lastmod' => '' ];
             }
         }
 

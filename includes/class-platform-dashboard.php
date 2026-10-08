@@ -38,6 +38,7 @@ class Qwoo_Platform_Dashboard {
     use Qwoo_Platform_Product_Tools;
     use Qwoo_Platform_Customers;
     use Qwoo_Platform_Reviews;
+    use Qwoo_Platform_Blog;
 
     const KEY_OPTION   = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
@@ -67,6 +68,13 @@ class Qwoo_Platform_Dashboard {
         'review_moderate'       => 'action_review_moderate',
         'review_reply'          => 'action_review_reply',
         'reviews_settings'      => 'action_reviews_settings',
+        'posts_list'            => 'action_posts_list',
+        'post_get'              => 'action_post_get',
+        'post_save'             => 'action_post_save',
+        'post_delete'           => 'action_post_delete',
+        'blog_categories'       => 'action_blog_categories',
+        'blog_category_save'    => 'action_blog_category_save',
+        'blog_category_delete'  => 'action_blog_category_delete',
         'categories_list' => 'action_categories_list',
         'category_create' => 'action_category_create',
         'category_get'    => 'action_category_get',
@@ -1337,8 +1345,8 @@ class Qwoo_Platform_Dashboard {
             @unlink( $saved['path'] );
             return self::bad( $id->get_error_message() );
         }
-        // url: the product-size thumbnail; media: what the Design screen shows and previews.
-        return [ 'id' => (int) $id, 'url' => self::image_url( $id, 'woocommerce_thumbnail' ), 'media' => Shop_Settings_Builder::platform_media_item( $id ) ];
+        // url: the product-size thumbnail; large: for blog posts; media: what the Design screen shows and previews.
+        return [ 'id' => (int) $id, 'url' => self::image_url( $id, 'woocommerce_thumbnail' ), 'large' => self::image_url( $id, 'large' ), 'media' => Shop_Settings_Builder::platform_media_item( $id ) ];
     }
 
     /* ---------------- orders ---------------- */

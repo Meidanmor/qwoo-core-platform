@@ -538,6 +538,20 @@ abstract class Shop_Builder_Constants {
                                     'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
                     ],
             ],
+            'latest_posts' => [
+                    'label'  => 'Latest Blog Posts',
+                    'category' => 'shop',
+                    'icon'   => 'article',
+                    'fields' => [
+                            'count'        => [ 'type' => 'number', 'label' => 'Posts', 'tab' => 'content', 'min' => 1, 'max' => 12, 'default' => 3 ],
+                            'columns'      => [ 'type' => 'number', 'label' => 'Posts Per Row', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 4,
+                                    'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
+                            'show_excerpt' => [ 'type' => 'toggle', 'label' => 'Show the summary', 'tab' => 'content', 'default' => true ],
+                            'show_date'    => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
+                            'button_label' => [ 'type' => 'text', 'label' => 'Link to the blog', 'tab' => 'content', 'default' => 'All posts',
+                                    'help' => 'Leave empty for no link.' ],
+                    ],
+            ],
             'category_grid' => [
                     'label'  => 'Category Grid',
                     'category' => 'shop',
