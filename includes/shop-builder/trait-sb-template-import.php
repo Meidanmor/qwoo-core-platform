@@ -146,6 +146,14 @@ trait SB_Template_Import {
             return [ 'error' => 'No access to the content repository.' ];
         }
 
+        // What the store sells (optional at signup): its tagline and the homepage's opening text.
+        $description = mb_substr( trim( sanitize_textarea_field( (string) ( $input['description'] ?? '' ) ) ), 0, 300 );
+        if ( $description !== '' ) {
+            update_option( 'blogdescription', $description );
+        }
+        // Home (from the template's homepage), privacy policy, terms, shipping & returns.
+        self::ensure_store_pages( true, trim( (string) ( $input['name'] ?? '' ) ) );
+
         $options  = (array) get_option( 'shop_builder_options', [] );
         $branding = (array) ( $options['branding'] ?? [] );
         $pwa      = (array) ( $options['pwa'] ?? [] );

@@ -157,7 +157,7 @@ trait SB_Menus {
             case 'builtin':
                 return isset( self::$menu_builtins[ $ref ] ) ? self::$menu_builtins[ $ref ] : [ '', '' ];
             case 'page':
-                if ( empty( $paths[ $ref ] ) ) return [ '', '' ];
+                if ( ! isset( $paths[ $ref ] ) ) return [ '', '' ];
                 return [ (string) ( $titles[ $ref ] ?? '' ), '/' . $paths[ $ref ] ];
             case 'category':
                 $term = get_term( (int) $ref, 'product_cat' );

@@ -9,7 +9,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * Stored in shop_builder_options['custom_pages'] (draft, versions and
  * undo work like every other page):
  *   [ { id: pg_…, title, slug, parent: '' | pg_…, status: publish | draft,
- *       show_title, role: '' | privacy | terms | returns,
+ *       show_title, role: '' | home | privacy | terms | returns,
  *       seo: { title, description, image_id, noindex, keyphrase },
  *       sections: [ … ] } ]
  *
@@ -21,6 +21,11 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * page whose address changed since the last publish keeps its old address
  * working (old_paths → 301).
  *
+ * The page with role "home" is the storefront's homepage: its address is
+ * "/" (path ''), and it never sits inside another page or holds pages.
+ * New stores get it (and the legal pages) at setup; older stores get their
+ * old Homepage tab turned into it (trait-sb-store-pages.php).
+ *
  * Menus are their own thing (trait-sb-menus.php).
  */
 trait SB_Pages {
@@ -29,7 +34,7 @@ trait SB_Pages {
     private static $max_pages = 50;
     private static $max_page_depth = 6;
     // What a page is for, when the storefront links to it on its own (one page each).
-    private static $page_roles = [ 'privacy', 'terms', 'returns' ];
+    private static $page_roles = [ 'home', 'privacy', 'terms', 'returns' ];
 
     /** Top-level addresses the storefront (or Vercel) already uses. */
     private static $reserved_slugs = [
@@ -65,6 +70,10 @@ trait SB_Pages {
         }
         $paths = [];
         foreach ( $by_id as $id => $page ) {
+            if ( ( $page['role'] ?? '' ) === 'home' ) {
+                $paths[ $id ] = ''; // the homepage: "/"
+                continue;
+            }
             $parts = [];
             $seen  = [];
             $at    = $id;
@@ -111,11 +120,18 @@ trait SB_Pages {
             }
             $id         = (string) ( $page['id'] ?? '' );
             $ids[ $id ] = true;
-            $clean[]    = [ 'id' => $id, 'title' => $title, 'slug' => $slug, 'parent' => (string) ( $page['parent'] ?? '' ) ];
+            $clean[]    = [ 'id' => $id, 'title' => $title, 'slug' => $slug, 'parent' => (string) ( $page['parent'] ?? '' ), 'role' => (string) ( $page['role'] ?? '' ) ];
+        }
+        $homes = array_column( array_filter( $clean, static fn( $p ) => $p['role'] === 'home' ), 'id' );
+        if ( count( $homes ) > 1 ) {
+            return 'Only one page can be the homepage.';
         }
         foreach ( $clean as $i => $page ) {
             if ( $page['parent'] !== '' && ! isset( $ids[ $page['parent'] ] ) ) {
                 $clean[ $i ]['parent'] = '';
+            }
+            if ( $page['parent'] !== '' && ( $page['role'] === 'home' || in_array( $page['parent'], $homes, true ) ) ) {
+                return $page['role'] === 'home' ? 'The homepage can\'t sit inside another page.' : "\"{$page['title']}\" can't sit inside the homepage. Choose another page or the top level.";
             }
         }
 
@@ -129,7 +145,7 @@ trait SB_Pages {
             if ( substr_count( $path, '/' ) >= self::$max_page_depth ) {
                 return "\"{$page['title']}\" is too deep: pages can sit up to " . self::$max_page_depth . ' levels inside each other.';
             }
-            if ( $page['parent'] === '' && in_array( $page['slug'], self::$reserved_slugs, true ) ) {
+            if ( $page['parent'] === '' && $page['role'] !== 'home' && in_array( $page['slug'], self::$reserved_slugs, true ) ) {
                 return 'The address /' . urldecode( $page['slug'] ) . " is used by your store itself. Choose another one for \"{$page['title']}\".";
             }
             if ( isset( $seen[ $path ] ) ) {
@@ -178,7 +194,13 @@ trait SB_Pages {
         foreach ( $clean as $i => $page ) {
             if ( $page['role'] === '' ) continue;
             if ( isset( $roles[ $page['role'] ] ) ) $clean[ $i ]['role'] = '';
-            $roles[ $page['role'] ] = true;
+            $roles[ $page['role'] ] = $page['id'];
+        }
+        // The homepage is "/": at the top level, with no pages inside it.
+        foreach ( $clean as $i => $page ) {
+            if ( $page['role'] === 'home' || ( isset( $roles['home'] ) && $page['parent'] === $roles['home'] ) ) {
+                $clean[ $i ]['parent'] = '';
+            }
         }
 
         // Parents must exist and not loop; addresses must be unique and never a store address
@@ -196,6 +218,7 @@ trait SB_Pages {
         }
         $used = [];
         foreach ( $clean as $i => $page ) {
+            if ( $page['role'] === 'home' ) continue; // its address is "/", whatever its slug
             $key = $page['parent'] . '/' . $page['slug'];
             if ( isset( $used[ $key ] ) || ( $page['parent'] === '' && in_array( $page['slug'], self::$reserved_slugs, true ) ) ) {
                 $clean[ $i ]['slug'] = sanitize_title( $page['title'] . '-' . substr( $page['id'], 3, 6 ) );
@@ -241,7 +264,9 @@ trait SB_Pages {
         $paths = self::page_paths( $pages );
         $out   = [];
         foreach ( $pages as $page ) {
-            if ( ( $page['status'] ?? '' ) === 'publish' && ! empty( $paths[ $page['id'] ] ) ) {
+            $path = $paths[ $page['id'] ] ?? null;
+            // '' is only the homepage's address.
+            if ( ( $page['status'] ?? '' ) === 'publish' && $path !== null && ( $path !== '' || ( $page['role'] ?? '' ) === 'home' ) ) {
                 $out[ $page['id'] ] = $page + [ 'path' => $paths[ $page['id'] ] ];
             }
         }

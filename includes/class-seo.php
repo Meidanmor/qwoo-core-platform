@@ -196,6 +196,12 @@ class Qwoo_Seo {
         $tagline = self::plain( get_bloginfo( 'description' ) );
         $options = get_option( 'shop_builder_options', [] );
         $hero    = self::plain( implode( ' ', array_filter( [ $options['home']['hero_title'] ?? '', $options['home']['hero_description'] ?? '' ], 'is_string' ) ) );
+        // Stores whose homepage is one of their pages: its first words.
+        foreach ( class_exists( 'Shop_Settings_Builder' ) ? Shop_Settings_Builder::published_pages() : [] as $page ) {
+            if ( ( $page['role'] ?? '' ) === 'home' && trim( (string) ( $page['excerpt'] ?? '' ) ) !== '' ) {
+                $hero = self::plain( (string) $page['excerpt'] );
+            }
+        }
         return [
             'title'       => $tagline !== '' ? "$name – $tagline" : $name,
             'description' => self::shorten( $tagline !== '' ? $tagline : ( $hero !== '' ? $hero : $name ) ),

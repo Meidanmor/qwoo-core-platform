@@ -77,6 +77,7 @@ class Qwoo_Platform_Dashboard {
         'design_save'     => 'action_design_save',
         'design_publish'  => 'action_design_publish',
         'design_search'   => 'action_design_search',
+        'design_page_template' => 'action_design_page_template',
         'design_media'    => 'action_design_media',
         'design_versions' => 'action_design_versions',
         'design_version'  => 'action_design_version',
@@ -1350,7 +1351,15 @@ class Qwoo_Platform_Dashboard {
     /* ---------------- design (the Shop Builder) ---------------- */
 
     private static function action_design_get() {
+        // Stores from before the homepage was a page: their Homepage tab becomes the Home page.
+        Shop_Settings_Builder::ensure_store_pages();
         return Shop_Settings_Builder::platform_design_data();
+    }
+
+    /** { role: privacy | terms | returns }: a ready-made page, filled with the store's details. */
+    private static function action_design_page_template( array $params ) {
+        $page = Shop_Settings_Builder::store_page_template( (string) ( $params['role'] ?? '' ) );
+        return $page ?: self::bad( 'Unknown page.' );
     }
 
     /** { options, pages, custom_pages, menus }: sanitized by the Shop Builder itself, like Save Draft. */
