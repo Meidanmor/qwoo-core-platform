@@ -180,6 +180,8 @@ trait Qwoo_Platform_Customers {
                 $order->save();
             }
         }
+        // Their reviews stay, as "Anonymous" (WordPress's own comment eraser).
+        wp_comments_personal_data_eraser( $customer['email'], 1 );
         if ( $customer['account'] ) {
             WC_Privacy_Erasers::customer_data_eraser( $customer['email'], 1 );
             foreach ( WC_Payment_Tokens::get_customer_tokens( $customer['user'] ) as $token ) {

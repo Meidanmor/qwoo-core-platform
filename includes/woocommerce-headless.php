@@ -17,8 +17,11 @@ add_action( 'init', function() {
                 // Get the first assigned category as the "default" one
                 $terms = get_the_terms($product->get_id(), 'product_cat');
 
+                // Whether the storefront shows reviews (the owner's switch in the dashboard).
+                $reviews = class_exists('Qwoo_Reviews') && Qwoo_Reviews::settings()['enabled'];
+
                 if (empty($terms) || is_wp_error($terms)) {
-                    return ['default_category' => null];
+                    return ['default_category' => null, 'reviews' => $reviews];
                 }
 
                 // Get the first term (you can customize sorting if needed)
@@ -30,6 +33,7 @@ add_action( 'init', function() {
                         'name' => $default->name,
                         'slug' => $default->slug,
                     ],
+                    'reviews' => $reviews,
                 ];
             },
             'schema_callback' => function () {
@@ -43,6 +47,12 @@ add_action( 'init', function() {
                                 'name' => ['type' => 'string'],
                                 'slug' => ['type' => 'string'],
                             ],
+                            'context' => ['view', 'edit'],
+                            'readonly' => true,
+                        ],
+                        'reviews' => [
+                            'description' => 'Whether the store shows product reviews.',
+                            'type' => 'boolean',
                             'context' => ['view', 'edit'],
                             'readonly' => true,
                         ],

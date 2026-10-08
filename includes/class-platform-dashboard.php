@@ -37,6 +37,7 @@ class Qwoo_Platform_Dashboard {
     use Qwoo_Platform_Coupons;
     use Qwoo_Platform_Product_Tools;
     use Qwoo_Platform_Customers;
+    use Qwoo_Platform_Reviews;
 
     const KEY_OPTION   = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
@@ -61,6 +62,11 @@ class Qwoo_Platform_Dashboard {
         'customer_get'          => 'action_customer_get',
         'customer_save'         => 'action_customer_save',
         'customer_delete'       => 'action_customer_delete',
+        'reviews_list'          => 'action_reviews_list',
+        'reviews_pending'       => 'action_reviews_pending',
+        'review_moderate'       => 'action_review_moderate',
+        'review_reply'          => 'action_review_reply',
+        'reviews_settings'      => 'action_reviews_settings',
         'categories_list' => 'action_categories_list',
         'category_create' => 'action_category_create',
         'category_get'    => 'action_category_get',
@@ -418,6 +424,7 @@ class Qwoo_Platform_Dashboard {
             ],
             'recent'   => $recent,
             'launch'   => self::launch_steps(),
+            'reviews'  => self::action_reviews_pending(),
         ];
     }
 
