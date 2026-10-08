@@ -163,7 +163,8 @@ trait SB_Github_Push {
 
                 if ( $attachment_path && file_exists( $attachment_path ) ) {
                     $image_folder = 'public/homepage-hero';
-                    $filename     = sanitize_file_name( basename( $attachment_path ) );
+                    // Named after the attachment: a new image is a new address, so browsers can keep it for good.
+                    $filename     = $attachment_id . '-' . sanitize_file_name( basename( $attachment_path ) );
                     $image_path   = "{$image_folder}/{$filename}";
                     $image_data   = file_get_contents( $attachment_path );
 
@@ -174,7 +175,9 @@ trait SB_Github_Push {
                         aps_github_batch_put_file( $batch, $image_path, $image_data );
                         $path_to_label[ $image_path ] = "{$label} (hero image)";
 
-                        $page_data['hero_image'] = wp_get_attachment_url( $attachment_id );
+                        $page_data['hero_image']      = wp_get_attachment_url( $attachment_id );
+                        // Where the storefront serves its own copy (no need to look for it).
+                        $page_data['hero_image_path'] = '/homepage-hero/' . $filename;
                     } else {
                         error_log( 'Qwoo: could not read hero image file, pushing home.json without it.' );
                     }
@@ -184,7 +187,8 @@ trait SB_Github_Push {
             }
 
             if ( $page_slug === 'branding' ) {
-                $image_fields = [ 'logo_id' => 'logo', 'app_icon_id' => 'app_icon' ];
+                $image_fields  = [ 'logo_id' => 'logo', 'app_icon_id' => 'app_icon' ];
+                $branding_kept = [];
 
                 foreach ( $image_fields as $id_field => $url_field ) {
                     $attachment_id = $page_data[ $id_field ] ?? 0;
@@ -198,7 +202,8 @@ trait SB_Github_Push {
                     }
 
                     $image_folder = 'public/branding';
-                    $filename     = sanitize_file_name( basename( $attachment_path ) );
+                    // Named after the attachment: a new image is a new address, so browsers can keep it for good.
+                    $filename     = $attachment_id . '-' . sanitize_file_name( basename( $attachment_path ) );
                     $image_path   = "{$image_folder}/{$filename}";
                     $image_data   = file_get_contents( $attachment_path );
 
@@ -207,15 +212,22 @@ trait SB_Github_Push {
                         continue;
                     }
 
-                    // Scoped to this exact target path, NOT the whole folder —
-                    // logo and app icon share 'public/branding'.
-                    aps_github_batch_delete_stale_prefix( $batch, $image_path, $image_path );
                     aps_github_batch_put_file( $batch, $image_path, $image_data );
+                    $branding_kept[ $image_path ] = true;
 
                     $field_label = $url_field === 'app_icon' ? 'app icon' : $url_field;
                     $path_to_label[ $image_path ] = "{$label} ({$field_label})";
 
-                    $page_data[ $url_field ] = wp_get_attachment_url( $attachment_id );
+                    $page_data[ $url_field ]           = wp_get_attachment_url( $attachment_id );
+                    $page_data[ $url_field . '_path' ] = '/branding/' . $filename;
+                }
+
+                // Logo and app icon share the folder: anything else in it was replaced or removed.
+                foreach ( array_keys( $batch['existing'] ) as $old ) {
+                    if ( strpos( $old, 'public/branding/' ) === 0 && ! isset( $branding_kept[ $old ] ) ) {
+                        $batch['tree_updates'][] = [ 'path' => $old, 'mode' => '100644', 'type' => 'blob', 'sha' => null ];
+                        $batch['deleted'][]      = $old;
+                    }
                 }
             }
 

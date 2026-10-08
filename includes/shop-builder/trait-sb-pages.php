@@ -9,11 +9,12 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * Stored in shop_builder_options['custom_pages'] (draft, versions and
  * undo work like every other page):
  *   [ { id: pg_…, title, slug, parent: '' | pg_…, status: publish | draft,
- *       show_title, seo: { title, description, image_id, noindex, keyphrase },
+ *       show_title, role: '' | privacy | terms | returns,
+ *       seo: { title, description, image_id, noindex, keyphrase },
  *       sections: [ … ] } ]
  *
  * Publishing writes, for published pages only:
- *   public/config/pages.json        { pages: [ { id, path, title, parent } ] }  (the router's list)
+ *   public/config/pages.json        { pages: [ { id, path, title, parent, role? } ] }  (the router's list)
  *   public/config/page-{id}.json    { id, path, slug, title, show_title, crumbs, sections }
  * and remembers what went live (option qwoo_published_pages) for SEO and the
  * sitemap, so they never point at a page the storefront doesn't have. A
@@ -27,6 +28,8 @@ trait SB_Pages {
     /** Most pages a store can have, and how deep pages can sit inside each other. */
     private static $max_pages = 50;
     private static $max_page_depth = 6;
+    // What a page is for, when the storefront links to it on its own (one page each).
+    private static $page_roles = [ 'privacy', 'terms', 'returns' ];
 
     /** Top-level addresses the storefront (or Vercel) already uses. */
     private static $reserved_slugs = [
@@ -164,9 +167,18 @@ trait SB_Pages {
                     'parent'     => is_string( $page['parent'] ?? null ) && preg_match( '/^pg_[a-zA-Z0-9]{6,20}$/', $page['parent'] ) ? $page['parent'] : '',
                     'status'     => ( $page['status'] ?? '' ) === 'publish' ? 'publish' : 'draft',
                     'show_title' => ! array_key_exists( 'show_title', $page ) || ! empty( $page['show_title'] ),
+                    'role'       => in_array( $page['role'] ?? '', self::$page_roles, true ) ? $page['role'] : '',
                     'seo'        => $seo,
                     'sections'   => $this->sanitize_sections( $page['sections'] ?? [], 'home' ),
             ];
+        }
+
+        // One page per role: the first one keeps it.
+        $roles = [];
+        foreach ( $clean as $i => $page ) {
+            if ( $page['role'] === '' ) continue;
+            if ( isset( $roles[ $page['role'] ] ) ) $clean[ $i ]['role'] = '';
+            $roles[ $page['role'] ] = true;
         }
 
         // Parents must exist and not loop; addresses must be unique and never a store address
@@ -209,6 +221,7 @@ trait SB_Pages {
                     'parent'     => (string) ( $page['parent'] ?? '' ),
                     'status'     => (string) ( $page['status'] ?? 'draft' ),
                     'show_title' => ! array_key_exists( 'show_title', $page ) || ! empty( $page['show_title'] ),
+                    'role'       => (string) ( $page['role'] ?? '' ),
                     'seo'        => [
                             'title'       => (string) ( $seo['title'] ?? '' ),
                             'description' => (string) ( $seo['description'] ?? '' ),
@@ -265,7 +278,10 @@ trait SB_Pages {
             aps_github_batch_put_file( $batch, $path, aps_normalize_json( json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ) );
             $path_to_label[ $path ] = $label;
             $kept[ $path ]          = true;
-            $list[]                 = [ 'id' => $page['id'], 'path' => $page['path'], 'title' => $page['title'], 'parent' => (string) ( $page['parent'] ?? '' ) ];
+            $entry = [ 'id' => $page['id'], 'path' => $page['path'], 'title' => $page['title'], 'parent' => (string) ( $page['parent'] ?? '' ) ];
+            // What the storefront links to on its own (the cookie notice → the privacy policy).
+            if ( ! empty( $page['role'] ) ) $entry['role'] = (string) $page['role'];
+            $list[] = $entry;
         }
         aps_github_batch_put_file( $batch, 'public/config/pages.json', aps_normalize_json( json_encode( [ 'pages' => $list ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ) );
         $path_to_label['public/config/pages.json'] = 'Pages';
@@ -302,6 +318,7 @@ trait SB_Pages {
                     'path'      => $page['path'],
                     'slug'      => $page['slug'],
                     'title'     => $page['title'],
+                    'role'      => (string) ( $page['role'] ?? '' ),
                     'seo'       => (array) ( $page['seo'] ?? [] ),
                     'excerpt'   => self::page_excerpt( (array) ( $page['sections'] ?? [] ) ),
                     'old_paths' => array_slice( array_values( array_unique( array_diff( $old, [ $page['path'] ] ) ) ), 0, 10 ),

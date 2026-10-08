@@ -371,6 +371,42 @@ class Qwoo_Platform_Dashboard {
                 'out_of_stock' => $count( [ 'status' => 'publish', 'stock_status' => 'outofstock' ] ),
             ],
             'recent'   => $recent,
+            'launch'   => self::launch_steps(),
+        ];
+    }
+
+    /**
+     * What a store needs before it's ready to sell (the Overview checklist):
+     * a logo, a way to pay, a way to ship, its address, and its legal pages
+     * (the roles of the published ones: privacy, terms, returns).
+     */
+    private static function launch_steps() {
+        $options = (array) get_option( 'shop_builder_options', [] );
+
+        $payments = false;
+        foreach ( WC()->payment_gateways() ? WC()->payment_gateways()->payment_gateways() : [] as $gateway ) {
+            if ( $gateway->enabled === 'yes' ) {
+                $payments = true;
+                break;
+            }
+        }
+
+        $shipping = false;
+        foreach ( array_merge( array_column( WC_Shipping_Zones::get_zones(), 'id' ), [ 0 ] ) as $zone_id ) {
+            if ( ( new WC_Shipping_Zone( (int) $zone_id ) )->get_shipping_methods( true ) ) {
+                $shipping = true;
+                break;
+            }
+        }
+
+        $legal = array_filter( array_map( static fn( $page ) => (string) ( $page['role'] ?? '' ), Shop_Settings_Builder::published_pages() ) );
+
+        return [
+            'logo'     => (int) ( $options['branding']['logo_id'] ?? 0 ) > 0,
+            'payments' => $payments,
+            'shipping' => $shipping,
+            'address'  => trim( (string) get_option( 'woocommerce_store_address' ) ) !== '' && trim( (string) get_option( 'woocommerce_store_city' ) ) !== '',
+            'legal'    => array_values( array_unique( $legal ) ),
         ];
     }
 
@@ -529,6 +565,18 @@ class Qwoo_Platform_Dashboard {
                 return self::bad( 'The description is too long (20,000 characters at most).' );
             }
         }
+        // Weight and size, in the store's units (Settings): left alone when missing.
+        $shipping = null;
+        if ( is_array( $f['shipping'] ?? null ) ) {
+            $shipping = [];
+            foreach ( [ 'weight', 'length', 'width', 'height' ] as $key ) {
+                $value = trim( str_replace( ',', '.', (string) ( $f['shipping'][ $key ] ?? '' ) ) );
+                if ( $value !== '' && ! preg_match( '/^\d{1,6}(\.\d{1,4})?$/', $value ) ) {
+                    return self::bad( 'Weight and size must be numbers, like 0.25.' );
+                }
+                $shipping[ $key ] = $value === '' ? '' : wc_format_decimal( $value );
+            }
+        }
         $images = array_values( array_unique( array_map( 'absint', (array) ( $f['image_ids'] ?? [] ) ) ) );
         if ( count( $images ) > self::MAX_GALLERY + 1 ) {
             return self::bad( 'A product can have up to ' . ( self::MAX_GALLERY + 1 ) . ' photos.' );
@@ -558,6 +606,7 @@ class Qwoo_Platform_Dashboard {
             'categories'  => $categories,
             'slug'        => $slug,
             'seo'         => $seo,
+            'shipping'    => $shipping,
         ];
     }
 
@@ -572,6 +621,12 @@ class Qwoo_Platform_Dashboard {
         if ( $c['slug'] ) {
             // WordPress keeps the old one (_wp_old_slug): the old address redirects.
             $product->set_slug( $c['slug'] );
+        }
+        if ( $c['shipping'] !== null ) {
+            $product->set_weight( $c['shipping']['weight'] );
+            $product->set_length( $c['shipping']['length'] );
+            $product->set_width( $c['shipping']['width'] );
+            $product->set_height( $c['shipping']['height'] );
         }
         $product->set_image_id( $c['images'][0] ?? 0 );
         $product->set_gallery_image_ids( array_slice( $c['images'], 1 ) );
@@ -1909,6 +1964,8 @@ class Qwoo_Platform_Dashboard {
             'tax'          => (float) $o->get_total_tax(),
             'payment'      => $o->get_payment_method_title(),
             'paid'         => $paid ? $paid->getTimestamp() : null,
+            // Cash on delivery: WooCommerce counts it as paid once it's processing, but the money comes later.
+            'on_delivery'  => $o->get_payment_method() === 'cod',
             'online_refund' => self::can_refund_online( $o ),
             'shipping_via' => $o->get_shipping_method(),
             'email'        => $o->get_billing_email(),
@@ -2061,6 +2118,14 @@ class Qwoo_Platform_Dashboard {
             'url'          => get_post_field( 'post_name', $p->get_id() ) !== '' ? Qwoo_Seo::url( '/product/' . get_post_field( 'post_name', $p->get_id() ) ) : '',
             'seo'          => Qwoo_Seo::for_editor( $p->get_id(), 'post' ),
             'seo_defaults' => Qwoo_Seo::product_defaults( $p ),
+            'shipping'     => [
+                'weight' => (string) $p->get_weight( 'edit' ),
+                'length' => (string) $p->get_length( 'edit' ),
+                'width'  => (string) $p->get_width( 'edit' ),
+                'height' => (string) $p->get_height( 'edit' ),
+            ],
+            'weight_unit'    => (string) get_option( 'woocommerce_weight_unit', 'kg' ),
+            'dimension_unit' => (string) get_option( 'woocommerce_dimension_unit', 'cm' ),
         ];
     }
 
