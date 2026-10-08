@@ -34,6 +34,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class Qwoo_Platform_Dashboard {
 
     use Qwoo_Platform_Payments;
+    use Qwoo_Platform_Coupons;
 
     const KEY_OPTION   = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
@@ -94,6 +95,11 @@ class Qwoo_Platform_Dashboard {
         'stripe_settings'       => 'action_stripe_settings',
         'stripe_disconnect'     => 'action_stripe_disconnect',
         'frontend_domain_set'   => 'action_frontend_domain_set',
+        'coupons_list'          => 'action_coupons_list',
+        'coupon_get'            => 'action_coupon_get',
+        'coupon_save'           => 'action_coupon_save',
+        'coupon_delete'         => 'action_coupon_delete',
+        'coupons_enable'        => 'action_coupons_enable',
     ];
 
     const MAX_VIDEO_BYTES = 20971520; // 20 MB
@@ -1725,7 +1731,11 @@ class Qwoo_Platform_Dashboard {
         return self::action_shipping_get();
     }
 
-    /** { zone_id, instance_id?, method_id, title, enabled, cost, min_amount }. */
+    /**
+     * { zone_id, instance_id?, method_id, title, enabled, cost, min_amount,
+     * requires }. requires (free shipping) is WooCommerce's: '' (everyone),
+     * min_amount, coupon (a free-shipping discount code), either or both.
+     */
     private static function action_method_save( array $params ) {
         $zone_id = absint( $params['zone_id'] ?? 0 );
         if ( $zone_id && ! self::zone_exists( $zone_id ) ) {
@@ -1762,7 +1772,15 @@ class Qwoo_Platform_Dashboard {
             if ( $min === null ) {
                 return self::bad( 'The minimum order must be a number.' );
             }
-            $settings['requires']   = $min === '' || (float) $min <= 0 ? '' : 'min_amount';
+            $has_min  = $min !== '' && (float) $min > 0;
+            $requires = (string) ( $params['requires'] ?? ( $has_min ? 'min_amount' : '' ) );
+            if ( ! in_array( $requires, [ '', 'min_amount', 'coupon', 'either', 'both' ], true ) ) {
+                return self::bad( 'Choose who gets free shipping.' );
+            }
+            if ( $requires !== '' && $requires !== 'coupon' && ! $has_min ) {
+                return self::bad( 'Enter the minimum order for free shipping.' );
+            }
+            $settings['requires']   = $requires;
             $settings['min_amount'] = $min;
         }
 
