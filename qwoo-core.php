@@ -72,6 +72,8 @@ function qwoo_get_cron_url() {
 }
 
 // ── Core includes ──
+require_once QWOO_PATH . 'includes/class-i18n.php';
+require_once QWOO_PATH . 'includes/class-store-language.php';
 require_once QWOO_PATH . 'includes/security.php';
 require_once QWOO_PATH . 'includes/rate-limiter.php';
 require_once QWOO_PATH . 'includes/auth.php';
@@ -101,3 +103,6 @@ require_once QWOO_PATH . 'includes/class-shop-settings.php';
 
 // Instantiate technical settings (registers AJAX hooks etc.)
 new Qwoo_Technical_Settings();
+
+// qwoo's messages and emails in the store's language.
+Qwoo_I18n::init();

@@ -48,7 +48,8 @@ trait SB_Platform {
             'template_pages' => self::TEMPLATE_PAGES,
             'blog_categories' => self::blog_category_labels(),
             'schema'        => [
-                'blocks'           => self::BLOCK_SCHEMA,
+                // New blocks start with texts ("View all"…) in the store's language.
+                'blocks'           => self::localized_block_schema(),
                 'section_style'    => self::SECTION_STYLE_FIELDS,
                 'block_common'     => self::BLOCK_COMMON_FIELDS,
                 'global_colors'    => self::GLOBAL_COLOR_KEYS,

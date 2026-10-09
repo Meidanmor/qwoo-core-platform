@@ -136,6 +136,11 @@ trait SB_Github_Push {
                     . 'Double-check the GitHub Owner/Repo/Token in Technical Settings.' ];
         }
 
+        // The store's language: the storefront's build reads it (unchanged files are skipped).
+        if ( class_exists( 'Qwoo_Store_Language' ) ) {
+            aps_github_batch_put_file( $batch, 'public/config/languages.json', Qwoo_Store_Language::config_json() );
+        }
+
         // Maps a staged path back to the human label it belongs to, so the
         // single combined batch result can still be reported per-page.
         $path_to_label = [];

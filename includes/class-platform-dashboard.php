@@ -92,6 +92,8 @@ class Qwoo_Platform_Dashboard {
         'order_refund'    => 'action_order_refund',
         'settings_get'    => 'action_settings_get',
         'settings_save'   => 'action_settings_save',
+        'store_language'  => 'action_store_language',
+        'plan_set'        => 'action_plan_set',
         'states'          => 'action_states',
         'tax_rate_save'   => 'action_tax_rate_save',
         'tax_rate_delete' => 'action_tax_rate_delete',
@@ -1628,6 +1630,8 @@ class Qwoo_Platform_Dashboard {
                 'currency'       => get_woocommerce_currency(),
                 'weight_unit'    => (string) get_option( 'woocommerce_weight_unit', 'kg' ),
                 'dimension_unit' => (string) get_option( 'woocommerce_dimension_unit', 'cm' ),
+                // What shoppers see (Qwoo_Store_Language).
+                'language'       => class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::get() : 'en',
             ],
             'checkout' => [
                 'guest_checkout'     => get_option( 'woocommerce_enable_guest_checkout' ) === 'yes',
@@ -1650,6 +1654,39 @@ class Qwoo_Platform_Dashboard {
                 'dimension_units' => [ 'm', 'cm', 'mm', 'in', 'yd' ],
             ],
         ];
+    }
+
+    /**
+     * { lang }: the language shoppers see. Installs WordPress' and
+     * WooCommerce's translations and rebuilds the storefront in it.
+     * Answers { language, warning }.
+     */
+    private static function action_store_language( array $params ) {
+        $lang = (string) ( $params['lang'] ?? '' );
+        if ( ! isset( Qwoo_Store_Language::LANGS[ $lang ] ) ) {
+            return self::bad( 'Unknown language.' );
+        }
+        if ( $lang === Qwoo_Store_Language::get() ) {
+            return [ 'language' => $lang, 'warning' => '' ];
+        }
+        $set = Qwoo_Store_Language::set( $lang );
+        if ( is_wp_error( $set ) && $set->get_error_code() !== 'qwoo_lang_partial' ) {
+            return self::bad( $set->get_error_message() );
+        }
+        return [ 'language' => Qwoo_Store_Language::get(), 'warning' => is_wp_error( $set ) ? $set->get_error_message() : '' ];
+    }
+
+    /** { plan, features }: from the platform, which decides them (plans and premium addons). */
+    private static function action_plan_set( array $params ) {
+        $features = array_values( array_filter( array_map( 'sanitize_key', (array) ( $params['features'] ?? [] ) ) ) );
+        update_option( 'qwoo_plan', [ 'plan' => sanitize_key( (string) ( $params['plan'] ?? 'basic' ) ), 'features' => $features ], false );
+        return [ 'plan' => get_option( 'qwoo_plan' ) ];
+    }
+
+    /** Whether the platform's plan lets this store use a premium addon. */
+    public static function has_feature( $feature ) {
+        $plan = get_option( 'qwoo_plan', [] );
+        return is_array( $plan ) && in_array( $feature, (array) ( $plan['features'] ?? [] ), true );
     }
 
     /** { section: store | checkout | taxes, values }. */

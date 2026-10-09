@@ -66,21 +66,21 @@ trait SB_Store_Pages {
         $sections = array_values( array_filter( (array) ( $old['sections'] ?? [] ), 'is_array' ) );
         if ( ! $sections ) {
             // Nothing else on the homepage yet: the newest products.
-            $sections[] = [ 'id' => self::new_id( 'sec' ), 'label' => 'Products', 'enabled' => true, 'style' => [], 'blocks' => [
-                self::store_page_block( 'heading', [ 'title' => 'Our products', 'tag' => 'h2', 'alignment' => 'center' ] ),
-                self::store_page_block( 'product_grid', [ 'query_type' => 'newest', 'limit' => 8, 'show_view_all' => true, 'view_all_url' => '/products', 'view_all_text' => 'View all products' ] ),
+            $sections[] = [ 'id' => self::new_id( 'sec' ), 'label' => Qwoo_I18n::t( 'Products' ), 'enabled' => true, 'style' => [], 'blocks' => [
+                self::store_page_block( 'heading', [ 'title' => Qwoo_I18n::t( 'Our products' ), 'tag' => 'h2', 'alignment' => 'center' ] ),
+                self::store_page_block( 'product_grid', [ 'query_type' => 'newest', 'limit' => 8, 'show_view_all' => true, 'view_all_url' => '/products', 'view_all_text' => Qwoo_I18n::t( 'View all products' ) ] ),
             ] ];
         }
         array_unshift( $sections, self::hero_section( [
             'title'    => trim( wp_strip_all_tags( $hero['title'] ) ) !== '' ? $hero['title'] : $facts['name_plain'],
             'text'     => trim( $hero['text'] ) !== '' ? $hero['text'] : $facts['description'],
-            'btn_text' => $hero['btn_text'] !== '' ? $hero['btn_text'] : 'Our products',
+            'btn_text' => $hero['btn_text'] !== '' ? $hero['btn_text'] : Qwoo_I18n::t( 'Our products' ),
             'btn_url'  => $hero['btn_url'] !== '' ? $hero['btn_url'] : '/products',
             'image_id' => (int) ( $old['hero_image_id'] ?? 0 ),
         ] ) );
         return [
             'id'         => self::new_id( 'pg' ),
-            'title'      => 'Home',
+            'title'      => Qwoo_I18n::t( 'Home' ),
             'slug'       => 'home',
             'parent'     => '',
             'status'     => 'publish',
@@ -119,7 +119,7 @@ trait SB_Store_Pages {
         }
         // "secondary": the old homepage's button colour (templates keep "primary" light, for backgrounds).
         $blocks[] = self::store_page_block( 'button', [ 'text' => $h['btn_text'], 'url' => $h['btn_url'], 'style' => 'secondary', 'size' => 'lg', 'alignment' => 'left' ] );
-        return [ 'id' => self::new_id( 'sec' ), 'label' => 'Opening', 'enabled' => true, 'style' => $style, 'blocks' => $blocks ];
+        return [ 'id' => self::new_id( 'sec' ), 'label' => Qwoo_I18n::t( 'Opening' ), 'enabled' => true, 'style' => $style, 'blocks' => $blocks ];
     }
 
     private static function store_page_block( $type, array $data ) {
@@ -148,11 +148,11 @@ trait SB_Store_Pages {
         ] ) );
         return [
             'name_plain'  => $name,
-            'name'        => $name !== '' ? esc_html( $name ) : '[your store name]',
-            'email'       => $email !== '' ? '<a href="mailto:' . esc_attr( $email ) . '">' . esc_html( $email ) . '</a>' : '[your email address]',
+            'name'        => $name !== '' ? esc_html( $name ) : Qwoo_I18n::t( '[your store name]' ),
+            'email'       => $email !== '' ? '<a href="mailto:' . esc_attr( $email ) . '">' . esc_html( $email ) . '</a>' : Qwoo_I18n::t( '[your email address]' ),
             // A country alone isn't an address.
-            'address'     => $address !== '' ? esc_html( $address ) : '[your business address]',
-            'today'       => wp_date( 'F j, Y' ),
+            'address'     => $address !== '' ? esc_html( $address ) : Qwoo_I18n::t( '[your business address]' ),
+            'today'       => self::long_date(),
             'description' => html_entity_decode( (string) get_bloginfo( 'description' ), ENT_QUOTES ),
         ];
     }
@@ -168,9 +168,9 @@ trait SB_Store_Pages {
             return null;
         }
         $f    = self::store_page_facts( $name );
-        $html = strtr( self::legal_text( $role ), [ '{name}' => $f['name'], '{email}' => $f['email'], '{address}' => $f['address'], '{today}' => $f['today'] ] );
+        $html = strtr( self::legal_text( $role, Qwoo_Store_Language::get() ), [ '{name}' => $f['name'], '{email}' => $f['email'], '{address}' => $f['address'], '{today}' => $f['today'] ] );
         return [
-            'title'      => $titles[ $role ][0],
+            'title'      => Qwoo_I18n::t( $titles[ $role ][0] ),
             'slug'       => $titles[ $role ][1],
             'role'       => $role,
             'show_title' => true,
@@ -178,7 +178,19 @@ trait SB_Store_Pages {
         ];
     }
 
-    private static function legal_text( $role ) {
+    /** Today, written out in the store's language ("9 October 2026" / "9 באוקטובר 2026"). */
+    private static function long_date() {
+        if ( Qwoo_Store_Language::get() !== 'he' ) {
+            return wp_date( 'F j, Y' );
+        }
+        $months = [ 'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר' ];
+        return wp_date( 'j' ) . ' ב' . $months[ (int) wp_date( 'n' ) - 1 ] . ' ' . wp_date( 'Y' );
+    }
+
+    private static function legal_text( $role, $lang = 'en' ) {
+        if ( $lang === 'he' ) {
+            return self::legal_text_he( $role );
+        }
         if ( $role === 'privacy' ) {
             return <<<'HTML'
 <p><em>Last updated: {today}</em></p>
@@ -264,6 +276,96 @@ HTML;
 <p>Once we receive and check the return, we refund you to the original payment method within [14] days.</p>
 <h2>Damaged or wrong items</h2>
 <p>If something arrived damaged or isn't what you ordered, write to us within [7] days with a photo, and {name} will make it right at no cost to you.</p>
+HTML;
+    }
+
+    /** The same pages in Hebrew: starting points, not legal advice ([סוגריים] = to fill in or check). */
+    private static function legal_text_he( $role ) {
+        if ( $role === 'privacy' ) {
+            return <<<'HTML'
+<p><em>עודכן לאחרונה: {today}</em></p>
+<p>המדיניות הזו מסבירה איזה מידע אישי {name} ("אנחנו") אוספים כשמבקרים בחנות או קונים בה, איך אנחנו משתמשים בו ואילו בחירות יש לך.</p>
+<h2>מי אנחנו</h2>
+<p>{name}, {address}. בכל שאלה על המידע שלך אפשר לכתוב לנו: {email}.</p>
+<h2>מה אנחנו אוספים</h2>
+<ul>
+<li><strong>פרטי הזמנה:</strong> שם, אימייל, טלפון, כתובת לחיוב ולמשלוח, ומה קנית.</li>
+<li><strong>פרטי חשבון:</strong> אם פתחת חשבון, פרטי ההתחברות והיסטוריית ההזמנות.</li>
+<li><strong>תשלום:</strong> התשלומים מטופלים על ידי ספק התשלומים שלנו. אנחנו לא רואים ולא שומרים את מספר הכרטיס המלא.</li>
+<li><strong>הודעות:</strong> מה ששולחים לנו בטפסים, באימייל או בצ׳אט.</li>
+<li><strong>מכשיר ושימוש:</strong> מידע טכני בסיסי (כמו הדפדפן והעמודים שנצפו) ששומר על החנות עובדת ומאובטחת.</li>
+</ul>
+<h2>איך אנחנו משתמשים בו</h2>
+<ul>
+<li>כדי לטפל בהזמנות, לשלוח אותן ולתת עליהן שירות, ולשלוח עדכונים על ההזמנה.</li>
+<li>כדי לענות להודעות ולתת שירות לקוחות.</li>
+<li>כדי למנוע הונאות ולשמור על אבטחת החנות.</li>
+<li>כדי לשלוח חדשות ומבצעים, רק אם הסכמת לקבל אותם. אפשר להפסיק בכל זמן.</li>
+<li>כדי לעמוד בחובות שלנו לפי החוק, כמו שמירת חשבוניות.</li>
+</ul>
+<h2>עם מי אנחנו משתפים אותו</h2>
+<p>רק עם השירותים שעוזרים לנו להפעיל את החנות, ורק את מה שהם צריכים: ספקי תשלום, חברות משלוחים, ספקי אימייל ואחסון [יש לפרט שירותים נוספים, כמו כלי ניתוח או שיווק]. אנחנו לא מוכרים מידע אישי.</p>
+<h2>עוגיות ואחסון בדפדפן</h2>
+<p>אנחנו משתמשים בעוגיות ובאחסון של הדפדפן כדי לשמור את העגלה, את ההתחברות ואת הבחירה לגבי עוגיות, וכדי שהחנות תעבוד מהר יותר וגם בלי חיבור. [אם יש כלי ניתוח או פרסום, יש לכתוב כאן את שמם ואיך אפשר לסרב להם.]</p>
+<h2>התראות</h2>
+<p>אם אישרת התראות, אנחנו משתמשים בהן כדי לעדכן על [הזמנות ומבצעים]. אפשר לכבות אותן בכל זמן בהגדרות הדפדפן או המכשיר.</p>
+<h2>כמה זמן אנחנו שומרים אותו</h2>
+<p>את פרטי ההזמנות אנחנו שומרים כל עוד החוק מחייב לצורכי הנהלת חשבונות ומס [למשל 7 שנים], ומידע אחר רק כל עוד הוא נחוץ למטרות שלמעלה.</p>
+<h2>הזכויות שלך</h2>
+<p>אפשר לבקש לעיין במידע שאנחנו שומרים עליך, לתקן אותו, למחוק אותו או לקבל עותק שלו. אפשר גם להתנגד לשימוש בו או לבטל הסכמה. כתבו לנו לכתובת {email} ונענה תוך [30] ימים. אפשר גם להגיש תלונה לרשות להגנת הפרטיות.</p>
+<h2>שינויים</h2>
+<p>ייתכן שנעדכן את המדיניות מדי פעם. התאריך למעלה מראה מתי היא שונתה לאחרונה.</p>
+HTML;
+        }
+        if ( $role === 'terms' ) {
+            return <<<'HTML'
+<p><em>עודכן לאחרונה: {today}</em></p>
+<p>התנאים האלה חלים על כל רכישה מ־{name} ("אנחנו"). ביצוע הזמנה הוא הסכמה להם.</p>
+<h2>עלינו</h2>
+<p>{name}, {address}. ליצירת קשר: {email}.</p>
+<h2>הזמנות</h2>
+<p>אחרי ביצוע הזמנה נשלח אליך אימייל שמאשר שקיבלנו אותה. אנחנו רשאים לבטל הזמנה, למשל אם מוצר אזל מהמלאי או שהמחיר שלו הוצג בטעות. אם כבר שילמת, נחזיר את מלוא הסכום.</p>
+<h2>מחירים ותשלום</h2>
+<p>המחירים מוצגים ב[מטבע] ו[כוללים / לא כוללים] מע״מ. דמי המשלוח מוצגים בקופה לפני התשלום. התשלום נגבה [בעת ההזמנה / במסירה].</p>
+<h2>משלוחים</h2>
+<p>זמני המשלוח ועלויותיו מוסברים בעמוד משלוחים והחזרות. זמני המשלוח הם הערכה ועשויים להשתנות בגלל דברים שאינם בשליטתנו.</p>
+<h2>החזרות וזיכויים</h2>
+<p>אפשר להחזיר מוצרים כמוסבר בעמוד משלוחים והחזרות. אין בכך כדי לגרוע מזכויות לפי חוק הגנת הצרכן.</p>
+<h2>מוצרים</h2>
+<p>אנחנו משתדלים להציג את המוצרים במדויק. צבעים וגדלים עשויים להיראות מעט אחרת במסך, ופריטים בעבודת יד עשויים להיות שונים מעט מהתמונות.</p>
+<h2>חשבונות</h2>
+<p>אם פתחת חשבון, יש לשמור על הסיסמה. האחריות על מה שנעשה בחשבון היא שלך.</p>
+<h2>אחריות</h2>
+<p>ככל שהחוק מתיר, איננו אחראים לנזקים עקיפים, והאחריות שלנו להזמנה מוגבלת לסכום ששולם עליה. אין באמור כדי להגביל אחריות שהחוק אינו מאפשר להגביל.</p>
+<h2>דין וסמכות שיפוט</h2>
+<p>על התנאים האלה חלים דיני [מדינת ישראל]. סמכות השיפוט נתונה לבתי המשפט ב[עיר], אלא אם דיני הגנת הצרכן קובעים אחרת.</p>
+<h2>שינויים</h2>
+<p>ייתכן שנעדכן את התנאים. הנוסח שמופיע בעמוד הזה בזמן ההזמנה הוא שחל עליה.</p>
+HTML;
+        }
+        return <<<'HTML'
+<p><em>עודכן לאחרונה: {today}</em></p>
+<h2>משלוחים</h2>
+<ul>
+<li><strong>לאן שולחים:</strong> [מדינות או אזורים].</li>
+<li><strong>הכנת ההזמנה:</strong> [1–3] ימי עסקים.</li>
+<li><strong>זמן משלוח:</strong> [3–7] ימי עסקים מרגע השליחה.</li>
+<li><strong>עלות:</strong> מוצגת בקופה. [משלוח חינם בהזמנות מעל …]</li>
+</ul>
+<p>כשההזמנה נשלחת, נשלח אליך אימייל [עם מספר מעקב].</p>
+<h2>החזרות</h2>
+<p>לא מרוצים מההזמנה? אפשר להחזיר אותה תוך [14] ימים ממועד הקבלה. הפריטים צריכים להיות ללא שימוש, במצבם המקורי ובאריזה המקורית.</p>
+<p>[פריטים שאי אפשר להחזיר, למשל: כרטיסי מתנה, מוצרים בהתאמה אישית או מוצרי היגיינה.]</p>
+<h2>איך מחזירים</h2>
+<ol>
+<li>כתבו לנו לכתובת {email} עם מספר ההזמנה ומה רוצים להחזיר.</li>
+<li>נענה עם כתובת ההחזרה וההוראות.</li>
+<li>שלחו את הפריט בחזרה. [דמי המשלוח בהחזרה על הלקוח / עלינו.]</li>
+</ol>
+<h2>זיכויים</h2>
+<p>אחרי שנקבל ונבדוק את ההחזרה, נזכה אותך באמצעי התשלום המקורי תוך [14] ימים.</p>
+<h2>פריטים פגומים או שגויים</h2>
+<p>אם משהו הגיע פגום או שאינו מה שהזמנת, כתבו לנו תוך [7] ימים עם תמונה, ו־{name} יתקנו את זה בלי עלות.</p>
 HTML;
     }
 }

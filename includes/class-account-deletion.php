@@ -62,12 +62,12 @@ class Qwoo_Account_Deletion {
 
         $store = html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES );
         $link  = rtrim( $front, '/' ) . '/my-account?' . http_build_query( [ 'delete_account' => $token, 'u' => $user->ID ] );
-        $html  = '<p>' . esc_html( 'Someone (hopefully you) asked to delete your account at ' . $store . '.' ) . '</p>'
-            . '<p>' . esc_html( 'Deleting removes your account, your saved details and your name, email, phone and addresses from your past orders. It can\'t be undone.' ) . '</p>'
-            . '<p><a href="' . esc_url( $link ) . '" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#b42318;color:#ffffff;text-decoration:none;font-weight:bold;">' . esc_html( 'Delete my account' ) . '</a></p>'
-            . '<p style="color:#888888;font-size:12px;">' . esc_html( 'The link works for one hour. If you didn\'t ask for this, ignore this email: your account stays as it is.' ) . '</p>';
+        $html  = '<p>' . esc_html( Qwoo_I18n::t( 'Someone (hopefully you) asked to delete your account at {store}.', [ 'store' => $store ] ) ) . '</p>'
+            . '<p>' . esc_html( Qwoo_I18n::t( 'Deleting removes your account, your saved details and your name, email, phone and addresses from your past orders. It can\'t be undone.' ) ) . '</p>'
+            . '<p><a href="' . esc_url( $link ) . '" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#b42318;color:#ffffff;text-decoration:none;font-weight:bold;">' . esc_html( Qwoo_I18n::t( 'Delete my account' ) ) . '</a></p>'
+            . '<p style="color:#888888;font-size:12px;">' . esc_html( Qwoo_I18n::t( 'The link works for one hour. If you didn\'t ask for this, ignore this email: your account stays as it is.' ) ) . '</p>';
         $mailer = WC()->mailer();
-        $mailer->send( $user->user_email, sprintf( 'Confirm deleting your account at %s', $store ), $mailer->wrap_message( 'Delete your account?', $html ) );
+        $mailer->send( $user->user_email, Qwoo_I18n::t( 'Confirm deleting your account at {store}', [ 'store' => $store ] ), $mailer->wrap_message( Qwoo_I18n::t( 'Delete your account?' ), $html ) );
 
         return rest_ensure_response( [ 'sent' => true, 'email' => self::masked( $user->user_email ) ] );
     }
@@ -98,10 +98,9 @@ class Qwoo_Account_Deletion {
 
         // The owner hears about it (no personal details: they're gone).
         $owner = class_exists( 'Qwoo_Reviews' ) ? Qwoo_Reviews::owner_email() : (string) get_option( 'admin_email' );
-        wp_mail( $owner, 'A customer deleted their account', sprintf(
-            "A customer deleted their account from your store, as privacy laws allow.\n\nTheir name, email, phone and addresses were removed from %d %s. The amounts stay in your sales reports.",
-            (int) $result,
-            (int) $result === 1 ? 'order' : 'orders'
+        wp_mail( $owner, Qwoo_I18n::t( 'A customer deleted their account' ), Qwoo_I18n::t(
+            "A customer deleted their account from your store, as privacy laws allow.\n\nTheir name, email, phone and addresses were removed from their orders ({n}). The amounts stay in your sales reports.",
+            [ 'n' => (int) $result ]
         ) );
         return rest_ensure_response( [ 'deleted' => true ] );
     }

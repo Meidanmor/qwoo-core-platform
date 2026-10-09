@@ -53,7 +53,7 @@ trait SB_Menus {
         foreach ( self::$menu_default_builtins as $key ) {
             $header[] = $item( 'builtin', $key );
         }
-        $columns = [ [ 'id' => self::new_id( 'mc' ), 'title' => 'Shop', 'items' => [ $item( 'builtin', 'products' ) ] ] ];
+        $columns = [ [ 'id' => self::new_id( 'mc' ), 'title' => Qwoo_I18n::t( 'Shop' ), 'items' => [ $item( 'builtin', 'products' ) ] ] ];
         // Pages that had the old "Show in the menu / footer" ticks.
         $footer_pages = [];
         foreach ( self::custom_pages_of( $options ) as $page ) {
@@ -160,7 +160,8 @@ trait SB_Menus {
         $ref = (string) ( $item['ref'] ?? '' );
         switch ( $item['type'] ?? '' ) {
             case 'builtin':
-                return isset( self::$menu_builtins[ $ref ] ) ? self::$menu_builtins[ $ref ] : [ '', '' ];
+                // The label in the store's language ("Cart" → "עגלה").
+                return isset( self::$menu_builtins[ $ref ] ) ? [ Qwoo_I18n::t( self::$menu_builtins[ $ref ][0] ), self::$menu_builtins[ $ref ][1] ] : [ '', '' ];
             case 'page':
                 if ( ! isset( $paths[ $ref ] ) ) return [ '', '' ];
                 return [ (string) ( $titles[ $ref ] ?? '' ), '/' . $paths[ $ref ] ];

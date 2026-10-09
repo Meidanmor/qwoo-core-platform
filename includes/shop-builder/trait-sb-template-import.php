@@ -146,6 +146,17 @@ trait SB_Template_Import {
             return [ 'error' => 'No access to the content repository.' ];
         }
 
+        // The store's language first: the pages made below are in it.
+        if ( ! empty( $input['lang'] ) && class_exists( 'Qwoo_Store_Language' ) && empty( $state['lang_done'] ) ) {
+            $set = Qwoo_Store_Language::set( (string) $input['lang'], false );
+            if ( is_wp_error( $set ) && $set->get_error_code() !== 'qwoo_lang_partial' ) {
+                return [ 'error' => $set->get_error_message() ];
+            }
+            $state['lang_done'] = true;
+            $state['warnings']  = is_wp_error( $set ) ? [ $set->get_error_message() ] : [];
+            update_option( self::$branding_option, $state, false );
+        }
+
         // What the store sells (optional at signup): its tagline and the homepage's opening text.
         $description = mb_substr( trim( sanitize_textarea_field( (string) ( $input['description'] ?? '' ) ) ), 0, 300 );
         if ( $description !== '' ) {

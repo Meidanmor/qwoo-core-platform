@@ -246,9 +246,9 @@ trait SB_Forms {
 
         if ( $form_type !== 'newsletter' ) {
             $to      = is_email( $data['recipient_email'] ?? '' ) ? $data['recipient_email'] : get_option( 'admin_email' );
-            $subject = ( $data['email_subject'] ?? '' ) ?: 'New form submission';
+            $subject = ( $data['email_subject'] ?? '' ) ?: Qwoo_I18n::t( 'New form submission' );
             $headers = $reply_to ? [ 'Reply-To: ' . $reply_to ] : [];
-            if ( ! wp_mail( $to, $subject, $body . "\n\n— Sent from the \"{$page}\" page form.", $headers ) ) {
+            if ( ! wp_mail( $to, $subject, $body . "\n\n" . Qwoo_I18n::t( '— Sent from the "{page}" page form.', [ 'page' => $page ] ), $headers ) ) {
                 error_log( "Qwoo: could not email form submission for block {$block_id}. The entry is still saved under Form Entries." );
             }
         }

@@ -89,6 +89,23 @@ trait SB_Sanitizers {
         return $device === 'desktop' ? $default : '';
     }
 
+    /** BLOCK_SCHEMA with its text defaults in the store's language. */
+    public static function localized_block_schema() {
+        $schema = self::BLOCK_SCHEMA;
+        if ( ! class_exists( 'Qwoo_Store_Language' ) || Qwoo_Store_Language::get() === 'en' ) {
+            return $schema;
+        }
+        foreach ( $schema as &$block ) {
+            foreach ( (array) ( $block['fields'] ?? [] ) as $key => $spec ) {
+                if ( isset( $spec['default'] ) && is_string( $spec['default'] ) && in_array( $spec['type'] ?? 'text', [ 'text', 'textarea' ], true ) ) {
+                    $block['fields'][ $key ]['default'] = Qwoo_I18n::t( $spec['default'] );
+                }
+            }
+        }
+        unset( $block );
+        return $schema;
+    }
+
     private static function sanitize_field_value( array $spec, $value ) {
         if ( ! empty( $spec['responsive'] ) ) {
             // A plain scalar (e.g. legacy non-responsive data) becomes the desktop value.
@@ -105,7 +122,13 @@ trait SB_Sanitizers {
             return $out;
         }
 
-        if ( $value === null ) $value = $spec['default'] ?? null;
+        if ( $value === null ) {
+            $value = $spec['default'] ?? null;
+            // A text default ("View all") in the store's language.
+            if ( is_string( $value ) && in_array( $spec['type'] ?? 'text', [ 'text', 'textarea' ], true ) && class_exists( 'Qwoo_I18n' ) ) {
+                $value = Qwoo_I18n::t( $value );
+            }
+        }
         return self::sanitize_scalar( $spec, $value, false );
     }
 

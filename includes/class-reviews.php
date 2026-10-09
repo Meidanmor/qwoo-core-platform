@@ -446,16 +446,16 @@ class Qwoo_Reviews {
 
         $store = html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES );
         $first = $order->get_billing_first_name();
-        $html  = '<p>' . esc_html( $first !== '' ? "Hi $first," : 'Hi,' ) . '</p>';
-        $html .= '<p>' . esc_html( "Thank you for your order from $store. We'd love to hear what you think. It only takes a minute:" ) . '</p>';
+        $html  = '<p>' . esc_html( $first !== '' ? Qwoo_I18n::t( 'Hi {name},', [ 'name' => $first ] ) : Qwoo_I18n::t( 'Hi,' ) ) . '</p>';
+        $html .= '<p>' . esc_html( Qwoo_I18n::t( 'Thank you for your order from {store}. We\'d love to hear what you think. It only takes a minute:', [ 'store' => $store ] ) ) . '</p>';
         foreach ( $links as $link ) {
             $html .= '<p><a href="' . esc_url( $link['url'] ) . '" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#1d1b2e;color:#ffffff;text-decoration:none;font-weight:bold;">'
-                . esc_html( 'Review ' . $link['name'] ) . '</a></p>';
+                . esc_html( Qwoo_I18n::t( 'Review {name}', [ 'name' => $link['name'] ] ) ) . '</a></p>';
         }
-        $html .= '<p style="color:#888888;font-size:12px;">' . esc_html( 'You\'re getting this one-time email because you ordered from us.' ) . '</p>';
+        $html .= '<p style="color:#888888;font-size:12px;">' . esc_html( Qwoo_I18n::t( 'You\'re getting this one-time email because you ordered from us.' ) ) . '</p>';
 
         $mailer = WC()->mailer();
-        return (bool) $mailer->send( $email, sprintf( 'How was your order from %s?', $store ), $mailer->wrap_message( 'How was your order?', $html ) );
+        return (bool) $mailer->send( $email, Qwoo_I18n::t( 'How was your order from {store}?', [ 'store' => $store ] ), $mailer->wrap_message( Qwoo_I18n::t( 'How was your order?' ), $html ) );
     }
 
     /* ---------------- helpers ---------------- */
@@ -464,11 +464,11 @@ class Qwoo_Reviews {
         $platform = get_option( 'qwoo_platform_connection', [] );
         $platform = is_array( $platform ) ? (string) ( $platform['platform_url'] ?? '' ) : '';
         $stars    = str_repeat( '★', $rating ) . str_repeat( '☆', 5 - $rating );
-        $body     = sprintf( "%s reviewed %s: %s\n\n", $name ?: 'A customer', html_entity_decode( $product_name, ENT_QUOTES ), $stars )
+        $body     = Qwoo_I18n::t( '{name} reviewed {product}: {stars}', [ 'name' => $name ?: Qwoo_I18n::t( 'A customer' ), 'product' => html_entity_decode( $product_name, ENT_QUOTES ), 'stars' => $stars ] ) . "\n\n"
             . ( $title !== '' ? $title . "\n" : '' ) . $text . "\n\n"
-            . ( $platform !== '' ? 'Approve or hide it in your dashboard: ' . rtrim( $platform, '/' ) . '/app/#/reviews' : 'Approve or hide it in your dashboard.' )
-            . "\n\nIt shows on your store only after you approve it.";
-        wp_mail( self::owner_email(), sprintf( 'New review waiting for approval: %s', html_entity_decode( $product_name, ENT_QUOTES ) ), $body );
+            . ( $platform !== '' ? Qwoo_I18n::t( 'Approve or hide it in your dashboard: {url}', [ 'url' => rtrim( $platform, '/' ) . '/app/#/reviews' ] ) : Qwoo_I18n::t( 'Approve or hide it in your dashboard.' ) )
+            . "\n\n" . Qwoo_I18n::t( 'It shows on your store only after you approve it.' );
+        wp_mail( self::owner_email(), Qwoo_I18n::t( 'New review waiting for approval: {name}', [ 'name' => html_entity_decode( $product_name, ENT_QUOTES ) ] ), $body );
     }
 
     /** Runs $job after the response is sent, when the server allows it (else at the end of the request). */
