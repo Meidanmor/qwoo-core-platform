@@ -386,17 +386,18 @@ trait Qwoo_Platform_Product_Tools {
         fwrite( $handle, $csv );
         rewind( $handle );
         $headers = fgetcsv( $handle, 0, ',', '"', "\0" );
-        $rows    = 0;
+        $lines   = [];
         while ( ( $row = fgetcsv( $handle, 0, ',', '"', "\0" ) ) !== false ) {
             if ( $row !== [ null ] ) {
-                $rows++;
+                $lines[] = $row;
             }
-            if ( $rows > self::$import_max_rows ) {
+            if ( count( $lines ) > self::$import_max_rows ) {
                 fclose( $handle );
                 return self::bad( 'A file can have up to ' . self::$import_max_rows . ' rows. Split it into smaller files.' );
             }
         }
         fclose( $handle );
+        $rows = count( $lines );
         if ( ! is_array( $headers ) || count( $headers ) < 2 ) {
             return self::bad( 'The first row must have the column names, separated by commas.' );
         }
@@ -427,18 +428,179 @@ trait Qwoo_Platform_Product_Tools {
             return self::bad( 'There\'s no Name, ID or SKU column. Use a file from Export, or a WooCommerce product CSV.' );
         }
 
+        // Rows are sorted into products to add and products to update. A
+        // file's IDs only mean something in the store it came from, so they
+        // are renumbered: a matched row gets its product's ID here, a new one
+        // a one-off number (WooCommerce links a new product's variations and
+        // upsells through it), and links between rows ("id:12") follow.
+        $update  = ! empty( $params['update_existing'] );
+        $cols    = array_flip( array_filter( array_values( $mapping ) ) );
+        $counts  = [ 'imported' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 0 ];
+        $skipped = [];
+        $base    = random_int( 1000000, 9000000 ) * 1000;
+        $targets = [];
+        $ids     = [];  // file ID => ID here (or one-off number)
+        $sources = [];  // one-off number => file ID
+        foreach ( $lines as $i => $line ) {
+            $targets[ $i ] = self::import_match( $line, $cols );
+            $file_id       = isset( $cols['id'] ) ? absint( $line[ $cols['id'] ] ?? 0 ) : 0;
+            if ( $file_id && ! isset( $ids[ $file_id ] ) ) {
+                $ids[ $file_id ] = $targets[ $i ] ?: $base + $i + 1;
+                if ( ! $targets[ $i ] ) {
+                    $sources[ $base + $i + 1 ] = $file_id;
+                }
+            }
+        }
+        $relink = static function ( $value ) use ( $ids ) {
+            $links = array_map( 'trim', explode( ',', (string) $value ) );
+            foreach ( $links as $n => $link ) {
+                if ( preg_match( '/^id:(\d+)$/', $link, $m ) && isset( $ids[ (int) $m[1] ] ) ) {
+                    $links[ $n ] = 'id:' . $ids[ (int) $m[1] ];
+                }
+            }
+            return implode( ',', $links );
+        };
+        $add    = [];
+        $change = [];
+        foreach ( $lines as $i => $line ) {
+            if ( isset( $cols['id'] ) && absint( $line[ $cols['id'] ] ?? 0 ) ) {
+                $line[ $cols['id'] ] = (string) $ids[ absint( $line[ $cols['id'] ] ) ];
+            }
+            foreach ( [ 'parent_id', 'upsell_ids', 'cross_sell_ids', 'grouped_products' ] as $field ) {
+                if ( isset( $cols[ $field ] ) && ( $line[ $cols[ $field ] ] ?? '' ) !== '' ) {
+                    $line[ $cols[ $field ] ] = $relink( $line[ $cols[ $field ] ] );
+                }
+            }
+            if ( ! $targets[ $i ] ) {
+                $add[] = $line;
+            } elseif ( $update ) {
+                $change[] = self::import_aim( $line, $cols, $targets[ $i ] );
+            } else {
+                $counts['skipped']++;
+                if ( count( $skipped ) < 100 ) {
+                    $skipped[] = [ 'row' => self::import_row_label( $line, $cols ), 'message' => 'Already in the store (not updated).' ];
+                }
+            }
+        }
+        $parts = [];
+        if ( $add ) {
+            $parts[] = [ 'csv' => self::import_csv( $headers, $add ), 'update' => false ];
+        }
+        if ( $change ) {
+            $parts[] = [ 'csv' => self::import_csv( $headers, $change ), 'update' => true ];
+        }
+
         $job = bin2hex( random_bytes( 12 ) );
         set_transient( 'qwoo_import_' . $job, [
-            'csv'      => $csv,
+            'parts'    => $parts,
+            'part'     => 0,
             'mapping'  => $mapping,
-            'update'   => ! empty( $params['update_existing'] ),
+            'direct'   => array_values( array_unique( array_filter( $targets ) ) ),
+            'sources'  => $sources,
             'pos'      => 0,
             'rows'     => $rows,
-            'counts'   => [ 'imported' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 0 ],
-            'problems' => [],
-            'finished' => false,
+            'counts'   => $counts,
+            'problems' => $skipped,
+            'finished' => ! $parts,
         ], 2 * HOUR_IN_SECONDS );
-        return [ 'job' => $job, 'rows' => $rows, 'columns' => $columns, 'update_existing' => ! empty( $params['update_existing'] ) ];
+        return [ 'job' => $job, 'rows' => $rows, 'columns' => $columns, 'update_existing' => $update, 'new' => count( $add ), 'matched' => $rows - count( $add ) ];
+    }
+
+    /**
+     * The product in this store a row stands for, or 0 for a new one: the
+     * product with its SKU, else the one with its ID (or imported earlier
+     * from that ID), when the name matches too and it has no other SKU.
+     * IDs alone aren't trusted, since a file from another store has IDs
+     * that belong to other products here.
+     */
+    private static function import_match( array $line, array $cols ) {
+        $cell = static fn( $field ) => isset( $cols[ $field ] ) ? trim( (string) ( $line[ $cols[ $field ] ] ?? '' ) ) : '';
+        $live = static fn( $id ) => $id && in_array( get_post_type( $id ), [ 'product', 'product_variation' ], true ) && ! in_array( get_post_status( $id ), [ 'importing', 'trash', 'auto-draft' ], true );
+
+        $sku = $cell( 'sku' );
+        if ( $sku !== '' ) {
+            $found = wc_get_product_id_by_sku( $sku );
+            if ( $live( $found ) ) {
+                return (int) $found;
+            }
+        }
+        $id = absint( $cell( 'id' ) );
+        if ( ! $id ) {
+            return 0;
+        }
+        global $wpdb;
+        $earlier = array_map( 'intval', $wpdb->get_col( $wpdb->prepare(
+            "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key IN ( '_qwoo_source_id', '_original_id' ) AND meta_value = %s ORDER BY post_id DESC LIMIT 20",
+            (string) $id
+        ) ) );
+        foreach ( array_unique( array_merge( [ $id ], $earlier ) ) as $candidate ) {
+            $product = $live( $candidate ) ? wc_get_product( $candidate ) : null;
+            if ( ! $product ) {
+                continue;
+            }
+            $same_name = ! isset( $cols['name'] ) || mb_strtolower( trim( $product->get_name( 'edit' ) ) ) === mb_strtolower( $cell( 'name' ) );
+            $own_sku   = (string) $product->get_sku( 'edit' );
+            if ( $same_name && ( $sku === '' || $own_sku === '' || $own_sku === $sku ) ) {
+                return (int) $candidate;
+            }
+        }
+        return 0;
+    }
+
+    /** A matched row, pointed at its product (and a combination at its own parent). */
+    private static function import_aim( array $line, array $cols, $target ) {
+        if ( isset( $cols['id'] ) ) {
+            $line[ $cols['id'] ] = (string) $target;
+        }
+        $parent = wp_get_post_parent_id( $target );
+        if ( isset( $cols['parent_id'] ) && $parent && get_post_type( $target ) === 'product_variation' ) {
+            $line[ $cols['parent_id'] ] = 'id:' . $parent;
+        }
+        return $line;
+    }
+
+    /**
+     * After an import: new products remember the file ID they came from
+     * (so the same file can update them next time), and WooCommerce's
+     * temporary links and leftover placeholders are removed.
+     */
+    private static function import_tidy( array $sources ) {
+        global $wpdb;
+        foreach ( array_chunk( $sources, 200, true ) as $chunk ) {
+            $in   = implode( ',', array_map( 'intval', array_keys( $chunk ) ) );
+            $rows = $wpdb->get_results( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_original_id' AND meta_value IN ( {$in} )" );
+            foreach ( $rows as $row ) {
+                $post_id = (int) $row->post_id;
+                delete_post_meta( $post_id, '_original_id' );
+                if ( get_post_status( $post_id ) === 'importing' ) {
+                    wp_delete_post( $post_id, true );
+                } else {
+                    update_post_meta( $post_id, '_qwoo_source_id', (string) $chunk[ (int) $row->meta_value ] );
+                }
+            }
+        }
+    }
+
+    private static function import_row_label( array $line, array $cols ) {
+        foreach ( [ 'name', 'sku', 'id' ] as $field ) {
+            $value = isset( $cols[ $field ] ) ? trim( (string) ( $line[ $cols[ $field ] ] ?? '' ) ) : '';
+            if ( $value !== '' ) {
+                return mb_substr( wp_strip_all_tags( $value ), 0, 120 );
+            }
+        }
+        return '';
+    }
+
+    private static function import_csv( array $headers, array $lines ) {
+        $handle = fopen( 'php://temp', 'r+' );
+        fputcsv( $handle, $headers, ',', '"', '' );
+        foreach ( $lines as $line ) {
+            fputcsv( $handle, $line, ',', '"', '' );
+        }
+        rewind( $handle );
+        $csv = stream_get_contents( $handle );
+        fclose( $handle );
+        return $csv;
     }
 
     /**
@@ -450,7 +612,7 @@ trait Qwoo_Platform_Product_Tools {
         $job   = preg_replace( '/[^a-f0-9]/', '', (string) ( $params['job'] ?? '' ) );
         $key   = 'qwoo_import_' . $job;
         $state = strlen( $job ) === 24 ? get_transient( $key ) : false;
-        if ( ! is_array( $state ) ) {
+        if ( ! is_array( $state ) || ! isset( $state['parts'] ) ) {
             return self::error( 'qwoo_dashboard_not_found', 'This import has expired. Upload the file again.', 404 );
         }
         if ( $state['finished'] ) {
@@ -498,19 +660,25 @@ trait Qwoo_Platform_Product_Tools {
         $file    = trailingslashit( get_temp_dir() ) . 'qwoo-import-' . $job . '.csv';
         $percent = 0;
         $start   = microtime( true );
+        $sizes   = array_map( static fn( $part ) => strlen( $part['csv'] ), $state['parts'] );
+        $written = -1;
         try {
-            if ( file_put_contents( $file, $state['csv'] ) === false ) {
-                throw new RuntimeException( 'The file couldn\'t be read.' );
-            }
             do {
-                $importer = new WC_Product_CSV_Importer( $file, [
+                $part = $state['parts'][ $state['part'] ];
+                if ( $written !== $state['part'] ) {
+                    if ( file_put_contents( $file, $part['csv'] ) === false ) {
+                        throw new RuntimeException( 'The file couldn\'t be read.' );
+                    }
+                    $written = $state['part'];
+                }
+                $importer = new Qwoo_Product_CSV_Importer( $file, [
                     'start_pos'        => (int) $state['pos'],
                     'lines'            => 10,
                     'mapping'          => $state['mapping'],
-                    'update_existing'  => (bool) $state['update'],
+                    'update_existing'  => (bool) $part['update'],
                     'parse'            => true,
                     'prevent_timeouts' => true,
-                ] );
+                ], $state['direct'] );
                 $result = $importer->import();
                 $state['counts']['imported'] += count( $result['imported'] ) + count( $result['imported_variations'] );
                 $state['counts']['updated']  += count( $result['updated'] );
@@ -519,8 +687,10 @@ trait Qwoo_Platform_Product_Tools {
                     foreach ( $result[ $kind ] as $problem ) {
                         if ( is_wp_error( $problem ) && count( $state['problems'] ) < 100 ) {
                             $data                = (array) $problem->get_error_data();
+                            // Rows are named with the file's own IDs, not the one-off numbers.
+                            $row                 = preg_replace_callback( '/\bID (\d+)/', static fn( $m ) => 'ID ' . ( $state['sources'][ (int) $m[1] ] ?? $m[1] ), (string) ( $data['row'] ?? '' ) );
                             $state['problems'][] = [
-                                'row'     => mb_substr( wp_strip_all_tags( (string) ( $data['row'] ?? '' ) ), 0, 120 ),
+                                'row'     => mb_substr( wp_strip_all_tags( $row ), 0, 120 ),
                                 'message' => mb_substr( wp_strip_all_tags( html_entity_decode( $problem->get_error_message(), ENT_QUOTES ) ), 0, 300 ),
                             ];
                         }
@@ -528,11 +698,15 @@ trait Qwoo_Platform_Product_Tools {
                 }
                 $moved        = $importer->get_file_position() > $state['pos'];
                 $state['pos'] = $importer->get_file_position();
-                $percent      = $importer->get_percent_complete();
-            } while ( $moved && $percent < 100 && microtime( true ) - $start < self::$import_seconds );
-            if ( $percent >= 100 || ! $moved ) {
-                $percent = 100;
-            }
+                if ( ! $moved || $importer->get_percent_complete() >= 100 ) {
+                    // This part is done: on to the next one, if any.
+                    $state['part']++;
+                    $state['pos'] = 0;
+                    $moved        = true;
+                }
+                $done    = array_sum( array_slice( $sizes, 0, $state['part'] ) ) + $state['pos'];
+                $percent = $state['part'] >= count( $sizes ) ? 100 : min( 99, (int) floor( $done / max( 1, array_sum( $sizes ) ) * 100 ) );
+            } while ( $percent < 100 && microtime( true ) - $start < self::$import_seconds );
         } catch ( Throwable $e ) {
             $state['problems'][] = [ 'row' => '', 'message' => 'The import stopped: ' . mb_substr( wp_strip_all_tags( $e->getMessage() ), 0, 300 ) ];
             $percent             = 100;
@@ -549,7 +723,8 @@ trait Qwoo_Platform_Product_Tools {
         if ( $percent >= 100 ) {
             // Done: the file itself isn't kept.
             $state['finished'] = true;
-            $state['csv']      = '';
+            $state['parts']    = [];
+            self::import_tidy( $state['sources'] );
             wc_delete_product_transients();
         }
         set_transient( $key, $state, 2 * HOUR_IN_SECONDS );
