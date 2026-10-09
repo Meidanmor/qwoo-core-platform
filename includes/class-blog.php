@@ -89,9 +89,9 @@ class Qwoo_Blog {
             $args['cat'] = (int) $term->term_id;
             $category    = [ 'name' => html_entity_decode( $term->name, ENT_QUOTES ), 'slug' => urldecode( $term->slug ), 'description' => wp_strip_all_tags( $term->description ) ];
         }
-        $query = new WP_Query( $args );
+        $query = new WP_Query( self::only_translated( $args ) );
         return rest_ensure_response( [
-            'posts'      => array_map( [ __CLASS__, 'card' ], $query->posts ),
+            'posts'      => array_map( [ __CLASS__, 'card' ], array_map( [ __CLASS__, 'in_language' ], $query->posts ) ),
             'page'       => $page,
             'pages'      => (int) $query->max_num_pages,
             'total'      => (int) $query->found_posts,
@@ -104,25 +104,57 @@ class Qwoo_Blog {
     public static function rest_post( WP_REST_Request $r ) {
         $slug = sanitize_title( rawurldecode( (string) $r->get_param( 'slug' ) ) );
         $post = $slug !== '' ? get_page_by_path( $slug, OBJECT, 'post' ) : null;
-        if ( ! $post || $post->post_status !== 'publish' ) {
+        // In an extra language, a post without a translation doesn't exist there.
+        $post = $post && $post->post_status === 'publish' ? self::in_language( $post, true ) : null;
+        if ( ! $post ) {
             return new WP_Error( 'qwoo_blog_not_found', 'This post doesn\'t exist.', [ 'status' => 404 ] );
         }
         $cats = self::post_categories( $post->ID );
-        $more = $cats ? get_posts( [
+        $more = $cats ? get_posts( self::only_translated( [
             'post_type'      => 'post',
             'post_status'    => 'publish',
             'posts_per_page' => 3,
             'post__not_in'   => [ $post->ID ],
             'category__in'   => array_column( $cats, 'id' ),
-        ] ) : [];
+        ] ) ) : [];
         if ( count( $more ) < 3 ) {
-            $more = array_merge( $more, get_posts( [ 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => 3 - count( $more ), 'post__not_in' => array_merge( [ $post->ID ], wp_list_pluck( $more, 'ID' ) ) ] ) );
+            $more = array_merge( $more, get_posts( self::only_translated( [ 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => 3 - count( $more ), 'post__not_in' => array_merge( [ $post->ID ], wp_list_pluck( $more, 'ID' ) ) ] ) ) );
         }
+        $more = array_map( [ __CLASS__, 'in_language' ], $more );
         return rest_ensure_response( self::card( $post ) + [
             'content'  => self::clean_content( $post->post_content ),
             'modified' => (int) strtotime( $post->post_modified_gmt . ' UTC' ),
             'more'     => array_map( [ __CLASS__, 'card' ], $more ),
         ] );
+    }
+
+    /** Query args limited to posts translated into the request's language (unchanged in the main language). */
+    private static function only_translated( array $args ) {
+        $lang = class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::request_lang() : '';
+        if ( $lang !== '' ) {
+            $args['meta_query'] = [ [ 'key' => Qwoo_Translations::META, 'value' => '"' . $lang . '"', 'compare' => 'LIKE' ] ];
+        }
+        return $args;
+    }
+
+    /**
+     * The post with its texts in the request's language. $strict: null when
+     * it has no translation (else the post as it is).
+     */
+    public static function in_language( $post, $strict = false ) {
+        $lang = class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::request_lang() : '';
+        if ( $lang === '' || ! ( $post instanceof WP_Post ) ) {
+            return $post;
+        }
+        $tr = Qwoo_Translations::get( $post->ID )[ $lang ] ?? [];
+        if ( empty( $tr['title'] ) ) {
+            return $strict ? null : $post;
+        }
+        $copy               = clone $post;
+        $copy->post_title   = (string) $tr['title'];
+        $copy->post_content = (string) ( $tr['content'] ?? '' );
+        $copy->post_excerpt = (string) ( $tr['excerpt'] ?? '' );
+        return $copy;
     }
 
     /** A post as lists show it. */

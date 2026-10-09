@@ -13,10 +13,23 @@ trait SB_Platform {
     /** Options other than page sections that the dashboard edits. */
     private static $platform_option_groups = [ 'header', 'footer', 'home', 'checkout', 'branding', 'pwa', 'contact' ];
 
-    /** Everything the Design screen needs: data, schema, display data and preview URLs. */
-    public static function platform_design_data() {
-        $options = get_option( 'shop_builder_options', [] );
-        $options = is_array( $options ) ? $options : [];
+    /**
+     * Everything the Design screen needs: data, schema, display data and
+     * preview URLs. $lang: an extra language's copy of the content (SB_Languages).
+     */
+    public static function platform_design_data( $lang = '' ) {
+        $lang = class_exists( 'Qwoo_Store_Language' ) && in_array( $lang, Qwoo_Store_Language::extra(), true ) ? $lang : '';
+        // An extra language's copy: built-in texts (block defaults, menu labels) in it.
+        if ( $lang !== '' && class_exists( 'Qwoo_I18n' ) ) {
+            return Qwoo_I18n::in_language( $lang, static fn() => self::design_data_in( $lang ) );
+        }
+        return self::design_data_in( '' );
+    }
+
+    private static function design_data_in( $lang ) {
+        $all     = get_option( 'shop_builder_options', [] );
+        $all     = is_array( $all ) ? $all : [];
+        $options = self::options_for_language( $all, $lang );
         $refs    = [ 'media' => [], 'products' => [], 'categories' => [], 'tags' => [] ];
 
         $pages = [];
@@ -65,6 +78,14 @@ trait SB_Platform {
             'preview'       => [ 'urls' => self::build_preview_urls( $frontend ), 'origin' => $origin ],
             'timezone'      => wp_timezone_string(),
             'templates'     => self::template_summaries(),
+            // Which language this is, and what it has its own copy of yet.
+            'language'      => [
+                'main'        => class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::get() : 'en',
+                'editing'     => $lang,
+                'extra'       => class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::extra() : [],
+                'prefixes'    => class_exists( 'Qwoo_Store_Language' ) ? (object) array_combine( Qwoo_Store_Language::extra(), array_map( [ 'Qwoo_Store_Language', 'prefix' ], Qwoo_Store_Language::extra() ) ) : (object) [],
+                'translation' => $lang !== '' ? self::translation_status( $all, $lang ) : null,
+            ],
         ] + self::refs_payload( $refs );
     }
 

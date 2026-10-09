@@ -27,9 +27,127 @@ class Qwoo_Store_Language {
         return self::LANGS[ $code ?? self::get() ] ?? 'en_US';
     }
 
-    /** What the storefront build reads (config/languages.json). */
+    /** What the storefront build reads (config/languages.json): the main language and the live extra ones. */
     public static function config_json() {
-        return wp_json_encode( [ 'main' => self::get(), 'extra' => [], 'prefixes' => (object) [] ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . "\n";
+        $live     = self::live_extra();
+        $prefixes = [];
+        foreach ( $live as $code ) {
+            $prefixes[ $code ] = self::prefix( $code );
+        }
+        return wp_json_encode( [ 'main' => self::get(), 'extra' => $live, 'prefixes' => (object) $prefixes ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . "\n";
+    }
+
+    /* ---------------- extra languages (the "extra_languages" premium addon) ---------------- */
+
+    const EXTRA_OPTION = 'qwoo_languages';
+
+    /** Addresses a prefix can't take: the storefront's own pages. */
+    const RESERVED = [ 'product', 'products', 'product-category', 'cart', 'checkout', 'my-account', 'blog', 'thank-you', 'review', 'forgot-password', 'reset-password', 'auth', 'config', 'data', 'wp-json', 'assets', 'icons', 'sections', 'branding', 'homepage-hero', 'sitemap.xml', 'robots.txt', 'api' ];
+
+    /** { extra: [codes], prefixes: { code: prefix }, live: { code: bool } } */
+    public static function extra_settings() {
+        $s     = get_option( self::EXTRA_OPTION, [] );
+        $s     = is_array( $s ) ? $s : [];
+        $main  = self::get();
+        $extra = array_values( array_filter( (array) ( $s['extra'] ?? [] ), static fn( $c ) => isset( self::LANGS[ $c ] ) && $c !== $main ) );
+        return [ 'extra' => $extra, 'prefixes' => (array) ( $s['prefixes'] ?? [] ), 'live' => (array) ( $s['live'] ?? [] ) ];
+    }
+
+    /** Whether the store's plan includes extra languages. */
+    public static function allowed() {
+        return class_exists( 'Qwoo_Platform_Dashboard' ) && Qwoo_Platform_Dashboard::has_feature( 'extra_languages' );
+    }
+
+    /** Extra languages the owner added (whether live or not). Empty without the addon. */
+    public static function extra() {
+        return self::allowed() ? self::extra_settings()['extra'] : [];
+    }
+
+    /** Extra languages shoppers can see now. */
+    public static function live_extra() {
+        $s = self::extra_settings();
+        return array_values( array_filter( self::extra(), static fn( $c ) => ! empty( $s['live'][ $c ] ) ) );
+    }
+
+    /** The address prefix of an extra language ("en" → /en/…), the code by default. */
+    public static function prefix( $code ) {
+        $p = (string) ( self::extra_settings()['prefixes'][ $code ] ?? '' );
+        return $p !== '' ? $p : $code;
+    }
+
+    /** Why a prefix can't be used ('' when it can). $taken: prefixes of the other languages. */
+    public static function prefix_problem( $prefix, array $taken = [] ) {
+        if ( ! preg_match( '/^[a-z]{2,10}(-[a-z0-9]{2,8})?$/', $prefix ) ) {
+            return 'Use 2 to 10 small English letters, like en or us.';
+        }
+        if ( in_array( $prefix, self::RESERVED, true ) || in_array( $prefix, $taken, true ) ) {
+            return 'That address is already used by your store.';
+        }
+        // A top-level page of the store with the same address.
+        $options = (array) get_option( 'shop_builder_options', [] );
+        foreach ( (array) ( $options['custom_pages'] ?? [] ) as $page ) {
+            if ( is_array( $page ) && empty( $page['parent'] ) && sanitize_title( (string) ( $page['slug'] ?? '' ) ?: (string) ( $page['title'] ?? '' ) ) === $prefix ) {
+                return 'One of your pages already uses that address.';
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Saves the extra languages: { extra: [ { code, prefix, live } ] }.
+     * @return true|WP_Error
+     */
+    public static function save_extra( array $rows ) {
+        if ( $rows && ! self::allowed() ) {
+            return new WP_Error( 'qwoo_lang_plan', 'Extra languages are part of the Pro and Plus plans.' );
+        }
+        $main = self::get();
+        $out  = [ 'extra' => [], 'prefixes' => [], 'live' => [] ];
+        foreach ( $rows as $row ) {
+            $code = (string) ( $row['code'] ?? '' );
+            if ( ! isset( self::LANGS[ $code ] ) || $code === $main || in_array( $code, $out['extra'], true ) ) {
+                continue;
+            }
+            $prefix  = strtolower( trim( (string) ( $row['prefix'] ?? '' ) ) ) ?: $code;
+            $problem = self::prefix_problem( $prefix, array_values( $out['prefixes'] ) );
+            if ( $problem !== '' ) {
+                return new WP_Error( 'qwoo_lang_prefix', $problem );
+            }
+            $out['extra'][]           = $code;
+            $out['prefixes'][ $code ] = $prefix;
+            $out['live'][ $code ]     = ! empty( $row['live'] );
+        }
+        $warnings = [];
+        foreach ( $out['extra'] as $code ) {
+            if ( self::LANGS[ $code ] !== 'en_US' ) {
+                $warnings = array_merge( $warnings, self::install_packs( self::LANGS[ $code ] ) );
+            }
+        }
+        update_option( self::EXTRA_OPTION, $out );
+        return $warnings ? new WP_Error( 'qwoo_lang_partial', implode( ' ', $warnings ), [ 'saved' => true ] ) : true;
+    }
+
+    /* ---------------- the language of this request ---------------- */
+
+    private static $request_lang = null;
+
+    /**
+     * The language a storefront request asks for (header X-Qwoo-Lang, sent by
+     * the storefront on pages of an extra language): a live extra language,
+     * else '' (the main language).
+     */
+    public static function request_lang() {
+        if ( self::$request_lang !== null ) {
+            return self::$request_lang;
+        }
+        $asked = isset( $_SERVER['HTTP_X_QWOO_LANG'] ) ? sanitize_key( wp_unslash( $_SERVER['HTTP_X_QWOO_LANG'] ) ) : '';
+        self::$request_lang = $asked !== '' && $asked !== self::get() && in_array( $asked, self::live_extra(), true ) ? $asked : '';
+        return self::$request_lang;
+    }
+
+    /** For tests and internal requests. */
+    public static function use_request_lang( $code ) {
+        self::$request_lang = (string) $code;
     }
 
     /**
@@ -61,7 +179,7 @@ class Qwoo_Store_Language {
     }
 
     /** WordPress' and WooCommerce's translations for a locale. @return string[] problems */
-    private static function install_packs( $locale ) {
+    public static function install_packs( $locale ) {
         $problems = [];
         require_once ABSPATH . 'wp-admin/includes/file.php';
         require_once ABSPATH . 'wp-admin/includes/translation-install.php';

@@ -93,6 +93,8 @@ class Qwoo_Platform_Dashboard {
         'settings_get'    => 'action_settings_get',
         'settings_save'   => 'action_settings_save',
         'store_language'  => 'action_store_language',
+        'languages_get'   => 'action_languages_get',
+        'languages_save'  => 'action_languages_save',
         'plan_set'        => 'action_plan_set',
         'states'          => 'action_states',
         'tax_rate_save'   => 'action_tax_rate_save',
@@ -463,7 +465,7 @@ class Qwoo_Platform_Dashboard {
             }
         }
 
-        $legal = array_filter( array_map( static fn( $page ) => (string) ( $page['role'] ?? '' ), Shop_Settings_Builder::published_pages() ) );
+        $legal = array_filter( array_map( static fn( $page ) => (string) ( $page['role'] ?? '' ), Shop_Settings_Builder::published_pages( '' ) ) );
 
         return [
             'logo'     => (int) ( $options['branding']['logo_id'] ?? 0 ) > 0,
@@ -656,6 +658,7 @@ class Qwoo_Platform_Dashboard {
         if ( $common['seo'] !== null ) {
             Qwoo_Seo::save( $product->get_id(), 'post', $common['seo'] );
         }
+        Qwoo_Translations::save( 'product', $product->get_id(), ( is_array( $params['fields'] ?? null ) ? ( $params['fields']['translations'] ?? null ) : null ) );
         wc_delete_product_transients( $product->get_id() );
         return self::product_full( wc_get_product( $product->get_id() ) );
     }
@@ -1105,6 +1108,7 @@ class Qwoo_Platform_Dashboard {
             'url'          => Qwoo_Seo::url( '/product-category/' . $term->slug ),
             'seo'          => Qwoo_Seo::for_editor( (int) $term->term_id, 'term' ),
             'seo_defaults' => Qwoo_Seo::term_defaults( $term ),
+            'translations' => Qwoo_Translations::for_dashboard( 'term', (int) $term->term_id, true ),
         ];
     }
 
@@ -1166,6 +1170,7 @@ class Qwoo_Platform_Dashboard {
         }
         $image ? update_term_meta( $term->term_id, 'thumbnail_id', $image ) : delete_term_meta( $term->term_id, 'thumbnail_id' );
         Qwoo_Seo::save( (int) $term->term_id, 'term', $seo );
+        Qwoo_Translations::save( 'term', (int) $term->term_id, ( is_array( $params['fields'] ?? null ) ? ( $params['fields']['translations'] ?? null ) : null ), true );
         return self::category_full( $term );
     }
 
@@ -1483,10 +1488,17 @@ class Qwoo_Platform_Dashboard {
 
     /* ---------------- design (the Shop Builder) ---------------- */
 
-    private static function action_design_get() {
+    /** { lang }: an extra language's copy of the content ('' = the main language). */
+    private static function action_design_get( array $params = [] ) {
         // Stores from before the homepage was a page: their Homepage tab becomes the Home page.
         Shop_Settings_Builder::ensure_store_pages();
-        return Shop_Settings_Builder::platform_design_data();
+        return Shop_Settings_Builder::platform_design_data( self::design_lang( $params ) );
+    }
+
+    /** An extra language the store has ('' otherwise). */
+    private static function design_lang( array $params ) {
+        $lang = sanitize_key( (string) ( $params['lang'] ?? '' ) );
+        return $lang !== '' && in_array( $lang, Qwoo_Store_Language::extra(), true ) ? $lang : '';
     }
 
     /** { role: privacy | terms | returns }: a ready-made page, filled with the store's details. */
@@ -1508,6 +1520,10 @@ class Qwoo_Platform_Dashboard {
         }
         $menus   = is_array( $params['menus'] ?? null ) ? self::to_arrays( $params['menus'] ) : null;
         $layouts = is_array( $params['layouts'] ?? null ) ? self::to_arrays( $params['layouts'] ) : null;
+        $lang    = self::design_lang( $params );
+        if ( $lang !== '' ) {
+            return Shop_Settings_Builder::platform_save_language( $lang, self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts );
+        }
         return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts );
     }
 
@@ -1674,6 +1690,39 @@ class Qwoo_Platform_Dashboard {
             return self::bad( $set->get_error_message() );
         }
         return [ 'language' => Qwoo_Store_Language::get(), 'warning' => is_wp_error( $set ) ? $set->get_error_message() : '' ];
+    }
+
+    /** The store's languages: main, extra (with address prefix and live), and whether the plan allows extra ones. */
+    private static function action_languages_get() {
+        $s    = Qwoo_Store_Language::extra_settings();
+        $rows = [];
+        foreach ( $s['extra'] as $code ) {
+            $rows[] = [ 'code' => $code, 'prefix' => Qwoo_Store_Language::prefix( $code ), 'live' => ! empty( $s['live'][ $code ] ) ];
+        }
+        return [
+            'main'      => Qwoo_Store_Language::get(),
+            'available' => array_keys( Qwoo_Store_Language::LANGS ),
+            'allowed'   => Qwoo_Store_Language::allowed(),
+            'extra'     => $rows,
+        ];
+    }
+
+    /**
+     * { extra: [ { code, prefix, live } ] }: saves the extra languages and
+     * publishes languages.json (the storefront is rebuilt with them).
+     */
+    private static function action_languages_save( array $params ) {
+        $saved = Qwoo_Store_Language::save_extra( self::to_arrays( $params['extra'] ?? [] ) );
+        if ( is_wp_error( $saved ) && $saved->get_error_code() !== 'qwoo_lang_partial' ) {
+            return self::bad( $saved->get_error_message() );
+        }
+        $warning = is_wp_error( $saved ) ? $saved->get_error_message() : '';
+        // The storefront learns about it with the next publish; publish now so it's live.
+        $push = Shop_Settings_Builder::instance()->push_all_pages();
+        if ( isset( $push['error'] ) ) {
+            $warning = trim( $warning . ' The storefront couldn\'t be updated. Publish from the Store builder to try again.' );
+        }
+        return self::action_languages_get() + [ 'warning' => $warning ];
     }
 
     /** { plan, features }: from the platform, which decides them (plans and premium addons). */
@@ -2314,6 +2363,7 @@ class Qwoo_Platform_Dashboard {
             'url'          => get_post_field( 'post_name', $p->get_id() ) !== '' ? Qwoo_Seo::url( '/product/' . get_post_field( 'post_name', $p->get_id() ) ) : '',
             'seo'          => Qwoo_Seo::for_editor( $p->get_id(), 'post' ),
             'seo_defaults' => Qwoo_Seo::product_defaults( $p ),
+            'translations' => Qwoo_Translations::for_dashboard( 'product', $p->get_id() ),
             'shipping'     => [
                 'weight' => (string) $p->get_weight( 'edit' ),
                 'length' => (string) $p->get_length( 'edit' ),

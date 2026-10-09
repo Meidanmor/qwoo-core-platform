@@ -7,6 +7,22 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 trait SB_Github_Push {
 
+    private static $push_page_labels = [
+                'header'   => 'Header',
+                'footer'   => 'Footer',
+                'home'     => 'Homepage',
+                'checkout' => 'Checkout',
+                'branding' => 'Branding',
+                'pwa'      => 'PWA Settings',
+                'shop'     => 'Shop Archive',
+                'category' => 'Category Archive',
+                'product'  => 'Product Page',
+                'cart'     => 'Cart',
+                'blog'     => 'Blog',
+                'blog_post' => 'Blog Post',
+    ];
+
+
     /** Repo folder holding every image used inside sections/blocks. */
     private static $sections_image_dir = 'public/sections/';
 
@@ -102,20 +118,6 @@ trait SB_Github_Push {
         $options       = get_option( 'shop_builder_options', [] );
         $allowed_pages = self::publishable_pages();
 
-        $page_labels = [
-                'header'   => 'Header',
-                'footer'   => 'Footer',
-                'home'     => 'Homepage',
-                'checkout' => 'Checkout',
-                'branding' => 'Branding',
-                'pwa'      => 'PWA Settings',
-                'shop'     => 'Shop Archive',
-                'category' => 'Category Archive',
-                'product'  => 'Product Page',
-                'cart'     => 'Cart',
-                'blog'     => 'Blog',
-                'blog_post' => 'Blog Post',
-        ];
 
         $has_any_page_data = false;
         foreach ( $allowed_pages as $page_slug ) {
@@ -147,6 +149,73 @@ trait SB_Github_Push {
         // Every public/sections/ file referenced by any page in this push.
         $kept_section_images = [];
 
+        $this->stage_configs( $batch, $options, 'public/config/', $path_to_label, $kept_section_images );
+        // Extra languages (premium addon): their own folders.
+        $this->stage_languages( $batch, $options, $path_to_label, $kept_section_images );
+
+        if ( ! empty( $batch['failed'] ) ) {
+            return [ 'error' => 'Failed to push to GitHub: could not upload ' . implode( ', ', $batch['failed'] )
+                    . '. Check the PHP error log for details.' ];
+        }
+
+        // Only clean up once every page staged successfully, so a partial
+        // failure can never delete an image a page still points to.
+        self::delete_unused_section_images( $batch, $kept_section_images, $path_to_label );
+
+        $result = aps_github_finish_batch( $batch, 'Update shop config from WP' );
+
+        if ( $result === false ) {
+            return [ 'error' => 'Failed to push to GitHub — the commit could not be created. '
+                    . 'Check the PHP error log for details.' ];
+        }
+
+        $to_labels = function ( $paths ) use ( $path_to_label ) {
+            $labels = array_map( function ( $p ) use ( $path_to_label ) {
+                return $path_to_label[ $p ] ?? $p;
+            }, $paths );
+            return array_values( array_unique( $labels ) );
+        };
+
+        $updated_labels = $result === 'no_changes' ? [] : $to_labels( array_merge( $batch['updated'], $batch['deleted'] ) );
+        $skipped_labels = array_values( array_diff(
+                $to_labels( array_merge( $batch['skipped'], $result === 'no_changes' ? $batch['updated'] : [] ) ),
+                $updated_labels
+        ) );
+
+        // The version now on the live site (Versions list shows it).
+        self::mark_revision_pushed();
+        self::remember_published_pages( $options, '' );
+        foreach ( class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::live_extra() : [] as $lang ) {
+            self::remember_published_pages( self::options_for_language( $options, $lang ), $lang );
+        }
+
+        if ( $result === 'no_changes' || ( empty( $updated_labels ) && empty( $skipped_labels ) ) ) {
+            return [
+                    'summary'        => 'Nothing changed — everything already up to date on GitHub.',
+                    'updated_labels' => [],
+                    'skipped_labels' => $skipped_labels,
+                    'failed_labels'  => [],
+            ];
+        }
+
+        return [
+                'summary'        => 'Updated: ' . count( $updated_labels ) . ', Skipped (no changes): ' . count( $skipped_labels ),
+                'updated_labels' => $updated_labels,
+                'skipped_labels' => $skipped_labels,
+                'failed_labels'  => [],
+        ];
+    }
+
+    /**
+     * Stages one language's config files into the push: the page configs
+     * (with menus), and its pages. $dir: 'public/config/' for the main
+     * language, 'public/config/{lang}/' for an extra one; $only_keys limits
+     * which page configs go there.
+     */
+    private function stage_configs( &$batch, array $options, $dir, array &$path_to_label, array &$kept_section_images, $only_keys = null, $label_prefix = '' ) {
+        $allowed_pages = self::publishable_pages();
+        $page_labels   = self::$push_page_labels;
+
         // The menus (Design → Menus): header.json "menu", footer.json "columns".
         $menus = self::published_menus( $options );
         foreach ( [ 'header' => 'menu', 'footer' => 'columns' ] as $slot => $key ) {
@@ -160,10 +229,11 @@ trait SB_Github_Push {
 
         foreach ( $allowed_pages as $page_slug ) {
             if ( ! isset( $options[ $page_slug ] ) ) continue;
+            if ( $only_keys !== null && ! in_array( $page_slug, $only_keys, true ) ) continue;
 
             $page_data = $options[ $page_slug ];
-            $path      = "public/config/{$page_slug}.json";
-            $label     = $page_labels[ $page_slug ] ?? ucfirst( $page_slug );
+            $path      = "{$dir}{$page_slug}.json";
+            $label     = $label_prefix . ( $page_labels[ $page_slug ] ?? ucfirst( $page_slug ) );
             $path_to_label[ $path ] = $label;
 
             if ( $page_slug === 'home' ) {
@@ -260,55 +330,6 @@ trait SB_Github_Push {
             aps_github_batch_put_file( $batch, $path, $content );
         }
 
-        $this->stage_custom_pages( $batch, $options, $path_to_label, $kept_section_images );
-
-        if ( ! empty( $batch['failed'] ) ) {
-            return [ 'error' => 'Failed to push to GitHub: could not upload ' . implode( ', ', $batch['failed'] )
-                    . '. Check the PHP error log for details.' ];
-        }
-
-        // Only clean up once every page staged successfully, so a partial
-        // failure can never delete an image a page still points to.
-        self::delete_unused_section_images( $batch, $kept_section_images, $path_to_label );
-
-        $result = aps_github_finish_batch( $batch, 'Update shop config from WP' );
-
-        if ( $result === false ) {
-            return [ 'error' => 'Failed to push to GitHub — the commit could not be created. '
-                    . 'Check the PHP error log for details.' ];
-        }
-
-        $to_labels = function ( $paths ) use ( $path_to_label ) {
-            $labels = array_map( function ( $p ) use ( $path_to_label ) {
-                return $path_to_label[ $p ] ?? $p;
-            }, $paths );
-            return array_values( array_unique( $labels ) );
-        };
-
-        $updated_labels = $result === 'no_changes' ? [] : $to_labels( array_merge( $batch['updated'], $batch['deleted'] ) );
-        $skipped_labels = array_values( array_diff(
-                $to_labels( array_merge( $batch['skipped'], $result === 'no_changes' ? $batch['updated'] : [] ) ),
-                $updated_labels
-        ) );
-
-        // The version now on the live site (Versions list shows it).
-        self::mark_revision_pushed();
-        self::remember_published_pages( $options );
-
-        if ( $result === 'no_changes' || ( empty( $updated_labels ) && empty( $skipped_labels ) ) ) {
-            return [
-                    'summary'        => 'Nothing changed — everything already up to date on GitHub.',
-                    'updated_labels' => [],
-                    'skipped_labels' => $skipped_labels,
-                    'failed_labels'  => [],
-            ];
-        }
-
-        return [
-                'summary'        => 'Updated: ' . count( $updated_labels ) . ', Skipped (no changes): ' . count( $skipped_labels ),
-                'updated_labels' => $updated_labels,
-                'skipped_labels' => $skipped_labels,
-                'failed_labels'  => [],
-        ];
+        $this->stage_custom_pages( $batch, $options, $path_to_label, $kept_section_images, $dir );
     }
 }

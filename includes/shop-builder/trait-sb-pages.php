@@ -254,6 +254,10 @@ trait SB_Pages {
                     ],
                     'sections'   => $sections,
             ];
+            // In an extra language: whether the page has its own copy yet.
+            if ( isset( $page['translated'] ) ) {
+                $out[ count( $out ) - 1 ]['translated'] = (bool) $page['translated'];
+            }
         }
         return $out;
     }
@@ -277,10 +281,10 @@ trait SB_Pages {
      * Stages the published pages into the push batch: the list, one file per
      * page, and deletion of pages that aren't published any more.
      */
-    private function stage_custom_pages( &$batch, array $options, array &$path_to_label, array &$kept_section_images ) {
+    private function stage_custom_pages( &$batch, array $options, array &$path_to_label, array &$kept_section_images, $dir = 'public/config/' ) {
         $live = self::published_page_map( $options );
         $list = [];
-        $kept = [ 'public/config/pages.json' => true ];
+        $kept = [ "{$dir}pages.json" => true ];
         foreach ( $live as $page ) {
             // The trail above the page ("About › Team"), for its breadcrumbs.
             $crumbs = [];
@@ -289,7 +293,7 @@ trait SB_Pages {
                 if ( count( $crumbs ) > self::$max_page_depth ) break;
             }
             $label    = 'Page: ' . $page['title'];
-            $path     = "public/config/page-{$page['id']}.json";
+            $path     = "{$dir}page-{$page['id']}.json";
             $resolver = $this->github_image_resolver( $batch, $label, $path_to_label, $kept_section_images );
             $data     = [
                     'id'         => $page['id'],
@@ -308,11 +312,11 @@ trait SB_Pages {
             if ( ! empty( $page['role'] ) ) $entry['role'] = (string) $page['role'];
             $list[] = $entry;
         }
-        aps_github_batch_put_file( $batch, 'public/config/pages.json', aps_normalize_json( json_encode( [ 'pages' => $list ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ) );
-        $path_to_label['public/config/pages.json'] = 'Pages';
+        aps_github_batch_put_file( $batch, "{$dir}pages.json", aps_normalize_json( json_encode( [ 'pages' => $list ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ) );
+        $path_to_label[ "{$dir}pages.json" ] = 'Pages';
 
         foreach ( array_keys( $batch['existing'] ) as $path ) {
-            if ( strpos( $path, 'public/config/page-' ) !== 0 || isset( $kept[ $path ] ) ) continue;
+            if ( strpos( $path, "{$dir}page-" ) !== 0 || isset( $kept[ $path ] ) ) continue;
             $batch['tree_updates'][] = [ 'path' => $path, 'mode' => '100644', 'type' => 'blob', 'sha' => null ];
             $batch['deleted'][]      = $path;
             $path_to_label[ $path ]  = 'Pages (removed)';
@@ -324,9 +328,9 @@ trait SB_Pages {
      * page whose address changed since it was last live remembers the old
      * one (up to 10), so it keeps working and redirects.
      */
-    private static function remember_published_pages( array $options ) {
+    private static function remember_published_pages( array $options, $lang = '' ) {
         $before = [];
-        foreach ( self::published_pages() as $page ) {
+        foreach ( self::published_pages( $lang ) as $page ) {
             $before[ $page['id'] ?? '' ] = $page;
         }
         $live = [];
@@ -352,7 +356,12 @@ trait SB_Pages {
                     'time'      => $was && ( $was['hash'] ?? '' ) === $hash ? (int) ( $was['time'] ?? time() ) : time(),
             ];
         }
-        update_option( self::PUBLISHED_PAGES_OPTION, $live, false );
+        update_option( self::published_option( $lang ), $live, false );
+    }
+
+    /** Where the live pages of a language are remembered ('' = the main language). */
+    private static function published_option( $lang ) {
+        return $lang === '' ? self::PUBLISHED_PAGES_OPTION : self::PUBLISHED_PAGES_OPTION . '_' . $lang;
     }
 
     /** The first text on a page (headings and text blocks), for its automatic search description. */
@@ -387,8 +396,12 @@ trait SB_Pages {
         return self::page_excerpt( $sections );
     }
 
-    /** The pages that are live on the storefront (Qwoo_Seo reads these). */
-    public static function published_pages() {
-        return array_values( array_filter( (array) get_option( self::PUBLISHED_PAGES_OPTION, [] ), 'is_array' ) );
+    /**
+     * The pages that are live on the storefront (Qwoo_Seo reads these), in
+     * $lang: by default the request's language (X-Qwoo-Lang), else the main one.
+     */
+    public static function published_pages( $lang = null ) {
+        $lang = $lang ?? ( class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::request_lang() : '' );
+        return array_values( array_filter( (array) get_option( self::published_option( (string) $lang ), [] ), 'is_array' ) );
     }
 }

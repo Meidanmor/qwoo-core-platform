@@ -19,6 +19,35 @@ class Qwoo_I18n {
         add_filter( 'rest_post_dispatch', [ __CLASS__, 'translate_rest' ], 20, 3 );
     }
 
+    /** A language set for a while (publishing an extra language's files), else null. */
+    private static $forced = null;
+
+    /** Runs $fn with texts in $code (an extra language's files are written in it). */
+    public static function in_language( $code, callable $fn ) {
+        $previous     = self::$forced;
+        self::$forced = $code;
+        try {
+            return $fn();
+        } finally {
+            self::$forced = $previous;
+        }
+    }
+
+    /**
+     * The language texts are in by default: a language being published, else
+     * the storefront request's (X-Qwoo-Lang, an extra language), else the store's.
+     */
+    public static function default_code() {
+        if ( self::$forced !== null ) {
+            return self::$forced;
+        }
+        if ( ! class_exists( 'Qwoo_Store_Language' ) ) {
+            return 'en';
+        }
+        $lang = Qwoo_Store_Language::request_lang();
+        return $lang !== '' ? $lang : Qwoo_Store_Language::get();
+    }
+
     /** $code: a language ('en', 'he'), default the store's. */
     public static function t( $text, $params = [], $code = null ) {
         // Back-compat: t( $text, 'he' ).
@@ -26,7 +55,7 @@ class Qwoo_I18n {
             $code   = $params;
             $params = [];
         }
-        $code = $code ?? ( class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::get() : 'en' );
+        $code = $code ?? self::default_code();
         $out  = $code === 'he' && isset( self::HE[ $text ] ) ? self::HE[ $text ] : $text;
         foreach ( (array) $params as $key => $value ) {
             $out = str_replace( '{' . $key . '}', (string) $value, $out );
@@ -37,7 +66,7 @@ class Qwoo_I18n {
     /** An English message, also one with values in it, in the store's language. */
     public static function message( $text ) {
         $text = (string) $text;
-        if ( ! class_exists( 'Qwoo_Store_Language' ) || Qwoo_Store_Language::get() === 'en' || $text === '' ) {
+        if ( self::default_code() !== 'he' || $text === '' ) {
             return $text;
         }
         if ( isset( self::HE[ $text ] ) ) {

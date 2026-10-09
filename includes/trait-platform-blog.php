@@ -146,6 +146,7 @@ trait Qwoo_Platform_Blog {
         if ( $seo !== null ) {
             Qwoo_Seo::save( $id, 'post', $seo );
         }
+        Qwoo_Translations::save( 'post', $id, ( is_array( $params['fields'] ?? null ) ? ( $params['fields']['translations'] ?? null ) : null ) );
         return self::post_full( get_post( $id ) );
     }
 
@@ -281,6 +282,7 @@ trait Qwoo_Platform_Blog {
             'url'          => $p->post_name !== '' ? Qwoo_Seo::url( '/blog/' . $p->post_name ) : '',
             'seo'          => Qwoo_Seo::for_editor( $p->ID, 'post' ),
             'seo_defaults' => Qwoo_Seo::post_defaults( $p ),
+            'translations' => Qwoo_Translations::for_dashboard( 'post', $p->ID ),
         ];
     }
 }

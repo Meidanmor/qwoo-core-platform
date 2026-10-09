@@ -75,6 +75,13 @@ class Qwoo_Seo {
     public static function custom( int $id, string $kind = 'post' ): array {
         $saved = $kind === 'term' ? get_term_meta( $id, self::META, true ) : get_post_meta( $id, self::META, true );
         $saved = is_array( $saved ) ? $saved : [];
+        // In an extra language: its own title and description (else the automatic ones, in that language).
+        $lang = self::lang();
+        if ( $lang !== '' && class_exists( 'Qwoo_Translations' ) ) {
+            $tr                   = Qwoo_Translations::get( $id, $kind === 'term' )[ $lang ] ?? [];
+            $saved['title']       = (string) ( $tr['seo_title'] ?? '' );
+            $saved['description'] = (string) ( $tr['seo_description'] ?? '' );
+        }
         return [
             'title'       => trim( (string) ( $saved['title'] ?? '' ) ),
             'description' => trim( (string) ( $saved['description'] ?? '' ) ),
@@ -205,7 +212,8 @@ class Qwoo_Seo {
     /** The homepage's automatic title and description: the tagline, else the homepage's hero text. */
     public static function home_defaults(): array {
         $name    = self::store_name();
-        $tagline = self::plain( get_bloginfo( 'description' ) );
+        // The tagline is in the main language.
+        $tagline = self::lang() === '' ? self::plain( get_bloginfo( 'description' ) ) : '';
         $options = get_option( 'shop_builder_options', [] );
         $hero    = self::plain( implode( ' ', array_filter( [ $options['home']['hero_title'] ?? '', $options['home']['hero_description'] ?? '' ], 'is_string' ) ) );
         // Stores whose homepage is one of their pages: its first words.
@@ -242,6 +250,20 @@ class Qwoo_Seo {
             return new WP_Error( 'not_found', 'Nothing at this address.', [ 'status' => 404 ] );
         }
         return rest_ensure_response( array_merge( self::common(), $answer ) );
+    }
+
+    /** The request's extra language ('' = the main language). */
+    private static function lang(): string {
+        return class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::request_lang() : '';
+    }
+
+    /** Words the storefront names pages with, in the request's language. */
+    private static function word( string $text ): string {
+        if ( ! class_exists( 'Qwoo_I18n' ) ) {
+            return $text;
+        }
+        $lang = self::lang();
+        return Qwoo_I18n::t( $text, [], $lang !== '' ? $lang : Qwoo_Store_Language::get() );
     }
 
     /** The answer for a storefront path ('' is the homepage), or null when nothing lives there. */
@@ -348,18 +370,21 @@ class Qwoo_Seo {
 
     /** Fields every answer carries. */
     private static function common(): array {
+        $lang = self::lang();
         return [
             'site_name' => self::store_name(),
-            'locale'    => str_replace( '-', '_', get_locale() ),
+            'locale'    => $lang !== '' ? Qwoo_Store_Language::LANGS[ $lang ] : str_replace( '-', '_', get_locale() ),
         ];
     }
 
     private static function homepage(): array {
         $s        = self::settings();
         $defaults = self::home_defaults();
+        // The homepage's own title and description are written in the main language.
+        $own = self::lang() === '';
         return [
-            'title'               => $s['home_title'] !== '' ? $s['home_title'] : $defaults['title'],
-            'description'         => $s['home_description'] !== '' ? $s['home_description'] : $defaults['description'],
+            'title'               => $own && $s['home_title'] !== '' ? $s['home_title'] : $defaults['title'],
+            'description'         => $own && $s['home_description'] !== '' ? $s['home_description'] : $defaults['description'],
             'canonical'           => self::url( '/' ),
             'robots'              => self::robots( true ),
             'og_image'            => self::image_url( absint( $s['image_id'] ) ),
@@ -373,7 +398,7 @@ class Qwoo_Seo {
         $shop_id = function_exists( 'wc_get_page_id' ) ? wc_get_page_id( 'shop' ) : 0;
         $name    = $shop_id > 0 ? self::plain( get_the_title( $shop_id ) ) : '';
         return [
-            'title'       => self::with_pattern( $name !== '' ? $name : 'Shop' ),
+            'title'       => self::with_pattern( $name !== '' && self::lang() === '' ? $name : self::word( 'Shop' ) ),
             'description' => self::home_defaults()['description'],
             'canonical'   => self::url( '/products' ),
             'robots'      => self::robots( true ),
@@ -429,9 +454,9 @@ class Qwoo_Seo {
 
     /** The blog's list: its own title, the store's description. Kept out of search until it has posts. */
     private static function blog(): array {
-        $has_posts = (bool) get_posts( [ 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => 1, 'fields' => 'ids' ] );
+        $has_posts = (bool) get_posts( self::translated_posts( [ 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => 1, 'fields' => 'ids' ] ) );
         return [
-            'title'       => self::with_pattern( 'Blog' ),
+            'title'       => self::with_pattern( self::word( 'Blog' ) ),
             'description' => self::home_defaults()['description'],
             'canonical'   => self::url( '/blog' ),
             'robots'      => self::robots( $has_posts ),
@@ -461,6 +486,10 @@ class Qwoo_Seo {
     private static function post( string $slug ): ?array {
         $post = get_page_by_path( sanitize_title( $slug ), OBJECT, 'post' );
         if ( ! $post || $post->post_status !== 'publish' ) {
+            return null;
+        }
+        // In an extra language, only posts written in it exist.
+        if ( class_exists( 'Qwoo_Blog' ) && ! ( $post = Qwoo_Blog::in_language( $post, true ) ) ) {
             return null;
         }
         $custom   = self::custom( $post->ID );
@@ -666,7 +695,7 @@ class Qwoo_Seo {
         }
 
         // The blog: its list, its posts, and categories with posts.
-        $posts = get_posts( [
+        $posts = get_posts( self::translated_posts( [
             'post_type'      => 'post',
             'post_status'    => 'publish',
             'posts_per_page' => 5000,
@@ -674,7 +703,7 @@ class Qwoo_Seo {
             'order'          => 'DESC',
             'meta_query'     => [ [ 'key' => self::NOINDEX_META, 'compare' => 'NOT EXISTS' ] ],
             'no_found_rows'  => true,
-        ] );
+        ] ) );
         if ( $posts ) {
             $urls[] = [ 'path' => '/blog', 'lastmod' => mysql2date( 'c', $posts[0]->post_modified_gmt, false ) ];
             foreach ( $posts as $post ) {
@@ -686,8 +715,22 @@ class Qwoo_Seo {
             }
         }
 
-        // base: the store's main address, so every alias lists the same URLs.
-        return rest_ensure_response( [ 'base' => Qwoo_Technical_Settings::get_primary_frontend_domain(), 'urls' => $urls ] );
+        // base: the store's main address (with the language's prefix), so every alias lists the same URLs.
+        $base = Qwoo_Technical_Settings::get_primary_frontend_domain();
+        if ( $base !== '' && self::lang() !== '' ) {
+            $base .= '/' . Qwoo_Store_Language::prefix( self::lang() );
+        }
+        return rest_ensure_response( [ 'base' => $base, 'urls' => $urls ] );
+    }
+
+    /** Post query args limited, in an extra language, to posts translated into it. */
+    private static function translated_posts( array $args ): array {
+        $lang = self::lang();
+        if ( $lang !== '' && class_exists( 'Qwoo_Translations' ) ) {
+            $args['meta_query']   = (array) ( $args['meta_query'] ?? [] );
+            $args['meta_query'][] = [ 'key' => Qwoo_Translations::META, 'value' => '"' . $lang . '"', 'compare' => 'LIKE' ];
+        }
+        return $args;
     }
 
     /* ---------------- helpers ---------------- */
@@ -697,6 +740,10 @@ class Qwoo_Seo {
         $front = Qwoo_Technical_Settings::get_primary_frontend_domain();
         if ( $front === '' ) {
             return '';
+        }
+        // An extra language's addresses: /en/…
+        if ( self::lang() !== '' ) {
+            $front .= '/' . Qwoo_Store_Language::prefix( self::lang() );
         }
         return $path === '/' ? $front . '/' : $front . $path;
     }
