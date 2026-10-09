@@ -166,6 +166,13 @@ class Qwoo_Store_Language {
             $warnings = self::install_packs( $locale );
         }
         update_option( self::OPTION, $code );
+        // The new main language stops being an extra one (its translations stay saved).
+        $extra = get_option( self::EXTRA_OPTION, [] );
+        if ( is_array( $extra ) && in_array( $code, (array) ( $extra['extra'] ?? [] ), true ) ) {
+            $extra['extra'] = array_values( array_diff( (array) $extra['extra'], [ $code ] ) );
+            unset( $extra['prefixes'][ $code ], $extra['live'][ $code ] );
+            update_option( self::EXTRA_OPTION, $extra );
+        }
         update_option( 'WPLANG', $locale === 'en_US' ? '' : $locale );
         self::localize_defaults( $code );
 
