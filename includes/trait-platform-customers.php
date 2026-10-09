@@ -164,10 +164,30 @@ trait Qwoo_Platform_Customers {
         if ( is_wp_error( $customer ) ) {
             return $customer;
         }
+        $result = self::erase_customer( $customer );
+        if ( $result === 'open_orders' ) {
+            return self::bad( 'This customer has orders that aren\'t finished (processing or on hold). Complete or cancel them first.' );
+        }
+        return [ 'deleted' => true, 'orders' => $result ];
+    }
+
+    /** The customer behind a storefront account (customer or subscriber), or null. */
+    public static function customer_for_user( $user_id ) {
+        $customer = self::find_customer( 'u' . absint( $user_id ) );
+        return is_wp_error( $customer ) ? null : $customer;
+    }
+
+    /**
+     * Removes a customer's personal data (dashboard "Delete customer data",
+     * and a customer deleting their own account on the storefront). Returns
+     * how many orders were anonymised, or 'open_orders' (nothing changed)
+     * while an order is processing or on hold.
+     */
+    public static function erase_customer( array $customer ) {
         $orders = self::customer_orders( $customer, -1 );
         foreach ( $orders as $order ) {
             if ( in_array( $order->get_status(), self::$customer_open, true ) ) {
-                return self::bad( 'This customer has orders that aren\'t finished (processing or on hold). Complete or cancel them first.' );
+                return 'open_orders';
             }
         }
         if ( ! class_exists( 'WC_Privacy_Erasers', false ) ) {
@@ -191,7 +211,7 @@ trait Qwoo_Platform_Customers {
             wp_delete_user( $customer['user'] );
         }
         self::set_guest_note( $customer['email'], '' );
-        return [ 'deleted' => true, 'orders' => count( $orders ) ];
+        return count( $orders );
     }
 
     /* ---------------- helpers ---------------- */

@@ -112,6 +112,9 @@ trait SB_Github_Push {
                 'shop'     => 'Shop Archive',
                 'category' => 'Category Archive',
                 'product'  => 'Product Page',
+                'cart'     => 'Cart',
+                'blog'     => 'Blog',
+                'blog_post' => 'Blog Post',
         ];
 
         $has_any_page_data = false;
@@ -146,6 +149,9 @@ trait SB_Github_Push {
             $options[ $slot ][ $key ] = $menus[ $slot ];
             unset( $options[ $slot ]['pages'] );
         }
+
+        // checkout.json always goes out: it carries the legal pages the terms checkbox links to.
+        $options['checkout'] = is_array( $options['checkout'] ?? null ) ? $options['checkout'] : [];
 
         foreach ( $allowed_pages as $page_slug ) {
             if ( ! isset( $options[ $page_slug ] ) ) continue;
@@ -234,6 +240,15 @@ trait SB_Github_Push {
             if ( isset( $page_data['sections'] ) ) {
                 $resolver = $this->github_image_resolver( $batch, $label, $path_to_label, $kept_section_images );
                 $page_data['sections'] = self::output_sections( (array) $page_data['sections'], $resolver );
+            }
+            if ( isset( $page_data['layouts'] ) ) {
+                $resolver = $this->github_image_resolver( $batch, $label, $path_to_label, $kept_section_images );
+                $page_data['layouts'] = self::published_layouts( (array) $page_data['layouts'], $resolver );
+            }
+            if ( $page_slug === 'checkout' ) {
+                // The terms and privacy pages the checkbox links to (only published ones).
+                $page_data += [ 'require_terms' => true, 'allow_signup' => true ];
+                $page_data['legal'] = self::legal_page_paths( $options );
             }
 
             $content = aps_normalize_json( json_encode( $page_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );

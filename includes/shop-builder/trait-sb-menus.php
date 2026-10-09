@@ -8,7 +8,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   header: { items: [ item… ] }
  *   footer: { columns: [ { id, title, items: [ item… ] } ] }
  * an item:
- *   { id: mi_…, type: page | builtin | category | product | custom,
+ *   { id: mi_…, type: page | builtin | category | product | blog_category | custom,
  *     ref:   the page id, builtin key, category id or product id,
  *     label: '' = the page / category / product's own name,
  *     url:   custom links only, new_tab, children: [ item… ] }
@@ -35,7 +35,11 @@ trait SB_Menus {
         'cart'     => [ 'Cart', '/cart' ],
         'checkout' => [ 'Checkout', '/checkout' ],
         'account'  => [ 'My account', '/my-account' ],
+        'blog'     => [ 'Blog', '/blog' ],
     ];
+
+    /** The builtins a new store's header menu starts with (not the blog: it may have no posts yet). */
+    private static $menu_default_builtins = [ 'home', 'products', 'cart', 'checkout', 'account' ];
 
     /** The menus as stored, or the defaults for a store that never saved any. */
     private static function menus_of( array $options ) {
@@ -46,7 +50,7 @@ trait SB_Menus {
         $item = static fn( $type, $ref ) => [ 'id' => self::new_id( 'mi' ), 'type' => $type, 'ref' => (string) $ref, 'label' => '', 'url' => '', 'new_tab' => false, 'children' => [] ];
 
         $header = [];
-        foreach ( array_keys( self::$menu_builtins ) as $key ) {
+        foreach ( self::$menu_default_builtins as $key ) {
             $header[] = $item( 'builtin', $key );
         }
         $columns = [ [ 'id' => self::new_id( 'mc' ), 'title' => 'Shop', 'items' => [ $item( 'builtin', 'products' ) ] ] ];
@@ -87,12 +91,13 @@ trait SB_Menus {
         foreach ( array_values( is_array( $items ) ? $items : [] ) as $item ) {
             if ( ! is_array( $item ) || ++$count > self::$max_menu_items ) continue;
             $type = (string) ( $item['type'] ?? '' );
-            if ( ! in_array( $type, [ 'page', 'builtin', 'category', 'product', 'custom' ], true ) ) continue;
+            if ( ! in_array( $type, [ 'page', 'builtin', 'category', 'product', 'blog_category', 'custom' ], true ) ) continue;
             $ref = (string) ( $item['ref'] ?? '' );
             switch ( $type ) {
                 case 'page':     $ref = preg_match( '/^pg_[A-Za-z0-9]{6,20}$/', $ref ) ? $ref : ''; break;
                 case 'builtin':  $ref = isset( self::$menu_builtins[ $ref ] ) ? $ref : ''; break;
                 case 'category':
+                case 'blog_category':
                 case 'product':  $ref = (string) absint( $ref ); break;
                 default:         $ref = '';
             }
@@ -162,6 +167,10 @@ trait SB_Menus {
             case 'category':
                 $term = get_term( (int) $ref, 'product_cat' );
                 return $term && ! is_wp_error( $term ) ? [ html_entity_decode( $term->name, ENT_QUOTES ), '/product-category/' . $term->slug ] : [ '', '' ];
+            case 'blog_category':
+                $term = get_term( (int) $ref, 'category' );
+                return $term && ! is_wp_error( $term ) && (int) $term->term_id !== (int) get_option( 'default_category' )
+                    ? [ html_entity_decode( $term->name, ENT_QUOTES ), '/blog/category/' . $term->slug ] : [ '', '' ];
             case 'product':
                 $product = function_exists( 'wc_get_product' ) ? wc_get_product( (int) $ref ) : null;
                 if ( ! $product || ( $live && ( $product->get_status() !== 'publish' || $product->get_catalog_visibility() === 'hidden' ) ) ) return [ '', '' ];

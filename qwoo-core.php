@@ -93,6 +93,8 @@ require_once QWOO_PATH . 'includes/trait-platform-reviews.php';
 require_once QWOO_PATH . 'includes/class-reviews.php';
 require_once QWOO_PATH . 'includes/trait-platform-blog.php';
 require_once QWOO_PATH . 'includes/class-blog.php';
+require_once QWOO_PATH . 'includes/class-checkout-extras.php';
+require_once QWOO_PATH . 'includes/class-account-deletion.php';
 require_once QWOO_PATH . 'includes/class-platform-dashboard.php';
 require_once QWOO_PATH . 'includes/class-platform-hardening.php';
 require_once QWOO_PATH . 'includes/class-shop-settings.php';

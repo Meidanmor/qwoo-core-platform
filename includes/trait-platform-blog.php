@@ -149,6 +149,32 @@ trait Qwoo_Platform_Blog {
         return self::post_full( get_post( $id ) );
     }
 
+    /** A draft copy of a post ("… (Copy)"): text, summary, cover and categories; not its address or search listing. */
+    private static function action_post_duplicate( array $params ) {
+        $post = self::find_post( $params['id'] ?? 0 );
+        if ( is_wp_error( $post ) ) {
+            return $post;
+        }
+        $id = wp_insert_post( wp_slash( [
+            'post_type'      => 'post',
+            'post_status'    => 'draft',
+            'post_title'     => mb_substr( html_entity_decode( $post->post_title, ENT_QUOTES ) . ' (Copy)', 0, 200 ),
+            'post_content'   => $post->post_content,
+            'post_excerpt'   => $post->post_excerpt,
+            'comment_status' => 'closed',
+            'ping_status'    => 'closed',
+        ] ), true );
+        if ( is_wp_error( $id ) ) {
+            return self::bad( $id->get_error_message() );
+        }
+        wp_set_post_categories( $id, wp_get_post_categories( $post->ID ) );
+        $image = (int) get_post_thumbnail_id( $post );
+        if ( $image ) {
+            set_post_thumbnail( $id, $image );
+        }
+        return self::post_full( get_post( $id ) );
+    }
+
     /** Moves a post to the trash (restorable from wp-admin for 30 days). */
     private static function action_post_delete( array $params ) {
         $post = self::find_post( $params['id'] ?? 0 );

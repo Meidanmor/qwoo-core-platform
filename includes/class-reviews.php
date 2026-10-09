@@ -58,7 +58,7 @@ class Qwoo_Reviews {
             'enabled'      => ! empty( $s['enabled'] ),
             'notify'       => ! array_key_exists( 'notify', $s ) || ! empty( $s['notify'] ),
             'request'      => ! empty( $s['request'] ),
-            'request_days' => max( 1, min( 60, (int) ( $s['request_days'] ?? 7 ) ) ),
+            'request_days' => max( 0, min( 60, (int) ( $s['request_days'] ?? 7 ) ) ), // 0: right away
         ];
     }
 
@@ -67,7 +67,7 @@ class Qwoo_Reviews {
             'enabled'      => ! empty( $in['enabled'] ),
             'notify'       => ! empty( $in['notify'] ),
             'request'      => ! empty( $in['request'] ),
-            'request_days' => max( 1, min( 60, (int) ( $in['request_days'] ?? 7 ) ) ),
+            'request_days' => max( 0, min( 60, (int) ( $in['request_days'] ?? 7 ) ) ),
         ];
         update_option( self::OPTION, $s, true );
         // WooCommerce's own switches agree: star ratings, required, verified owners only.
@@ -359,7 +359,11 @@ class Qwoo_Reviews {
         return is_array( $queue ) ? $queue : [];
     }
 
-    /** An order is completed: ask for a review after the owner's delay (once per order). */
+    /**
+     * An order is completed: ask for a review after the owner's delay (once
+     * per order). A delay of 0 days sends it right away, after the response
+     * of the request that completed the order.
+     */
     public static function schedule_request( $order_id ) {
         $s = self::settings();
         if ( ! $s['enabled'] || ! $s['request'] ) {
@@ -368,6 +372,13 @@ class Qwoo_Reviews {
         $order = wc_get_order( $order_id );
         $queue = self::queue();
         if ( ! $order || isset( $queue[ (int) $order_id ] ) || $order->get_meta( self::SENT_META ) || ! is_email( $order->get_billing_email() ) ) {
+            return;
+        }
+        if ( ! $s['request_days'] ) {
+            $id = (int) $order_id;
+            self::after_response( static function () use ( $id ) {
+                self::send_request( $id );
+            } );
             return;
         }
         $queue[ (int) $order_id ] = time() + $s['request_days'] * DAY_IN_SECONDS;

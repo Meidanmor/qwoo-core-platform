@@ -43,6 +43,9 @@ trait SB_Rest {
                 'tab-category' => $category,
                 'tab-product'  => $product,
                 'tab-checkout' => $checkout,
+                'tab-cart'     => $frontend_domain ? $frontend_domain . '/cart' : '',
+                'tab-blog'     => $frontend_domain ? $frontend_domain . '/blog' : '',
+                'tab-blog_post' => $frontend_domain ? $frontend_domain . '/blog' . self::first_post_path() : '',
                 'tab-branding' => $root,
                 'tab-pwa'      => $root,
                 'tab-contact'  => $root,
@@ -90,11 +93,18 @@ trait SB_Rest {
         return ! empty( $products[0] ) ? $products[0]->get_slug() : '';
     }
 
+    /** "/<slug>" of the newest published blog post, or '' (the blog itself then). */
+    private static function first_post_path() {
+        $posts = get_posts( [ 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => 1, 'fields' => 'ids' ] );
+        return $posts ? '/' . get_post_field( 'post_name', $posts[0] ) : '';
+    }
+
     /** Page slugs that are published as public/config/{slug}.json. */
     private static function publishable_pages() {
         return array_merge(
                 [ 'header', 'footer', 'home', 'checkout', 'branding', 'pwa' ],
-                array_keys( self::PAGE_SECTION_LOCATIONS )
+                array_keys( self::PAGE_SECTION_LOCATIONS ),
+                self::TEMPLATE_PAGES
         );
     }
 }

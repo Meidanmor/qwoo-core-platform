@@ -547,10 +547,7 @@ trait SB_Sanitizers {
        register_setting() sanitize callback
        ===================================================================== */
 
-    /** Pages that carry a `sections` list. */
-    private static function sectionable_pages() {
-        return array_merge( [ 'home' ], array_keys( self::PAGE_SECTION_LOCATIONS ) );
-    }
+    // Pages that carry a `sections` list: sectionable_pages() in trait-sb-layouts.php.
 
     public function sanitize_options( $input ) {
         $input    = is_array( $input ) ? $input : [];
@@ -621,6 +618,18 @@ trait SB_Sanitizers {
             $clean[ $page_slug ] = ( $clean[ $page_slug ] ?? [] ) + [ 'sections' => $sections ];
         }
 
+        // Layouts with conditions (trait-sb-layouts.php); kept as stored when not sent.
+        foreach ( array_keys( self::LAYOUT_PAGES ) as $page_slug ) {
+            if ( isset( $input[ $page_slug ]['layouts'] ) ) {
+                $layouts = $this->sanitize_layouts( $input[ $page_slug ]['layouts'], $page_slug );
+            } elseif ( isset( $existing[ $page_slug ]['layouts'] ) ) {
+                $layouts = $existing[ $page_slug ]['layouts'];
+            } else {
+                continue;
+            }
+            $clean[ $page_slug ] = ( $clean[ $page_slug ] ?? [] ) + [ 'layouts' => $layouts ];
+        }
+
         // The owner's own pages (trait-sb-pages.php) and the menus (trait-sb-menus.php).
         if ( isset( $input['custom_pages'] ) ) {
             $clean['custom_pages'] = $this->sanitize_custom_pages( $input['custom_pages'], self::custom_pages_of( $existing ) );
@@ -629,11 +638,15 @@ trait SB_Sanitizers {
             $clean['menus'] = $this->sanitize_menus( $input['menus'] );
         }
 
-        // Checkout
-        if ( isset( $input['checkout'] ) ) {
+        // Checkout (its sections are set above: merged, not replaced)
+        if ( isset( $input['checkout']['checkout_notice'] ) || isset( $input['checkout']['require_terms'] ) ) {
             $clean['checkout'] = [
                     'checkout_notice' => sanitize_textarea_field( $input['checkout']['checkout_notice'] ?? '' ),
-            ];
+                    // Customers tick "I agree to the terms and the privacy policy" (when those pages are published).
+                    'require_terms'   => ! empty( $input['checkout']['require_terms'] ),
+                    // Guests can tick "Create an account" (WooCommerce emails them a link to set a password).
+                    'allow_signup'    => ! empty( $input['checkout']['allow_signup'] ),
+            ] + ( $clean['checkout'] ?? [] );
         }
 
         // Branding

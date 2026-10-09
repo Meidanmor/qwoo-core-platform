@@ -72,6 +72,7 @@ class Qwoo_Platform_Dashboard {
         'post_get'              => 'action_post_get',
         'post_save'             => 'action_post_save',
         'post_delete'           => 'action_post_delete',
+        'post_duplicate'        => 'action_post_duplicate',
         'blog_categories'       => 'action_blog_categories',
         'blog_category_save'    => 'action_blog_category_save',
         'blog_category_delete'  => 'action_blog_category_delete',
@@ -1503,8 +1504,9 @@ class Qwoo_Platform_Dashboard {
                 return self::bad( $problem );
             }
         }
-        $menus = is_array( $params['menus'] ?? null ) ? self::to_arrays( $params['menus'] ) : null;
-        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus );
+        $menus   = is_array( $params['menus'] ?? null ) ? self::to_arrays( $params['menus'] ) : null;
+        $layouts = is_array( $params['layouts'] ?? null ) ? self::to_arrays( $params['layouts'] ) : null;
+        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts );
     }
 
     private static function action_design_publish() {
@@ -1528,7 +1530,7 @@ class Qwoo_Platform_Dashboard {
     /** { kind: products | categories | tags, term }. */
     private static function action_design_search( array $params ) {
         $kind = (string) ( $params['kind'] ?? '' );
-        if ( ! in_array( $kind, [ 'products', 'categories', 'tags' ], true ) ) {
+        if ( ! in_array( $kind, [ 'products', 'categories', 'tags', 'blog_categories' ], true ) ) {
             return self::bad( 'Unknown search.' );
         }
         return [ 'items' => Shop_Settings_Builder::platform_search( $kind, $params['term'] ?? '' ) ];

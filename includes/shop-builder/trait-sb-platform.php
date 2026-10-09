@@ -21,9 +21,10 @@ trait SB_Platform {
 
         $pages = [];
         foreach ( self::sectionable_pages() as $page_slug ) {
-            $pages[ $page_slug ] = array_values( (array) ( $options[ $page_slug ]['sections'] ?? [] ) );
+            $pages[ $page_slug ] = self::editor_sections( $options, $page_slug );
             self::collect_sections_refs( $pages[ $page_slug ], $refs );
         }
+        $layouts = self::platform_layouts_data( $options, $pages, $refs );
         $custom_pages = self::platform_pages_data( $options, $refs );
         foreach ( [ $options['home']['hero_image_id'] ?? 0, $options['branding']['logo_id'] ?? 0, $options['branding']['app_icon_id'] ?? 0 ] as $id ) {
             if ( (int) $id ) $refs['media'][ (int) $id ] = true;
@@ -42,6 +43,10 @@ trait SB_Platform {
             'pages'         => (object) $pages,
             'custom_pages'  => $custom_pages,
             'menus'         => self::platform_menus_data( $options ),
+            'layouts'       => $layouts,
+            'layout_pages'  => self::LAYOUT_PAGES,
+            'template_pages' => self::TEMPLATE_PAGES,
+            'blog_categories' => self::blog_category_labels(),
             'schema'        => [
                 'blocks'           => self::BLOCK_SCHEMA,
                 'section_style'    => self::SECTION_STYLE_FIELDS,
@@ -88,7 +93,11 @@ trait SB_Platform {
                 ],
                 'hero_image_id'    => (int) ( $o['home']['hero_image_id'] ?? 0 ),
             ],
-            'checkout' => [ 'checkout_notice' => (string) ( $o['checkout']['checkout_notice'] ?? '' ) ],
+            'checkout' => [
+                'checkout_notice' => (string) ( $o['checkout']['checkout_notice'] ?? '' ),
+                'require_terms'   => (bool) ( $o['checkout']['require_terms'] ?? true ),
+                'allow_signup'    => (bool) ( $o['checkout']['allow_signup'] ?? true ),
+            ],
             'branding' => [
                 'global_colors' => self::get_global_colors(),
                 'logo_id'       => (int) ( $o['branding']['logo_id'] ?? 0 ),
@@ -124,7 +133,7 @@ trait SB_Platform {
      * Saves the dashboard's draft: the option groups and every page's
      * sections go through sanitize_options(), exactly like Save Draft.
      */
-    public static function platform_save( array $options, array $pages, ?array $custom_pages = null, ?array $menus = null ) {
+    public static function platform_save( array $options, array $pages, ?array $custom_pages = null, ?array $menus = null, ?array $layouts = null ) {
         $input = array_intersect_key( $options, array_flip( self::$platform_option_groups ) );
         if ( $custom_pages !== null ) {
             $input['custom_pages'] = $custom_pages;
@@ -138,7 +147,17 @@ trait SB_Platform {
                 $input[ $page_slug ]['sections'] = $pages[ $page_slug ];
             }
         }
+        // Layouts: { page: [ { id, name, conditions, sections } ] }.
+        foreach ( array_keys( self::LAYOUT_PAGES ) as $page_slug ) {
+            if ( $layouts !== null && isset( $layouts[ $page_slug ] ) && is_array( $layouts[ $page_slug ] ) ) {
+                $input[ $page_slug ]            = is_array( $input[ $page_slug ] ?? null ) ? $input[ $page_slug ] : [];
+                $input[ $page_slug ]['layouts'] = $layouts[ $page_slug ];
+            }
+        }
         self::instance()->save_input( $input );
+        if ( isset( $input['checkout']['allow_signup'] ) ) {
+            Qwoo_Checkout_Extras::sync_signup( ! empty( $input['checkout']['allow_signup'] ) );
+        }
         return self::platform_design_data();
     }
 
@@ -195,6 +214,11 @@ trait SB_Platform {
         if ( $kind === 'products' ) {
             foreach ( wc_get_products( [ 'limit' => 20, 'status' => 'publish', 's' => $term ] ) as $p ) {
                 $out[] = [ 'id' => $p->get_id(), 'text' => html_entity_decode( $p->get_name(), ENT_QUOTES ), 'thumb' => (string) wp_get_attachment_image_url( $p->get_image_id(), 'thumbnail' ), 'href' => '/product/' . get_post_field( 'post_name', $p->get_id() ) ];
+            }
+        } elseif ( $kind === 'blog_categories' ) {
+            $terms = get_terms( [ 'taxonomy' => 'category', 'hide_empty' => false, 'name__like' => $term, 'number' => 20, 'exclude' => [ (int) get_option( 'default_category' ) ] ] );
+            foreach ( is_wp_error( $terms ) ? [] : $terms as $t ) {
+                $out[] = [ 'id' => (int) $t->term_id, 'text' => html_entity_decode( $t->name, ENT_QUOTES ), 'thumb' => '', 'href' => '/blog/category/' . $t->slug ];
             }
         } elseif ( $kind === 'categories' || $kind === 'tags' ) {
             $terms = get_terms( [ 'taxonomy' => $kind === 'tags' ? 'product_tag' : 'product_cat', 'hide_empty' => false, 'name__like' => $term, 'number' => 20 ] );

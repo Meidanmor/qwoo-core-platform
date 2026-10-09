@@ -538,6 +538,103 @@ abstract class Shop_Builder_Constants {
                                     'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
                     ],
             ],
+            /* ---- Dynamic blocks: only on their template page ('pages'), showing that page's content ---- */
+
+            'post_title' => [
+                    'label'  => 'Post Title',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog_post' ],
+                    'icon'   => 'title',
+                    'fields' => [
+                            'tag'   => [ 'type' => 'select', 'label' => 'Heading Level', 'tab' => 'content', 'default' => 'h1',
+                                    'options' => [ 'h1' => 'H1 (recommended)', 'h2' => 'H2' ] ],
+                            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'left', 'options' => self::ALIGN_OPTIONS ],
+                    ],
+            ],
+            'post_meta' => [
+                    'label'  => 'Post Date & Categories',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog_post' ],
+                    'icon'   => 'event',
+                    'fields' => [
+                            'show_date'       => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
+                            'show_categories' => [ 'type' => 'toggle', 'label' => 'Show the categories', 'tab' => 'content', 'default' => true ],
+                            'align'           => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'left', 'options' => self::ALIGN_OPTIONS ],
+                    ],
+            ],
+            'post_featured_image' => [
+                    'label'  => 'Post Cover Image',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog_post' ],
+                    'icon'   => 'image',
+                    'fields' => [
+                            'ratio'   => [ 'type' => 'select', 'label' => 'Shape', 'tab' => 'content', 'default' => '',
+                                    'options' => [ '' => 'As uploaded', '16/9' => 'Wide (16:9)', '4/3' => '4:3', '1/1' => 'Square' ] ],
+                            'rounded' => [ 'type' => 'toggle', 'label' => 'Rounded corners', 'tab' => 'style', 'default' => true ],
+                    ],
+            ],
+            'post_content' => [
+                    'label'  => 'Post Content',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog_post' ],
+                    'icon'   => 'notes',
+                    'fields' => [],
+            ],
+            'post_more' => [
+                    'label'  => 'More Posts To Read',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog_post' ],
+                    'icon'   => 'article',
+                    'fields' => [
+                            'title' => [ 'type' => 'text', 'label' => 'Heading', 'tab' => 'content', 'default' => 'More to read' ],
+                            'count' => [ 'type' => 'number', 'label' => 'Posts', 'tab' => 'content', 'min' => 1, 'max' => 3, 'default' => 3 ],
+                    ],
+            ],
+            'post_back' => [
+                    'label'  => 'Back To Blog Link',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog_post' ],
+                    'icon'   => 'arrow-back',
+                    'fields' => [
+                            'label' => [ 'type' => 'text', 'label' => 'Text', 'tab' => 'content', 'default' => '← Blog' ],
+                    ],
+            ],
+            'blog_title' => [
+                    'label'  => 'Blog Title',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog' ],
+                    'icon'   => 'title',
+                    'fields' => [
+                            'title'            => [ 'type' => 'text', 'label' => 'Title on /blog', 'tab' => 'content', 'default' => 'Blog',
+                                    'help' => 'A category page shows the category\'s name.' ],
+                            'show_description' => [ 'type' => 'toggle', 'label' => 'Show the category\'s description', 'tab' => 'content', 'default' => true ],
+                            'align'            => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'left', 'options' => self::ALIGN_OPTIONS ],
+                    ],
+            ],
+            'blog_categories' => [
+                    'label'  => 'Blog Category Links',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog' ],
+                    'icon'   => 'category',
+                    'fields' => [
+                            'all_label' => [ 'type' => 'text', 'label' => 'Label for all posts', 'tab' => 'content', 'default' => 'All' ],
+                    ],
+            ],
+            'blog_posts' => [
+                    'label'  => 'Blog Posts Grid',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog' ],
+                    'icon'   => 'grid',
+                    'fields' => [
+                            'per_page'     => [ 'type' => 'number', 'label' => 'Posts per page', 'tab' => 'content', 'min' => 1, 'max' => 24, 'default' => 9 ],
+                            'columns'      => [ 'type' => 'number', 'label' => 'Posts Per Row', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 4,
+                                    'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
+                            'show_excerpt' => [ 'type' => 'toggle', 'label' => 'Show the summary', 'tab' => 'content', 'default' => true ],
+                            'show_date'    => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
+                            'show_image'   => [ 'type' => 'toggle', 'label' => 'Show the cover image', 'tab' => 'content', 'default' => true ],
+                    ],
+            ],
+
             'latest_posts' => [
                     'label'  => 'Latest Blog Posts',
                     'category' => 'shop',
@@ -903,6 +1000,26 @@ abstract class Shop_Builder_Constants {
             'after_related_products'  => 'After Related Products',
     ];
 
+    /** Cart page slots. */
+    const CART_SECTION_LOCATIONS = [
+            'before_cart'        => 'Before Cart',
+            'before_cart_items'  => 'Before Cart Items',
+            'after_cart_items'   => 'After Cart Items',
+            'before_cart_totals' => 'Before Cart Totals',
+            'after_cart_totals'  => 'After Cart Totals',
+            'after_cart'         => 'After Cart',
+    ];
+
+    /** Checkout page slots. */
+    const CHECKOUT_SECTION_LOCATIONS = [
+            'before_checkout'         => 'Before Checkout',
+            'before_customer_details' => 'Before Customer Details',
+            'after_customer_details'  => 'After Customer Details',
+            'before_order_review'     => 'Before Order Summary',
+            'before_place_order'      => 'Before Place Order',
+            'after_checkout'          => 'After Checkout',
+    ];
+
     /**
      * Pages other than 'home' that support location-pinned sections. 'home'
      * is deliberately absent — its sections are a single flat, order-only list.
@@ -911,7 +1028,28 @@ abstract class Shop_Builder_Constants {
             'shop'     => self::ARCHIVE_SECTION_LOCATIONS,
             'category' => self::ARCHIVE_SECTION_LOCATIONS,
             'product'  => self::PRODUCT_SECTION_LOCATIONS,
+            'cart'     => self::CART_SECTION_LOCATIONS,
+            'checkout' => self::CHECKOUT_SECTION_LOCATIONS,
     ];
+
+    /**
+     * Template pages: built entirely from sections (like the homepage), with
+     * dynamic blocks for what the page shows ("Post title", "Posts grid"…).
+     */
+    const TEMPLATE_PAGES = [ 'blog', 'blog_post' ];
+
+    /**
+     * Pages that can have extra layouts, each used where its conditions
+     * match (the first match wins; otherwise the page's default layout):
+     * page => the condition kinds it takes.
+     */
+    const LAYOUT_PAGES = [
+            'product'   => [ 'products', 'categories' ],
+            'category'  => [ 'categories' ],
+            'blog'      => [ 'blog_categories' ],
+            'blog_post' => [ 'blog_categories' ],
+    ];
+    const MAX_LAYOUTS = 20;
 
     /** Max container depth (top-level section = 1). */
     const MAX_NESTING_DEPTH = 4;
