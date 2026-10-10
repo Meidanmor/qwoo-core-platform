@@ -127,6 +127,7 @@ class Qwoo_I18n {
         'Login failed. Please check your credentials and try again.'                                => 'ההתחברות נכשלה. כדאי לבדוק את הפרטים ולנסות שוב.',
         'No account found with that email address.'                                                 => 'לא נמצא חשבון עם כתובת האימייל הזו.',
         'No account found with that username or email.'                                             => 'לא נמצא חשבון עם שם המשתמש או האימייל האלה.',
+        'Our store has moved. To sign in, set a new password: we\'ve emailed you a link.'               => 'החנות שלנו עברה. כדי להתחבר יש לבחור סיסמה חדשה: שלחנו אליך קישור באימייל.',
         'No active session.'                                                                        => 'אין התחברות פעילה.',
         'No fields provided to update.'                                                             => 'לא נשלחו שדות לעדכון.',
         'Only customers who bought this product can review it.'                                     => 'רק לקוחות שקנו את המוצר יכולים לכתוב עליו ביקורת.',

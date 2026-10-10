@@ -185,6 +185,14 @@ function qwoo_handle_login(WP_REST_Request $request): WP_REST_Response {
     if (is_wp_error($user)) {
         $code = $user->get_error_code();
 
+        // A customer from the store this one moved from whose password couldn't come over.
+        if ($code === 'incorrect_password' && class_exists('Qwoo_Migration')) {
+            $moved = Qwoo_Migration::password_needed($username);
+            if ($moved !== '') {
+                return new WP_REST_Response(['success' => false, 'code' => 'qwoo_set_password', 'message' => $moved], 401);
+            }
+        }
+
         $messages = [
             'invalid_username'   => 'No account found with that username or email.',
             'invalid_email'      => 'No account found with that email address.',

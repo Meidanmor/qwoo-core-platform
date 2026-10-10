@@ -289,8 +289,8 @@ class Qwoo_Seo {
         if ( preg_match( '#^blog/([^/]+)$#u', $path, $m ) ) {
             return self::post( $m[1] ) ?? self::moved( 'post', $m[1] );
         }
-        // The owner's own pages (/about, /about/team…).
-        return self::page( $path );
+        // The owner's own pages (/about, /about/team…), else an address from the store this one moved from.
+        return self::page( $path ) ?? self::migrated( $path );
     }
 
     /** "About Us/Team" → "about-us/team", each part like WordPress makes slugs. */
@@ -366,6 +366,12 @@ class Qwoo_Seo {
         ) );
         $term = $id ? get_term( $id, 'product_cat' ) : null;
         return $term && ! is_wp_error( $term ) && $term->slug !== $old ? [ 'redirect' => '/product-category/' . $term->slug ] : null;
+    }
+
+    /** An old address of an item brought in from another store: { redirect }, or null. */
+    private static function migrated( string $path ): ?array {
+        $to = class_exists( 'Qwoo_Migration' ) ? Qwoo_Migration::moved_path( $path ) : null;
+        return $to && trim( $to, '/' ) !== $path ? [ 'redirect' => $to ] : null;
     }
 
     /** Fields every answer carries. */

@@ -40,6 +40,7 @@ class Qwoo_Platform_Dashboard {
     use Qwoo_Platform_Customers;
     use Qwoo_Platform_Reviews;
     use Qwoo_Platform_Blog;
+    use Qwoo_Platform_Migration;
 
     const KEY_OPTION   = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
@@ -134,6 +135,12 @@ class Qwoo_Platform_Dashboard {
         'coupon_save'           => 'action_coupon_save',
         'coupon_delete'         => 'action_coupon_delete',
         'coupons_enable'        => 'action_coupons_enable',
+        'migrate_status'        => 'action_migrate_status',
+        'migrate_check'         => 'action_migrate_check',
+        'migrate_start'         => 'action_migrate_start',
+        'migrate_run'           => 'action_migrate_run',
+        'migrate_cancel'        => 'action_migrate_cancel',
+        'migrate_forget'        => 'action_migrate_forget',
     ];
 
     const MAX_VIDEO_BYTES = 20971520; // 20 MB
