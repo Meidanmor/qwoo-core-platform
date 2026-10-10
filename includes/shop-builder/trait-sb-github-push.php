@@ -301,6 +301,16 @@ trait SB_Github_Push {
 
                     $page_data[ $url_field ]           = wp_get_attachment_url( $attachment_id );
                     $page_data[ $url_field . '_path' ] = '/branding/' . $filename;
+
+                    // The logo's own size: the header gives it width/height so nothing jumps while it loads
+                    // (SVGs too, see Qwoo_Media_Support).
+                    if ( $url_field === 'logo' ) {
+                        $src = wp_get_attachment_image_src( $attachment_id, 'full' );
+                        if ( $src && (int) $src[1] > 0 && (int) $src[2] > 0 ) {
+                            $page_data['logo_width']  = (int) $src[1];
+                            $page_data['logo_height'] = (int) $src[2];
+                        }
+                    }
                 }
 
                 // Logo and app icon share the folder: anything else in it was replaced or removed.
