@@ -19,9 +19,11 @@ add_action( 'init', function() {
 
                 // Whether the storefront shows reviews (the owner's switch in the dashboard).
                 $reviews = class_exists('Qwoo_Reviews') && Qwoo_Reviews::settings()['enabled'];
+                // Videos in the product's gallery, and where each one goes.
+                $videos = class_exists('Qwoo_Media_Support') ? Qwoo_Media_Support::product_videos($product) : [];
 
                 if (empty($terms) || is_wp_error($terms)) {
-                    return ['default_category' => null, 'reviews' => $reviews];
+                    return ['default_category' => null, 'reviews' => $reviews, 'videos' => $videos];
                 }
 
                 // Get the first term (you can customize sorting if needed)
@@ -34,6 +36,7 @@ add_action( 'init', function() {
                         'slug' => $default->slug,
                     ],
                     'reviews' => $reviews,
+                    'videos' => $videos,
                 ];
             },
             'schema_callback' => function () {
@@ -53,6 +56,12 @@ add_action( 'init', function() {
                         'reviews' => [
                             'description' => 'Whether the store shows product reviews.',
                             'type' => 'boolean',
+                            'context' => ['view', 'edit'],
+                            'readonly' => true,
+                        ],
+                        'videos' => [
+                            'description' => 'Videos in the gallery: id, position (place in the gallery), src, type, width, height.',
+                            'type' => 'array',
                             'context' => ['view', 'edit'],
                             'readonly' => true,
                         ],

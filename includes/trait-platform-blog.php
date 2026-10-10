@@ -102,7 +102,7 @@ trait Qwoo_Platform_Blog {
         }
 
         $image = absint( $f['image_id'] ?? 0 );
-        if ( $image && ! wp_attachment_is_image( $image ) ) {
+        if ( $image && ! Qwoo_Media_Support::is_image( $image ) ) {
             return self::bad( 'The cover image is missing. Upload it again.' );
         }
         $categories = array_values( array_filter( array_unique( array_map( 'absint', (array) ( $f['category_ids'] ?? [] ) ) ) ) );

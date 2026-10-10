@@ -54,12 +54,12 @@ trait Qwoo_Platform_Media {
 
         $touched = [];
         $rows    = $wpdb->get_results( $wpdb->prepare(
-            "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_product_image_gallery' AND " . self::media_in_list_sql( 'meta_value' ),
-            ...self::media_in_list_args( $id )
+            "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE meta_key IN ( '_product_image_gallery', %s ) AND " . self::media_in_list_sql( 'meta_value' ),
+            ...array_merge( [ Qwoo_Media_Support::GALLERY_META ], self::media_in_list_args( $id ) )
         ) );
         foreach ( $rows as $row ) {
             $ids = array_values( array_diff( array_map( 'intval', explode( ',', (string) $row->meta_value ) ), [ $id ] ) );
-            update_post_meta( (int) $row->post_id, '_product_image_gallery', implode( ',', $ids ) );
+            update_post_meta( (int) $row->post_id, $row->meta_key, implode( ',', $ids ) );
             $touched[] = (int) $row->post_id;
         }
         $terms = $wpdb->get_col( $wpdb->prepare( "SELECT term_id FROM {$wpdb->termmeta} WHERE meta_key = 'thumbnail_id' AND meta_value = %s", (string) $id ) );
@@ -94,6 +94,57 @@ trait Qwoo_Platform_Media {
         return [ 'deleted' => true ];
     }
 
+    /* ---------------- SVG uploads ---------------- */
+
+    /** An SVG starts with <svg (after an optional XML declaration and comments). */
+    private static function media_looks_like_svg( $bytes ) {
+        return (bool) preg_match( '/^\s*(<\?xml[^>]*>\s*)?(<!--.*?-->\s*)*<svg[\s>]/is', substr( (string) $bytes, 0, 4096 ) );
+    }
+
+    /**
+     * An SVG into the Media Library, rebuilt by Qwoo_Svg_Sanitizer (no
+     * scripts, links, outside files or entities). SVGs are allowed only
+     * here, for the length of this upload.
+     */
+    private static function media_svg_upload( $bytes, $name ) {
+        $clean = Qwoo_Svg_Sanitizer::sanitize( (string) $bytes );
+        if ( $clean === null ) {
+            return self::bad( 'This SVG can\'t be used. Export it again as a plain SVG from your design app.' );
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        $base = substr( sanitize_file_name( pathinfo( $name, PATHINFO_FILENAME ) ), 0, 60 ) ?: 'image';
+        $tmp  = wp_tempnam( $base . '.svg' );
+        file_put_contents( $tmp, $clean );
+
+        $allow = static fn( $mimes ) => $mimes + [ 'svg' => 'image/svg+xml' ];
+        $check = static fn( $data, $file, $filename ) => preg_match( '/\.svg$/i', (string) $filename )
+            ? [ 'ext' => 'svg', 'type' => 'image/svg+xml', 'proper_filename' => false ]
+            : $data;
+        add_filter( 'upload_mimes', $allow );
+        add_filter( 'wp_check_filetype_and_ext', $check, 10, 3 );
+        $id = media_handle_sideload( [ 'name' => $base . '.svg', 'tmp_name' => $tmp ], 0 );
+        remove_filter( 'upload_mimes', $allow );
+        remove_filter( 'wp_check_filetype_and_ext', $check, 10 );
+
+        if ( is_wp_error( $id ) ) {
+            @unlink( $tmp );
+            return self::bad( $id->get_error_message() );
+        }
+        [ $width, $height ] = Qwoo_Media_Support::svg_size( $clean );
+        $meta           = (array) wp_get_attachment_metadata( $id );
+        $meta['width']  = $width;
+        $meta['height'] = $height;
+        $meta['file']   = (string) get_post_meta( $id, '_wp_attached_file', true );
+        wp_update_attachment_metadata( $id, $meta );
+
+        $url = (string) wp_get_attachment_url( $id );
+        return [ 'id' => (int) $id, 'url' => $url, 'large' => $url, 'media' => Shop_Settings_Builder::platform_media_item( $id ) ];
+    }
+
     /* ---------------- helpers ---------------- */
 
     /** The attachment ID from { id }: an image or video, else a 404 error. */
@@ -126,6 +177,7 @@ trait Qwoo_Platform_Media {
             'name'    => get_the_title( $id ),
             'file'    => $file ? wp_basename( $file ) : '',
             'mime'    => (string) get_post_mime_type( $id ),
+            'kind'    => Qwoo_Media_Support::kind( $id ),
             'size'    => $size,
             'width'   => isset( $meta['width'] ) ? (int) $meta['width'] : null,
             'height'  => isset( $meta['height'] ) ? (int) $meta['height'] : null,
@@ -180,11 +232,12 @@ trait Qwoo_Platform_Media {
 
         $rows = $wpdb->get_results( $wpdb->prepare(
             "SELECT p.ID, p.post_title FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id
-             WHERE m.meta_key = '_product_image_gallery' AND " . self::media_in_list_sql( 'm.meta_value' ) . " AND p.post_type = 'product' AND {$live} LIMIT %d",
-            ...array_merge( self::media_in_list_args( $id ), [ $max ] )
+             WHERE m.meta_key IN ( '_product_image_gallery', %s ) AND " . self::media_in_list_sql( 'm.meta_value' ) . " AND p.post_type = 'product' AND {$live} LIMIT %d",
+            ...array_merge( [ Qwoo_Media_Support::GALLERY_META ], self::media_in_list_args( $id ), [ $max ] )
         ) );
+        $as = Qwoo_Media_Support::is_video( $id ) ? 'video' : 'photo';
         foreach ( $rows as $r ) {
-            $add( 'product', $r->ID, $r->post_title, 'photo' );
+            $add( 'product', $r->ID, $r->post_title, $as );
         }
 
         $terms = $wpdb->get_results( $wpdb->prepare(

@@ -252,36 +252,63 @@ trait SB_Platform {
         return $out;
     }
 
+    /** What each list filter shows (post_mime_type). image = every image, SVGs too. */
+    private static function media_kinds() {
+        return [
+            'image' => 'image',
+            'video' => 'video',
+            'all'   => [ 'image', 'video' ],
+            'photo' => [ 'image/jpeg', 'image/png', 'image/webp', 'image/gif' ],
+            'svg'   => 'image/svg+xml',
+        ];
+    }
+
     /**
-     * Media Library images or videos, newest first, 30 a page. Images also
-     * carry their alt text and the sizes the dashboard's editors show:
-     * product (product photos, categories) and large (blog posts).
+     * The Media Library, newest first, 30 a page: $kind is a media_kinds() key,
+     * $month "2026-10" or ''. Every item has its kind (image, svg, video);
+     * images also carry their alt text and the sizes the dashboard's editors
+     * show: product (product photos, categories) and large (blog posts).
+     * With $months, also the months that have files (newest first).
      */
-    public static function platform_media( $kind, $page, $search ) {
-        $query = new WP_Query( [
+    public static function platform_media( $kind, $page, $search, $month = '', $months = false ) {
+        $kinds = self::media_kinds();
+        $kind  = isset( $kinds[ $kind ] ) ? $kind : 'image';
+        $args  = [
             'post_type'      => 'attachment',
             'post_status'    => 'inherit',
-            'post_mime_type' => $kind === 'video' ? 'video' : 'image',
+            'post_mime_type' => $kinds[ $kind ],
             'posts_per_page' => 30,
             'paged'          => max( 1, min( 1000, (int) $page ) ),
             's'              => mb_substr( sanitize_text_field( (string) $search ), 0, 100 ),
             'orderby'        => 'date',
             'order'          => 'DESC',
             'fields'         => 'ids',
-        ] );
+        ];
+        if ( preg_match( '/^(\d{4})-(\d{2})$/', (string) $month, $m ) ) {
+            $args['m'] = $m[1] . $m[2];
+        }
+        $query = new WP_Query( $args );
         $items = [];
         foreach ( $query->posts as $id ) {
             $payload = self::admin_media_payload( $id );
             if ( ! $payload ) continue;
-            $item = [ 'id' => (int) $id, 'name' => get_the_title( $id ) ] + $payload;
-            if ( $kind !== 'video' ) {
+            $item = [ 'id' => (int) $id, 'name' => get_the_title( $id ), 'kind' => Qwoo_Media_Support::kind( $id ) ] + $payload;
+            if ( $item['kind'] !== 'video' ) {
                 $item['alt']     = (string) get_post_meta( $id, '_wp_attachment_image_alt', true );
                 $item['large']   = wp_get_attachment_image_url( $id, 'large' ) ?: $payload['url'];
                 $item['product'] = wp_get_attachment_image_url( $id, 'woocommerce_thumbnail' ) ?: $payload['thumb'];
             }
             $items[] = $item;
         }
-        return [ 'items' => $items, 'pages' => (int) $query->max_num_pages ];
+        $out = [ 'items' => $items, 'pages' => (int) $query->max_num_pages ];
+        if ( $months ) {
+            global $wpdb;
+            $dates = $wpdb->get_col(
+                "SELECT post_date FROM {$wpdb->posts} WHERE post_type = 'attachment' AND ( post_mime_type LIKE 'image/%' OR post_mime_type LIKE 'video/%' ) ORDER BY post_date DESC LIMIT 5000"
+            );
+            $out['months'] = array_values( array_unique( array_map( static fn( $d ) => substr( (string) $d, 0, 7 ), $dates ) ) );
+        }
+        return $out;
     }
 
     /**

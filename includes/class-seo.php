@@ -117,7 +117,7 @@ class Qwoo_Seo {
             return new WP_Error( 'qwoo_seo', 'The search description can be up to ' . self::MAX_DESCRIPTION . ' characters.', [ 'status' => 400 ] );
         }
         $image = absint( $in['image_id'] ?? 0 );
-        if ( $image && ! wp_attachment_is_image( $image ) ) {
+        if ( $image && ! Qwoo_Media_Support::is_image( $image ) ) {
             return new WP_Error( 'qwoo_seo', 'The share image is missing. Upload it again.', [ 'status' => 400 ] );
         }
         return [

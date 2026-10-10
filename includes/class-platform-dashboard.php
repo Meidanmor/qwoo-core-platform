@@ -719,8 +719,9 @@ class Qwoo_Platform_Dashboard {
         if ( count( $images ) > self::MAX_GALLERY + 1 ) {
             return self::bad( 'A product can have up to ' . ( self::MAX_GALLERY + 1 ) . ' photos.' );
         }
+        // Photos (and SVGs) and videos, in the owner's order.
         foreach ( $images as $image ) {
-            if ( ! $image || ! wp_attachment_is_image( $image ) ) {
+            if ( ! Qwoo_Media_Support::is_image( $image ) && ! Qwoo_Media_Support::is_video( $image ) ) {
                 return self::bad( 'One of the photos is missing. Upload it again.' );
             }
         }
@@ -768,8 +769,16 @@ class Qwoo_Platform_Dashboard {
             $product->set_width( $c['shipping']['width'] );
             $product->set_height( $c['shipping']['height'] );
         }
-        $product->set_image_id( $c['images'][0] ?? 0 );
-        $product->set_gallery_image_ids( array_slice( $c['images'], 1 ) );
+        // WooCommerce keeps the photos: the first photo is the main one, even if a video was put first.
+        $photos = array_values( array_filter( $c['images'], [ 'Qwoo_Media_Support', 'is_image' ] ) );
+        $product->set_image_id( $photos[0] ?? 0 );
+        $product->set_gallery_image_ids( array_slice( $photos, 1 ) );
+        if ( count( $photos ) < count( $c['images'] ) ) {
+            $order = $photos ? array_merge( [ $photos[0] ], array_values( array_diff( $c['images'], [ $photos[0] ] ) ) ) : $c['images'];
+            $product->update_meta_data( Qwoo_Media_Support::GALLERY_META, implode( ',', $order ) );
+        } else {
+            $product->delete_meta_data( Qwoo_Media_Support::GALLERY_META );
+        }
     }
 
     /**
@@ -986,7 +995,7 @@ class Qwoo_Platform_Dashboard {
                 $skus[ $sku ] = true;
             }
             $image = absint( $v['image_id'] ?? 0 );
-            if ( $image && ! wp_attachment_is_image( $image ) ) {
+            if ( $image && ! Qwoo_Media_Support::is_image( $image ) ) {
                 return self::bad( "The photo of \"$label\" is missing. Choose it again." );
             }
             $variations[] = [ 'id' => $vid, 'picked' => $picked, 'label' => $label, 'stock' => $stock, 'enabled' => $enabled, 'sku' => $sku, 'image' => $image ];
@@ -1146,7 +1155,7 @@ class Qwoo_Platform_Dashboard {
             return self::bad( 'Another category already uses this address. Choose a different one.' );
         }
         $image = absint( $f['image_id'] ?? 0 );
-        if ( $image && ! wp_attachment_is_image( $image ) ) {
+        if ( $image && ! Qwoo_Media_Support::is_image( $image ) ) {
             return self::bad( 'The photo is missing. Upload it again.' );
         }
         $seo = Qwoo_Seo::clean_input( $f['seo'] ?? [] );
@@ -1317,8 +1326,11 @@ class Qwoo_Platform_Dashboard {
         }
         $info  = @getimagesizefromstring( $bytes );
         $types = [ IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp' ];
+        if ( ! $info && self::media_looks_like_svg( $bytes ) ) {
+            return self::media_svg_upload( $bytes, (string) ( $params['name'] ?? '' ) );
+        }
         if ( ! $info || ! isset( $types[ $info[2] ] ) ) {
-            return self::bad( 'Use a JPG, PNG or WebP photo.' );
+            return self::bad( 'Use a JPG, PNG, WebP or SVG image.' );
         }
         if ( $info[0] * $info[1] > 40000000 ) {
             return self::bad( 'This photo is too large. Use one under 40 megapixels.' );
@@ -1558,9 +1570,15 @@ class Qwoo_Platform_Dashboard {
         return [ 'items' => Shop_Settings_Builder::platform_search( $kind, $params['term'] ?? '' ) ];
     }
 
-    /** { kind: image | video, page, search }: the Media Library. */
+    /** { kind: image | video | all | photo | svg, page, search, month: "2026-10", months: bool }: the Media Library. */
     private static function action_design_media( array $params ) {
-        return Shop_Settings_Builder::platform_media( ( $params['kind'] ?? '' ) === 'video' ? 'video' : 'image', (int) ( $params['page'] ?? 1 ), $params['search'] ?? '' );
+        return Shop_Settings_Builder::platform_media(
+            (string) ( $params['kind'] ?? 'image' ),
+            (int) ( $params['page'] ?? 1 ),
+            (string) ( $params['search'] ?? '' ),
+            (string) ( $params['month'] ?? '' ),
+            ! empty( $params['months'] )
+        );
     }
 
     private static function action_design_versions() {
@@ -2337,12 +2355,16 @@ class Qwoo_Platform_Dashboard {
     }
 
     private static function product_full( WC_Product $p ) {
+        // Photos and videos in the owner's order: { id, url, kind: image | svg | video }.
         $images = [];
         foreach ( array_merge( [ $p->get_image_id() ], $p->get_gallery_image_ids() ) as $id ) {
             $url = self::image_url( $id, 'woocommerce_thumbnail' );
             if ( $url !== '' ) {
-                $images[] = [ 'id' => (int) $id, 'url' => $url ];
+                $images[] = [ 'id' => (int) $id, 'url' => $url, 'kind' => Qwoo_Media_Support::kind( $id ) ];
             }
+        }
+        foreach ( Qwoo_Media_Support::product_videos( $p ) as $video ) {
+            array_splice( $images, min( $video['position'], count( $images ) ), 0, [ [ 'id' => $video['id'], 'url' => $video['src'], 'kind' => 'video' ] ] );
         }
         $description = (string) $p->get_description();
         return self::product_summary( $p ) + self::product_options( $p ) + self::sale_dates_of( $p ) + [
