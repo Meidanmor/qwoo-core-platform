@@ -30,20 +30,50 @@ function qwoo_export_products_json(WP_REST_Request $request)
     ]);
 }
 
-// Trigger sync when a product is created or updated
-add_action('woocommerce_update_product', 'aps_sync_products_to_github', 10, 0);
-// Trigger sync when a product import finished
-add_action('woocommerce_product_importer_complete', 'aps_sync_products_to_github');
+/*
+ * The storefront's products backup (data/products.json, categories.json,
+ * price-meta.json: only used when the store's API can't be reached) is
+ * refreshed at most once a day, started by the storefront's own traffic
+ * (no cron) and run after the answer is sent. It used to be published on
+ * every product save (a stock change after an order too), and each of those
+ * rebuilt the storefront.
+ */
+add_action( 'rest_api_init', 'aps_maybe_refresh_data_files' );
 
-//add_action('woocommerce_product_object_updated_props', 'aps_sync_products_to_github', 10, 0);
+function aps_maybe_refresh_data_files() {
+    // The hourly job of older versions.
+    if ( wp_next_scheduled( 'auto_sync_products_to_github' ) ) {
+        wp_clear_scheduled_hook( 'auto_sync_products_to_github' );
+    }
+    if ( get_transient( 'qwoo_data_refreshed' ) || ! aps_publishing_configured() ) {
+        return;
+    }
+    // Never on the storefront's "which version is live?" check: it's waited for
+    // (where the server can't answer before the work is done).
+    if ( strpos( (string) ( $_SERVER['REQUEST_URI'] ?? '' ), '/qwoo/v1/site' ) !== false ) {
+        return;
+    }
+    set_transient( 'qwoo_data_refreshed', time(), DAY_IN_SECONDS );
+    add_action( 'shutdown', static function () {
+        if ( function_exists( 'fastcgi_finish_request' ) ) {
+            fastcgi_finish_request();
+        } elseif ( function_exists( 'litespeed_finish_request' ) ) {
+            litespeed_finish_request();
+        }
+        ignore_user_abort( true );
+        $result = aps_sync_all_data_to_github();
+        if ( empty( $result['ok'] ) ) {
+            // Try again in an hour rather than tomorrow.
+            set_transient( 'qwoo_data_refreshed', time(), HOUR_IN_SECONDS );
+        }
+    } );
+}
 
-// Trigger sync when a product is deleted
-add_action('woocommerce_delete_product', 'aps_sync_products_to_github', 10, 0);
-
-// Run every hour
-add_action('auto_sync_products_to_github', 'aps_sync_products_to_github');
-if (!wp_next_scheduled('auto_sync_products_to_github')) {
-    wp_schedule_event(time(), 'hourly', 'auto_sync_products_to_github');
+/** Whether this site publishes anywhere (on the store, or a platform / Technical Settings repo). */
+function aps_publishing_configured() {
+    return ( class_exists( 'Qwoo_Site_Content' ) && Qwoo_Site_Content::enabled() )
+        || Qwoo_Platform_Connection::get()
+        || Qwoo_Technical_Settings::get_key( 'GITHUB_TOKEN' );
 }
 
 /**
@@ -80,6 +110,11 @@ function aps_normalize_json( $json ) {
  * commit, and moves the branch ref — all in a single round trip each.
  */
 function aps_github_start_batch() {
+    // Stores whose storefront reads published files from the store (see Qwoo_Site_Content).
+    if ( class_exists( 'Qwoo_Site_Content' ) && Qwoo_Site_Content::enabled() ) {
+        return Qwoo_Site_Content::start_batch();
+    }
+
     // Platform stores get a short-lived token for their own content repo;
     // other sites use the GitHub settings from Technical Settings.
     $gh = Qwoo_Platform_Connection::github_settings();
@@ -167,6 +202,9 @@ function aps_github_start_batch() {
  * @return bool  true if staged or skipped as unchanged, false on API error
  */
 function aps_github_batch_put_file( &$batch, $path, $content ) {
+    if ( ( $batch['store'] ?? '' ) === 'local' ) {
+        return Qwoo_Site_Content::batch_put( $batch, $path, $content );
+    }
     $local_sha = sha1( "blob " . strlen( $content ) . "\0" . $content );
 
     if ( isset( $batch['existing'][ $path ] ) && $batch['existing'][ $path ] === $local_sha ) {
@@ -215,6 +253,9 @@ function aps_github_batch_delete_stale_prefix( &$batch, $prefix, $keep_path ) {
 function aps_github_finish_batch( $batch, $message ) {
     if ( empty( $batch['tree_updates'] ) ) {
         return 'no_changes';
+    }
+    if ( ( $batch['store'] ?? '' ) === 'local' ) {
+        return Qwoo_Site_Content::finish_batch( $batch, $message );
     }
 
     $api = $batch['api'];
@@ -473,6 +514,14 @@ function aps_generate_categories_json() {
  * Commit JSON to GitHub via REST API.
  */
 function aps_commit_to_github($content, $path = null, $message = 'Auto-sync from WordPress') {
+
+    // Published on the store itself: one file is a batch of one.
+    if ( $path !== null && class_exists( 'Qwoo_Site_Content' ) && Qwoo_Site_Content::enabled() ) {
+        $batch = Qwoo_Site_Content::start_batch();
+        if ( ! $batch ) return false;
+        if ( ! Qwoo_Site_Content::batch_put( $batch, $path, aps_normalize_json( $content ) ) ) return false;
+        return aps_github_finish_batch( $batch, $message );
+    }
 
     $gh = Qwoo_Platform_Connection::github_settings();
     if ( ! $gh ) {

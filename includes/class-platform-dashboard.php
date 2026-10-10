@@ -1557,6 +1557,8 @@ class Qwoo_Platform_Dashboard {
             'summary'  => wp_strip_all_tags( (string) ( $result['summary'] ?? '' ) ),
             'warnings' => array_map( 'wp_strip_all_tags', array_map( 'strval', (array) ( $result['warnings'] ?? [] ) ) ),
             'failed'   => array_map( 'strval', (array) ( $result['failed_labels'] ?? [] ) ),
+            // On the storefront right away (published on the store), or after a rebuild.
+            'live'     => ! empty( $result['live'] ),
             'versions' => Shop_Settings_Builder::platform_revisions(),
         ];
     }

@@ -132,8 +132,13 @@ trait SB_Github_Push {
         }
 
         $batch = aps_github_start_batch();
+        // Published on the store itself (live within seconds), or to the content repo (a rebuild).
+        $live  = is_array( $batch ) && ( $batch['store'] ?? '' ) === 'local';
 
         if ( ! $batch ) {
+            if ( class_exists( 'Qwoo_Site_Content' ) && Qwoo_Site_Content::enabled() ) {
+                return [ 'error' => Qwoo_Site_Content::$last_error ?: 'Publishing did not work. Try again in a minute.' ];
+            }
             return [ 'error' => 'Failed to push to GitHub: could not reach the repository. '
                     . 'Double-check the GitHub Owner/Repo/Token in Technical Settings.' ];
         }
@@ -165,8 +170,9 @@ trait SB_Github_Push {
         $result = aps_github_finish_batch( $batch, 'Update shop config from WP' );
 
         if ( $result === false ) {
-            return [ 'error' => 'Failed to push to GitHub — the commit could not be created. '
-                    . 'Check the PHP error log for details.' ];
+            return [ 'error' => $live
+                    ? 'Publishing did not work. Try again in a minute.'
+                    : 'Failed to push to GitHub — the commit could not be created. Check the PHP error log for details.' ];
         }
 
         $to_labels = function ( $paths ) use ( $path_to_label ) {
@@ -195,6 +201,7 @@ trait SB_Github_Push {
                     'updated_labels' => [],
                     'skipped_labels' => $skipped_labels,
                     'failed_labels'  => [],
+                    'live'           => $live,
             ];
         }
 
@@ -203,6 +210,7 @@ trait SB_Github_Push {
                 'updated_labels' => $updated_labels,
                 'skipped_labels' => $skipped_labels,
                 'failed_labels'  => [],
+                'live'           => $live,
         ];
     }
 

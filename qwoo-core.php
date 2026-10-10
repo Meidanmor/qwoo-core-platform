@@ -88,6 +88,7 @@ require_once QWOO_PATH . 'includes/admin-options.php';
 require_once QWOO_PATH . 'includes/class-technical-settings.php';
 require_once QWOO_PATH . 'includes/class-svg-sanitizer.php';
 require_once QWOO_PATH . 'includes/class-platform-connection.php';
+require_once QWOO_PATH . 'includes/class-site-content.php';
 require_once QWOO_PATH . 'includes/trait-platform-payments.php';
 require_once QWOO_PATH . 'includes/trait-platform-coupons.php';
 require_once QWOO_PATH . 'includes/trait-platform-media.php';

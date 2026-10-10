@@ -215,67 +215,19 @@ class Qwoo_Icon_Generator {
      * @param string $manifest_path Repo path for the generated manifest.json.
      */
     public static function sync_to_github( $files, $icon_folder = 'public/icons', $manifest_path = 'public/config/icons.json', $public_root = 'public' ) {
-        $gh = Qwoo_Platform_Connection::github_settings();
-        if ( ! $gh ) {
+        // One batch with the rest of the publishing code: GitHub, or the
+        // store's own published files (Qwoo_Site_Content).
+        $batch = aps_github_start_batch();
+        if ( ! $batch ) {
             return false;
         }
-        $owner  = $gh['owner'];
-        $repo   = $gh['repo'];
-        $token  = $gh['token'];
-        $branch = $gh['branch'];
 
         $icon_folder = trim( $icon_folder, '/' );
         $public_root = trim( $public_root, '/' );
 
-        $github_api = function ( $method, $endpoint, $body = null ) use ( $owner, $repo, $token ) {
-            $args = [
-                'method'  => $method,
-                'headers' => [
-                    'Authorization' => "token {$token}",
-                    'User-Agent'    => 'WordPress-GitHub-Client',
-                    'Content-Type'  => 'application/json',
-                    'Accept'        => 'application/vnd.github+json',
-                ],
-                'timeout' => 30,
-            ];
-            if ( $body !== null ) {
-                $args['body'] = json_encode( $body );
-            }
-
-            $url      = "https://api.github.com/repos/{$owner}/{$repo}{$endpoint}";
-            $response = wp_remote_request( $url, $args );
-
-            if ( is_wp_error( $response ) ) {
-                error_log( 'Qwoo Icon Sync error: ' . $response->get_error_message() );
-                return false;
-            }
-
-            $code = wp_remote_retrieve_response_code( $response );
-            $raw  = wp_remote_retrieve_body( $response );
-            $decoded = json_decode( $raw, true );
-
-            if ( $code < 200 || $code >= 300 ) {
-                error_log( "Qwoo Icon Sync failed [{$method} {$endpoint}]: {$code} — {$raw}" );
-                return false;
-            }
-
-            return $decoded;
-        };
-
-        $ref = $github_api( 'GET', "/git/ref/heads/{$branch}" );
-        if ( ! $ref ) return false;
-        $base_commit_sha = $ref['object']['sha'];
-
-        $commit = $github_api( 'GET', "/git/commits/{$base_commit_sha}" );
-        if ( ! $commit ) return false;
-        $base_tree_sha = $commit['tree']['sha'];
-
-        $tree = $github_api( 'GET', "/git/trees/{$base_tree_sha}?recursive=1" );
-        if ( ! $tree || empty( $tree['tree'] ) ) return false;
-
-        // Build the exact set of repo paths our current file list will occupy,
-        // so we only treat old icon-folder files as "stale" and never touch
-        // unrelated root-level files that happen to live in public/.
+        // The paths our current file list will occupy: only old icon-folder
+        // files (and our own root files, like favicon.ico) are "stale";
+        // unrelated root-level files in public/ are never touched.
         $expected_paths = [];
         foreach ( $files as $file ) {
             $expected_paths[] = ( $file['location'] ?? 'icons' ) === 'root'
@@ -283,55 +235,29 @@ class Qwoo_Icon_Generator {
                 : "{$icon_folder}/{$file['filename']}";
         }
 
-        $stale_files           = [];
-        $existing_by_path      = [];
-        $existing_manifest_sha = null;
-
-        foreach ( $tree['tree'] as $entry ) {
-            if ( $entry['type'] !== 'blob' ) continue;
-
-            if ( $entry['path'] === $manifest_path ) {
-                $existing_manifest_sha = $entry['sha'];
-                continue;
+        $stale_files = [];
+        foreach ( array_keys( $batch['existing'] ) as $path ) {
+            if ( $path === $manifest_path ) continue;
+            $in_icon_folder       = strpos( $path, $icon_folder . '/' ) === 0;
+            $is_managed_root_file = ( in_array( $path, $expected_paths, true ) || $path === "{$public_root}/favicon.ico" )
+                && strpos( $path, $public_root . '/' ) === 0
+                && ! $in_icon_folder;
+            if ( $in_icon_folder || $is_managed_root_file ) {
+                $stale_files[ $path ] = true;
             }
-
-            // Only consider a path "managed" (and therefore prunable) if it's
-            // either inside the icon folder, or it's one of our known root-level
-            // filenames directly under $public_root (e.g. favicon.ico).
-            $in_icon_folder = strpos( $entry['path'], $icon_folder . '/' ) === 0;
-            $is_managed_root_file = ( in_array( $entry['path'], $expected_paths, true ) || $entry['path'] === "{$public_root}/favicon.ico" )
-                && strpos( $entry['path'], $public_root . '/' ) === 0
-                && strpos( $entry['path'], $icon_folder . '/' ) !== 0;
-
-            if ( ! $in_icon_folder && ! $is_managed_root_file ) continue;
-
-            $existing_by_path[ $entry['path'] ] = $entry['sha'];
-            $stale_files[] = $entry['path'];
         }
 
-        $tree_updates   = [];
         $manifest_icons = [];
-
         foreach ( $files as $file ) {
             $location = $file['location'] ?? 'icons';
             $path     = $location === 'root'
                 ? "{$public_root}/{$file['filename']}"
                 : "{$icon_folder}/{$file['filename']}";
 
-            $local_sha = sha1( "blob " . strlen( $file['data'] ) . "\0" . $file['data'] );
-
-            if ( isset( $existing_by_path[ $path ] ) && $existing_by_path[ $path ] === $local_sha ) {
-                $stale_files = array_diff( $stale_files, [ $path ] );
-            } else {
-                $blob = $github_api( 'POST', '/git/blobs', [
-                    'content'  => base64_encode( $file['data'] ),
-                    'encoding' => 'base64',
-                ] );
-                if ( ! $blob ) return false;
-
-                $tree_updates[] = [ 'path' => $path, 'mode' => '100644', 'type' => 'blob', 'sha' => $blob['sha'] ];
-                $stale_files = array_diff( $stale_files, [ $path ] );
+            if ( ! aps_github_batch_put_file( $batch, $path, $file['data'] ) ) {
+                return false;
             }
+            unset( $stale_files[ $path ] );
 
             // favicon.ico isn't part of the web manifest icon list (it's a
             // legacy/root asset), so skip it there.
@@ -345,45 +271,16 @@ class Qwoo_Icon_Generator {
             ];
         }
 
-        foreach ( array_values( $stale_files ) as $old_path ) {
-            $tree_updates[] = [ 'path' => $old_path, 'mode' => '100644', 'type' => 'blob', 'sha' => null ];
+        foreach ( array_keys( $stale_files ) as $old_path ) {
+            $batch['tree_updates'][] = [ 'path' => $old_path, 'mode' => '100644', 'type' => 'blob', 'sha' => null ];
+            $batch['deleted'][]      = $old_path;
         }
 
         $manifest_json = json_encode( [ 'icons' => $manifest_icons ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
-        $local_manifest_sha = sha1( "blob " . strlen( $manifest_json ) . "\0" . $manifest_json );
-
-        if ( $existing_manifest_sha !== $local_manifest_sha ) {
-            $blob = $github_api( 'POST', '/git/blobs', [
-                'content'  => base64_encode( $manifest_json ),
-                'encoding' => 'base64',
-            ] );
-            if ( ! $blob ) return false;
-
-            $tree_updates[] = [ 'path' => $manifest_path, 'mode' => '100644', 'type' => 'blob', 'sha' => $blob['sha'] ];
+        if ( ! aps_github_batch_put_file( $batch, $manifest_path, $manifest_json ) ) {
+            return false;
         }
 
-        if ( empty( $tree_updates ) ) {
-            return 'no_changes';
-        }
-
-        $new_tree = $github_api( 'POST', '/git/trees', [
-            'base_tree' => $base_tree_sha,
-            'tree'      => $tree_updates,
-        ] );
-        if ( ! $new_tree ) return false;
-
-        $new_commit = $github_api( 'POST', '/git/commits', [
-            'message' => 'Update PWA icon set',
-            'tree'    => $new_tree['sha'],
-            'parents' => [ $base_commit_sha ],
-        ] );
-        if ( ! $new_commit ) return false;
-
-        $updated_ref = $github_api( 'PATCH', "/git/refs/heads/{$branch}", [
-            'sha'   => $new_commit['sha'],
-            'force' => false,
-        ] );
-        if ( ! $updated_ref ) return false;
-        return true;
+        return aps_github_finish_batch( $batch, 'Update PWA icon set' );
     }
 }
