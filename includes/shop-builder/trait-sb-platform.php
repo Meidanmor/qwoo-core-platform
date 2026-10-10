@@ -252,14 +252,18 @@ trait SB_Platform {
         return $out;
     }
 
-    /** Media Library images or videos, newest first, 30 a page. */
+    /**
+     * Media Library images or videos, newest first, 30 a page. Images also
+     * carry their alt text and the sizes the dashboard's editors show:
+     * product (product photos, categories) and large (blog posts).
+     */
     public static function platform_media( $kind, $page, $search ) {
         $query = new WP_Query( [
             'post_type'      => 'attachment',
             'post_status'    => 'inherit',
             'post_mime_type' => $kind === 'video' ? 'video' : 'image',
             'posts_per_page' => 30,
-            'paged'          => max( 1, (int) $page ),
+            'paged'          => max( 1, min( 1000, (int) $page ) ),
             's'              => mb_substr( sanitize_text_field( (string) $search ), 0, 100 ),
             'orderby'        => 'date',
             'order'          => 'DESC',
@@ -268,11 +272,41 @@ trait SB_Platform {
         $items = [];
         foreach ( $query->posts as $id ) {
             $payload = self::admin_media_payload( $id );
-            if ( $payload ) {
-                $items[] = [ 'id' => (int) $id, 'name' => get_the_title( $id ) ] + $payload;
+            if ( ! $payload ) continue;
+            $item = [ 'id' => (int) $id, 'name' => get_the_title( $id ) ] + $payload;
+            if ( $kind !== 'video' ) {
+                $item['alt']     = (string) get_post_meta( $id, '_wp_attachment_image_alt', true );
+                $item['large']   = wp_get_attachment_image_url( $id, 'large' ) ?: $payload['url'];
+                $item['product'] = wp_get_attachment_image_url( $id, 'woocommerce_thumbnail' ) ?: $payload['thumb'];
             }
+            $items[] = $item;
         }
         return [ 'items' => $items, 'pages' => (int) $query->max_num_pages ];
+    }
+
+    /**
+     * Attachment IDs the Store builder uses ({ id: true }): sections of every
+     * page, layout and language copy, plus the logo, app icon, hero and
+     * page share images. Versions don't count.
+     */
+    public static function platform_media_used_ids() {
+        $refs = [ 'media' => [], 'products' => [], 'categories' => [], 'tags' => [] ];
+        self::collect_media_anywhere( get_option( 'shop_builder_options', [] ), $refs );
+        return $refs['media'];
+    }
+
+    private static function collect_media_anywhere( $value, array &$refs ) {
+        if ( ! is_array( $value ) ) return;
+        static $id_keys = [ 'logo_id', 'app_icon_id', 'hero_image_id', 'image_id', 'bg_image_id', 'custom_icon_id' ];
+        foreach ( $value as $key => $item ) {
+            if ( $key === 'sections' && is_array( $item ) ) {
+                self::collect_sections_refs( array_values( $item ), $refs );
+            } elseif ( is_string( $key ) && in_array( $key, $id_keys, true ) && is_numeric( $item ) ) {
+                if ( (int) $item > 0 ) $refs['media'][ (int) $item ] = true;
+            } else {
+                self::collect_media_anywhere( $item, $refs );
+            }
+        }
     }
 
     /** Display data for one uploaded attachment (url, thumb, width, height). */

@@ -35,6 +35,7 @@ class Qwoo_Platform_Dashboard {
 
     use Qwoo_Platform_Payments;
     use Qwoo_Platform_Coupons;
+    use Qwoo_Platform_Media;
     use Qwoo_Platform_Product_Tools;
     use Qwoo_Platform_Customers;
     use Qwoo_Platform_Reviews;
@@ -110,6 +111,9 @@ class Qwoo_Platform_Dashboard {
         'design_search'   => 'action_design_search',
         'design_page_template' => 'action_design_page_template',
         'design_media'    => 'action_design_media',
+        'media_get'       => 'action_media_get',
+        'media_save'      => 'action_media_save',
+        'media_delete'    => 'action_media_delete',
         'design_versions' => 'action_design_versions',
         'design_version'  => 'action_design_version',
         'template_save'   => 'action_template_save',
