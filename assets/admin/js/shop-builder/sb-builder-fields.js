@@ -217,8 +217,10 @@
                 if ((spec.type === 'image' || spec.type === 'video') && spec.responsive) {
                     // One image per screen size: inherit the IDs, then make each one public.
                     const ids = F.resolveResponsive(value, spec.type);
-                    out[key] = { desktop: null, tablet: null, mobile: null };
-                    DEVICES.forEach(function (d) { out[key][d] = ids[d] ? F.imagePayload(ids[d]) : null; });
+                    const m = {};
+                    DEVICES.forEach(function (d) { m[d] = ids[d] ? F.imagePayload(ids[d]) : null; });
+                    // The desktop image ({ url, width, height }) plus tablet and mobile (mirror of PHP output_fields()).
+                    out[key] = (m.desktop || m.tablet || m.mobile) ? Object.assign({}, m.desktop || { url: '' }, { tablet: m.tablet, mobile: m.mobile }) : null;
                     return;
                 }
                 if (spec.type === 'image' || spec.type === 'video') value = value ? F.imagePayload(value) : null;

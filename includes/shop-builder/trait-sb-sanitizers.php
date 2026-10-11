@@ -487,7 +487,12 @@ trait SB_Sanitizers {
             if ( ( $type === 'image' || $type === 'video' ) && ! empty( $spec['responsive'] ) ) {
                 // One image per screen size: inherit the IDs first, then make each one public.
                 $ids = self::resolve_responsive( self::is_device_map( $value ) ? array_map( 'intval', $value ) : (int) $value, $type );
-                $out[ $key ] = array_map( static function ( $id ) use ( $image_cb ) { return $id ? $image_cb( (int) $id ) : null; }, $ids );
+                $media = array_map( static function ( $id ) use ( $image_cb ) { return $id ? $image_cb( (int) $id ) : null; }, $ids );
+                // Published as the desktop image ({ url, width, height }, what storefronts
+                // before per-screen images read) plus `tablet` and `mobile`.
+                $out[ $key ] = ( $media['desktop'] || $media['tablet'] || $media['mobile'] )
+                    ? array_merge( $media['desktop'] ?: [ 'url' => '' ], [ 'tablet' => $media['tablet'], 'mobile' => $media['mobile'] ] )
+                    : null;
                 continue;
             }
 

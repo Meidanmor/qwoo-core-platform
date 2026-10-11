@@ -250,6 +250,9 @@ trait SB_Template_Import {
             if ( ! is_array( $value ) ) return;
             if ( self::is_media_payload( $value ) ) {
                 $add( self::image_source( $value['url'], '' ) );
+                // A per-screen image also carries its tablet and mobile images.
+                $walk( $value['tablet'] ?? null );
+                $walk( $value['mobile'] ?? null );
                 return;
             }
             foreach ( $value as $child ) $walk( $child );
@@ -451,6 +454,12 @@ trait SB_Template_Import {
                     $items[] = self::reverse_fields( $spec['fields'] ?? [], $item, $map );
                 }
                 $out[ $key ] = $items;
+            } elseif ( ( $type === 'image' || $type === 'video' ) && is_array( $value ) && ( array_key_exists( 'tablet', $value ) || array_key_exists( 'mobile', $value ) ) && array_key_exists( 'url', $value ) ) {
+                // One image per screen size: { url, width, height (desktop), tablet, mobile }.
+                $desktop     = self::payload_to_id( $value, $map );
+                $tablet      = self::payload_to_id( $value['tablet'] ?? null, $map );
+                $mobile      = self::payload_to_id( $value['mobile'] ?? null, $map );
+                $out[ $key ] = [ 'desktop' => $desktop, 'tablet' => $tablet === $desktop ? '' : $tablet, 'mobile' => $mobile === ( $tablet ?: $desktop ) ? '' : $mobile ];
             } elseif ( $type === 'image' || $type === 'video' ) {
                 $out[ $key ] = self::is_device_map( $value ) && ! self::is_media_payload( $value )
                     ? array_map( static function ( $v ) use ( $map ) { return self::payload_to_id( $v, $map ); }, $value )
