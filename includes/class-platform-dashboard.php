@@ -1515,6 +1515,7 @@ class Qwoo_Platform_Dashboard {
     private static function action_design_get( array $params = [] ) {
         // Stores from before the homepage was a page: their Homepage tab becomes the Home page.
         Shop_Settings_Builder::ensure_store_pages();
+        Shop_Settings_Builder::upgrade_default_alignment();
         return Shop_Settings_Builder::platform_design_data( self::design_lang( $params ) );
     }
 
@@ -1543,11 +1544,13 @@ class Qwoo_Platform_Dashboard {
         }
         $menus   = is_array( $params['menus'] ?? null ) ? self::to_arrays( $params['menus'] ) : null;
         $layouts = is_array( $params['layouts'] ?? null ) ? self::to_arrays( $params['layouts'] ) : null;
+        // { key: language }: pages that always show another language's sections.
+        $sync    = is_array( $params['sync'] ?? null ) ? self::to_arrays( $params['sync'] ) : null;
         $lang    = self::design_lang( $params );
         if ( $lang !== '' ) {
-            return Shop_Settings_Builder::platform_save_language( $lang, self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts );
+            return Shop_Settings_Builder::platform_save_language( $lang, self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts, $sync );
         }
-        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts );
+        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts, $sync );
     }
 
     private static function action_design_publish() {

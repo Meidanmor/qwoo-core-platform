@@ -115,6 +115,8 @@ trait SB_Github_Push {
      * @return array [ 'summary', 'updated_labels', 'skipped_labels', 'failed_labels' ] or [ 'error' => message ].
      */
     public function push_all_pages() {
+        // Saved "Left" alignments become "Default" before the first publish after the update.
+        self::upgrade_default_alignment();
         $options       = get_option( 'shop_builder_options', [] );
         $allowed_pages = self::publishable_pages();
 
@@ -154,7 +156,9 @@ trait SB_Github_Push {
         // Every public/sections/ file referenced by any page in this push.
         $kept_section_images = [];
 
-        $this->stage_configs( $batch, $options, 'public/config/', $path_to_label, $kept_section_images );
+        // Pages of the main language that follow another language show its sections.
+        $main_options = self::with_section_sync( $options, $options, class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::get() : 'en' );
+        $this->stage_configs( $batch, $main_options, 'public/config/', $path_to_label, $kept_section_images );
         // Extra languages (premium addon): their own folders.
         $this->stage_languages( $batch, $options, $path_to_label, $kept_section_images );
 

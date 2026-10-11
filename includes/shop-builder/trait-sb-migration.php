@@ -54,6 +54,68 @@ trait SB_Migration {
     }
 
     /* -----------------------------------------------------------------
+       Default alignment (2026-10): alignment fields that used to start at
+       "Left" now start at "Default" (the start of the line in the page's
+       language). Saved "Left" values were almost always just that old
+       default, so they become "Default": Hebrew pages then line up on the
+       right by themselves. Runs once (flag in the options); covers every
+       page, layout and language copy, versions and section templates.
+       $force: run again on the options only (after a template import).
+       ----------------------------------------------------------------- */
+
+    public static function upgrade_default_alignment( $force = false ) {
+        $options = get_option( 'shop_builder_options', [] );
+        if ( ! is_array( $options ) || ( ! $force && ! empty( $options['_align_default'] ) ) ) {
+            return;
+        }
+        $fields  = self::default_align_fields();
+        $options = self::align_walk( $options, $fields );
+        $options['_align_default'] = 1;
+        update_option( 'shop_builder_options', $options );
+
+        if ( $force ) return;
+        foreach ( [ self::REVISIONS_OPTION, self::TEMPLATES_OPTION ] as $name ) {
+            $stored = get_option( $name, null );
+            if ( is_array( $stored ) && $stored ) {
+                update_option( $name, self::align_walk( $stored, $fields ), false );
+            }
+        }
+    }
+
+    /** { block type: [ field, … ] } whose alignment now starts at "Default". */
+    private static function default_align_fields() {
+        $out = [];
+        foreach ( self::BLOCK_SCHEMA as $type => $schema ) {
+            foreach ( (array) ( $schema['fields'] ?? [] ) as $key => $spec ) {
+                if ( ( $spec['type'] ?? '' ) === 'select' && isset( $spec['options']['default'] ) && ( $spec['default'] ?? '' ) === 'default' ) {
+                    $out[ $type ][] = $key;
+                }
+            }
+        }
+        return $out;
+    }
+
+    private static function align_walk( array $node, array $fields ) {
+        $type = $node['type'] ?? null;
+        if ( is_string( $type ) && isset( $fields[ $type ] ) && is_array( $node['data'] ?? null ) ) {
+            foreach ( $fields[ $type ] as $key ) {
+                $v = $node['data'][ $key ] ?? null;
+                if ( $v === 'left' ) {
+                    $node['data'][ $key ] = 'default';
+                } elseif ( is_array( $v ) && ( $v['desktop'] ?? null ) === 'left' ) {
+                    $node['data'][ $key ]['desktop'] = 'default';
+                }
+            }
+        }
+        foreach ( $node as $k => $child ) {
+            if ( is_array( $child ) ) {
+                $node[ $k ] = self::align_walk( $child, $fields );
+            }
+        }
+        return $node;
+    }
+
+    /* -----------------------------------------------------------------
        v2 -> v3: nested style objects become flat, responsive fields.
        ----------------------------------------------------------------- */
 

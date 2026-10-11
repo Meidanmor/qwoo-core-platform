@@ -78,7 +78,7 @@ trait SB_Languages {
      * Saves the dashboard's draft for an extra language: sanitized exactly
      * like the main language's, kept in i18n[ lang ].
      */
-    public static function platform_save_language( $lang, array $options, array $pages, ?array $custom_pages, ?array $menus, ?array $layouts ) {
+    public static function platform_save_language( $lang, array $options, array $pages, ?array $custom_pages, ?array $menus, ?array $layouts, ?array $sync = null ) {
         $input = array_intersect_key( $options, array_flip( array_intersect( self::$platform_option_groups, self::$translatable_keys ) ) );
         foreach ( self::sectionable_pages() as $page_slug ) {
             if ( isset( $pages[ $page_slug ] ) && is_array( $pages[ $page_slug ] ) && in_array( $page_slug, self::$translatable_keys, true ) ) {
@@ -142,7 +142,119 @@ trait SB_Languages {
         }
         $all['i18n'][ $lang ] = $tr;
         update_option( 'shop_builder_options', $all );
+        if ( $sync !== null ) {
+            self::save_section_sync( $lang, $sync );
+        }
         return self::platform_design_data( $lang );
+    }
+
+    /* ---------------- pages that follow another language ----------------
+     * shop_builder_options['section_sync'][ lang code ][ key ] = source code:
+     * that page's sections, in that language, are always the source
+     * language's (its own copy is kept, for when the owner stops following).
+     * key: a page with sections ("shop", "blog_post"…), an owner's page id
+     * ("pg_…") or a layout ("product@lay_…"). Any language can follow any
+     * other, the main one included; a loop falls back to the own copy.
+     */
+
+    /** Every language of the store: the main one first. */
+    private static function store_languages() {
+        if ( ! class_exists( 'Qwoo_Store_Language' ) ) return [ 'en' ];
+        return array_values( array_unique( array_merge( [ Qwoo_Store_Language::get() ], Qwoo_Store_Language::extra() ) ) );
+    }
+
+    /** Which pages of a language follow another language ({ key: source }). */
+    public static function section_sync_of( array $all, $code ) {
+        $map = $all['section_sync'][ $code ] ?? [];
+        return is_array( $map ) ? $map : [];
+    }
+
+    /** Keeps known pages and other store languages only. */
+    private static function clean_section_sync( $map, $code, array $all ) {
+        $langs = self::store_languages();
+        $out   = [];
+        foreach ( is_array( $map ) ? $map : [] as $key => $source ) {
+            $key    = (string) $key;
+            $source = sanitize_key( (string) $source );
+            if ( $source === $code || ! in_array( $source, $langs, true ) ) continue;
+            if ( ! preg_match( '/^(pg_[A-Za-z0-9]{4,30}|[a-z_]{2,30}(@lay_[A-Za-z0-9]{4,30})?)$/', $key ) ) continue;
+            if ( strpos( $key, 'pg_' ) !== 0 ) {
+                $page = explode( '@', $key )[0];
+                if ( ! in_array( $page, self::sectionable_pages(), true ) || ( strpos( $key, '@' ) !== false && ! isset( self::LAYOUT_PAGES[ $page ] ) ) ) continue;
+            }
+            $out[ $key ] = $source;
+        }
+        return $out;
+    }
+
+    /** Saves which pages of a language follow another one. */
+    private static function save_section_sync( $code, $map ) {
+        $all = (array) get_option( 'shop_builder_options', [] );
+        $clean = self::clean_section_sync( $map, $code, $all );
+        if ( $clean ) {
+            $all['section_sync'][ $code ] = $clean;
+        } else {
+            unset( $all['section_sync'][ $code ] );
+        }
+        update_option( 'shop_builder_options', $all );
+    }
+
+    /** A page's sections in one language's options (null when the page isn't there). */
+    private static function sections_at( array $options, $key ) {
+        if ( strpos( $key, 'pg_' ) === 0 ) {
+            foreach ( (array) ( $options['custom_pages'] ?? [] ) as $page ) {
+                if ( ( $page['id'] ?? '' ) === $key ) return array_values( (array) ( $page['sections'] ?? [] ) );
+            }
+            return null;
+        }
+        if ( strpos( $key, '@' ) !== false ) {
+            [ $page, $id ] = explode( '@', $key, 2 );
+            foreach ( (array) ( $options[ $page ]['layouts'] ?? [] ) as $layout ) {
+                if ( ( $layout['id'] ?? '' ) === $id ) return array_values( (array) ( $layout['sections'] ?? [] ) );
+            }
+            return null;
+        }
+        return isset( $options[ $key ] ) ? array_values( (array) ( $options[ $key ]['sections'] ?? [] ) ) : null;
+    }
+
+    private static function set_sections_at( array $options, $key, array $sections ) {
+        if ( strpos( $key, 'pg_' ) === 0 ) {
+            foreach ( (array) ( $options['custom_pages'] ?? [] ) as $i => $page ) {
+                if ( ( $page['id'] ?? '' ) === $key ) $options['custom_pages'][ $i ]['sections'] = $sections;
+            }
+        } elseif ( strpos( $key, '@' ) !== false ) {
+            [ $page, $id ] = explode( '@', $key, 2 );
+            foreach ( (array) ( $options[ $page ]['layouts'] ?? [] ) as $i => $layout ) {
+                if ( ( $layout['id'] ?? '' ) === $id ) $options[ $page ]['layouts'][ $i ]['sections'] = $sections;
+            }
+        } else {
+            $options[ $key ]             = is_array( $options[ $key ] ?? null ) ? $options[ $key ] : [];
+            $options[ $key ]['sections'] = $sections;
+        }
+        return $options;
+    }
+
+    /** The sections a language shows for a page, following other languages ($seen stops loops). */
+    private static function effective_sections( array $all, $code, $key, array $seen = [] ) {
+        $seen[ $code ] = true;
+        $source        = self::section_sync_of( $all, $code )[ $key ] ?? '';
+        if ( $source !== '' && empty( $seen[ $source ] ) && in_array( $source, self::store_languages(), true ) ) {
+            $sections = self::effective_sections( $all, $source, $key, $seen );
+            if ( $sections !== null ) return $sections;
+        }
+        $main = class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::get() : 'en';
+        return self::sections_at( self::options_for_language( $all, $code === $main ? '' : $code ), $key );
+    }
+
+    /** One language's options with the sections of every page that follows another language swapped in. */
+    public static function with_section_sync( array $options, array $all, $code ) {
+        foreach ( array_keys( self::section_sync_of( $all, $code ) ) as $key ) {
+            $sections = self::effective_sections( $all, $code, (string) $key );
+            if ( $sections !== null ) {
+                $options = self::set_sections_at( $options, (string) $key, $sections );
+            }
+        }
+        return $options;
     }
 
     /**
@@ -153,7 +265,7 @@ trait SB_Languages {
     private function stage_languages( &$batch, array $options, array &$path_to_label, array &$kept_section_images ) {
         $live = class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::live_extra() : [];
         foreach ( $live as $lang ) {
-            $lang_options = self::options_for_language( $options, $lang );
+            $lang_options = self::with_section_sync( self::options_for_language( $options, $lang ), $options, $lang );
             // Built-in texts (menu labels…) in that language.
             Qwoo_I18n::in_language( $lang, function () use ( &$batch, $lang_options, $lang, &$path_to_label, &$kept_section_images ) {
                 $this->stage_configs( $batch, $lang_options, "public/config/{$lang}/", $path_to_label, $kept_section_images, self::$translatable_keys, strtoupper( $lang ) . ': ' );

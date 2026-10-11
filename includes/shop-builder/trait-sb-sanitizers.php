@@ -450,7 +450,8 @@ trait SB_Sanitizers {
                     if ( ( $v[ $side ] ?? '' ) === '' && $prev !== null ) $v[ $side ] = $prev[ $side ] ?? '';
                     $v[ $side ] = $v[ $side ] ?? '';
                 }
-            } elseif ( $v === '' && $prev !== null ) {
+            } elseif ( ( $v === '' || ( $v === 0 && ( $type === 'image' || $type === 'video' ) ) ) && $prev !== null ) {
+                // An image left empty (0) on a smaller screen uses the bigger screen's.
                 $v = $prev;
             }
             $out[ $device ] = $v;
@@ -480,6 +481,13 @@ trait SB_Sanitizers {
                     $items[] = self::output_fields( $spec['fields'] ?? [], $item, $image_cb );
                 }
                 $out[ $key ] = $items;
+                continue;
+            }
+
+            if ( ( $type === 'image' || $type === 'video' ) && ! empty( $spec['responsive'] ) ) {
+                // One image per screen size: inherit the IDs first, then make each one public.
+                $ids = self::resolve_responsive( self::is_device_map( $value ) ? array_map( 'intval', $value ) : (int) $value, $type );
+                $out[ $key ] = array_map( static function ( $id ) use ( $image_cb ) { return $id ? $image_cb( (int) $id ) : null; }, $ids );
                 continue;
             }
 

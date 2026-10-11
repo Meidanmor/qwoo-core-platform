@@ -113,12 +113,12 @@ trait SB_Store_Pages {
                 'text_color'         => '#ffffff',
             ];
         }
-        $blocks = [ self::store_page_block( 'heading', [ 'title' => $h['title'], 'tag' => 'h1', 'alignment' => 'left' ] ) ];
+        $blocks = [ self::store_page_block( 'heading', [ 'title' => $h['title'], 'tag' => 'h1', 'alignment' => 'default' ] ) ];
         if ( trim( (string) $h['text'] ) !== '' ) {
-            $blocks[] = self::store_page_block( 'text_block', [ 'text' => '<p>' . esc_html( $h['text'] ) . '</p>', 'alignment' => 'left' ] );
+            $blocks[] = self::store_page_block( 'text_block', [ 'text' => '<p>' . esc_html( $h['text'] ) . '</p>', 'alignment' => 'default' ] );
         }
         // "secondary": the old homepage's button colour (templates keep "primary" light, for backgrounds).
-        $blocks[] = self::store_page_block( 'button', [ 'text' => $h['btn_text'], 'url' => $h['btn_url'], 'style' => 'secondary', 'size' => 'lg', 'alignment' => 'left' ] );
+        $blocks[] = self::store_page_block( 'button', [ 'text' => $h['btn_text'], 'url' => $h['btn_url'], 'style' => 'secondary', 'size' => 'lg', 'alignment' => 'default' ] );
         return [ 'id' => self::new_id( 'sec' ), 'label' => Qwoo_I18n::t( 'Opening' ), 'enabled' => true, 'style' => $style, 'blocks' => $blocks ];
     }
 

@@ -134,7 +134,7 @@
                     SIDES.forEach(function (side) {
                         if ((v[side] === '' || v[side] === undefined) && prev) v[side] = prev[side];
                     });
-                } else if ((v === '' || v === undefined || v === null) && prev !== null) {
+                } else if ((v === '' || v === undefined || v === null || ((type === 'image' || type === 'video') && !v)) && prev !== null) {
                     v = prev;
                 }
                 out[device] = v;
@@ -212,6 +212,13 @@
                     out[key] = (Array.isArray(value) ? value : []).map(function (item) {
                         return F.output(spec.fields || {}, item);
                     });
+                    return;
+                }
+                if ((spec.type === 'image' || spec.type === 'video') && spec.responsive) {
+                    // One image per screen size: inherit the IDs, then make each one public.
+                    const ids = F.resolveResponsive(value, spec.type);
+                    out[key] = { desktop: null, tablet: null, mobile: null };
+                    DEVICES.forEach(function (d) { out[key][d] = ids[d] ? F.imagePayload(ids[d]) : null; });
                     return;
                 }
                 if (spec.type === 'image' || spec.type === 'video') value = value ? F.imagePayload(value) : null;

@@ -84,7 +84,11 @@ abstract class Shop_Builder_Constants {
        Shared option lists
        ------------------------------------------------------------------ */
 
-    const ALIGN_OPTIONS = [ 'left' => 'Left', 'center' => 'Center', 'right' => 'Right' ];
+    /**
+     * 'default' follows the page's language: the start of the line (left in
+     * English, right in Hebrew). Left and right are always that side.
+     */
+    const ALIGN_OPTIONS = [ 'default' => 'Default', 'left' => 'Left', 'center' => 'Center', 'right' => 'Right' ];
 
     const FLEX_DIRECTION_OPTIONS = [
             'column'         => 'Vertical (stacked)',
@@ -160,7 +164,8 @@ abstract class Shop_Builder_Constants {
             'bg_gradient_color2' => [ 'type' => 'color', 'label' => 'Gradient End', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'gradient' ] ],
             'bg_gradient_angle' => [ 'type' => 'number', 'label' => 'Gradient Angle (°)', 'tab' => 'style', 'group' => 'Background', 'min' => 0, 'max' => 360, 'default' => 180,
                     'show_if' => [ 'bg_type' => 'gradient' ] ],
-            'bg_image' => [ 'type' => 'image', 'label' => 'Background Image', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'image' ] ],
+            'bg_image' => [ 'type' => 'image', 'label' => 'Background Image', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'show_if' => [ 'bg_type' => 'image' ],
+                    'help' => 'Pick another image for tablets or phones, or leave it empty to use the bigger screen\'s image.' ],
             'bg_video_source' => [ 'type' => 'select', 'label' => 'Video Source', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'video' ],
                     'options' => [ 'upload' => 'Upload (media library)', 'youtube' => 'YouTube', 'vimeo' => 'Vimeo' ], 'default' => 'upload' ],
             'bg_video' => [ 'type' => 'video', 'label' => 'Background Video', 'tab' => 'style', 'group' => 'Background',
@@ -388,7 +393,7 @@ abstract class Shop_Builder_Constants {
                             'tag'      => [ 'type' => 'select', 'label' => 'HTML Tag / Size', 'tab' => 'content', 'default' => 'h2',
                                     'options' => [ 'h1' => 'H1 — page title (use once per page)', 'h2' => 'H2 — large', 'h3' => 'H3 — medium', 'h4' => 'H4 — small', 'h5' => 'H5', 'h6' => 'H6' ] ],
                             'alignment' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
-                                    'options' => self::ALIGN_OPTIONS, 'default' => 'left' ],
+                                    'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
                             'title_color'    => [ 'type' => 'color', 'label' => 'Title Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'subtitle_color' => [ 'type' => 'color', 'label' => 'Subtitle Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'font_size'      => [ 'type' => 'length', 'label' => 'Title Size', 'tab' => 'style', 'group' => 'Typography', 'responsive' => true, 'placeholder' => 'e.g. 48px or 3rem' ],
@@ -405,7 +410,7 @@ abstract class Shop_Builder_Constants {
                     'fields' => [
                             'text'       => [ 'type' => 'html', 'label' => 'Text', 'tab' => 'content' ],
                             'alignment'  => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
-                                    'options' => self::ALIGN_OPTIONS, 'default' => 'left' ],
+                                    'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
                             'text_color' => [ 'type' => 'color', 'label' => 'Text Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'font_size'  => [ 'type' => 'length', 'label' => 'Font Size', 'tab' => 'style', 'group' => 'Typography', 'responsive' => true, 'placeholder' => 'e.g. 18px' ],
                             'line_height' => [ 'type' => 'length', 'label' => 'Line Height', 'tab' => 'style', 'group' => 'Typography', 'responsive' => true, 'placeholder' => 'e.g. 1.6', 'unitless' => true ],
@@ -460,7 +465,7 @@ abstract class Shop_Builder_Constants {
                             'url'       => [ 'type' => 'url', 'label' => 'Link', 'tab' => 'content', 'placeholder' => '/products, #section-id or https://...' ],
                             'new_tab'   => [ 'type' => 'toggle', 'label' => 'Open in a new tab', 'tab' => 'content' ],
                             'alignment' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
-                                    'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'left' ],
+                                    'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'default' ],
                             'style'     => [ 'type' => 'select', 'label' => 'Style', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'primary',
                                     'options' => [ 'primary' => 'Primary (filled)', 'secondary' => 'Secondary (filled)', 'outline' => 'Outline', 'flat' => 'Text only', 'link' => 'Underlined link' ] ],
                             'size'      => [ 'type' => 'select', 'label' => 'Size', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'md',
@@ -517,7 +522,7 @@ abstract class Shop_Builder_Constants {
                             'button_style' => [ 'type' => 'select', 'label' => 'Button Style', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'primary',
                                     'options' => [ 'primary' => 'Primary (filled)', 'secondary' => 'Secondary (filled)', 'outline' => 'Outline' ] ],
                             'button_align' => [ 'type' => 'select', 'label' => 'Button Alignment', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true,
-                                    'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'left' ],
+                                    'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'default' ],
                             'max_width'    => [ 'type' => 'length', 'label' => 'Form Max Width', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true, 'placeholder' => 'e.g. 560px' ],
                             'accent_color'      => [ 'type' => 'color', 'label' => 'Accent Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary',
                                     'help' => 'Focused input borders, checked boxes/radios and the default button fill.' ],
@@ -548,7 +553,7 @@ abstract class Shop_Builder_Constants {
                     'fields' => [
                             'tag'   => [ 'type' => 'select', 'label' => 'Heading Level', 'tab' => 'content', 'default' => 'h1',
                                     'options' => [ 'h1' => 'H1 (recommended)', 'h2' => 'H2' ] ],
-                            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'left', 'options' => self::ALIGN_OPTIONS ],
+                            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
                     ],
             ],
             'post_meta' => [
@@ -559,7 +564,7 @@ abstract class Shop_Builder_Constants {
                     'fields' => [
                             'show_date'       => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
                             'show_categories' => [ 'type' => 'toggle', 'label' => 'Show the categories', 'tab' => 'content', 'default' => true ],
-                            'align'           => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'left', 'options' => self::ALIGN_OPTIONS ],
+                            'align'           => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
                     ],
             ],
             'post_featured_image' => [
@@ -608,7 +613,7 @@ abstract class Shop_Builder_Constants {
                             'title'            => [ 'type' => 'text', 'label' => 'Title on /blog', 'tab' => 'content', 'default' => 'Blog',
                                     'help' => 'A category page shows the category\'s name.' ],
                             'show_description' => [ 'type' => 'toggle', 'label' => 'Show the category\'s description', 'tab' => 'content', 'default' => true ],
-                            'align'            => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'left', 'options' => self::ALIGN_OPTIONS ],
+                            'align'            => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
                     ],
             ],
             'blog_categories' => [
@@ -745,7 +750,7 @@ abstract class Shop_Builder_Constants {
                             'layout'    => [ 'type' => 'select', 'label' => 'Layout', 'tab' => 'content', 'responsive' => true, 'default' => 'vertical',
                                     'options' => [ 'vertical' => 'Vertical list', 'horizontal' => 'Horizontal (inline)' ] ],
                             'alignment' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
-                                    'options' => self::ALIGN_OPTIONS, 'default' => 'left' ],
+                                    'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
 
                             'icon_size'  => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'default' => '20px' ],
                             'font_size'  => [ 'type' => 'length', 'label' => 'Text Size', 'tab' => 'style', 'group' => 'Size', 'responsive' => true ],
@@ -803,7 +808,7 @@ abstract class Shop_Builder_Constants {
                             'style'        => [ 'type' => 'select', 'label' => 'Tab Style', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'underline',
                                     'options' => [ 'underline' => 'Underline', 'pills' => 'Pills', 'boxed' => 'Boxed' ] ],
                             'alignment'    => [ 'type' => 'select', 'label' => 'Tab Alignment', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true,
-                                    'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'left' ],
+                                    'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'default' ],
                             'active_color' => [ 'type' => 'color', 'label' => 'Active Tab Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary' ],
                             'text_color'   => [ 'type' => 'color', 'label' => 'Tab Text Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'content_color' => [ 'type' => 'color', 'label' => 'Content Text Color', 'tab' => 'style', 'group' => 'Colors' ],
@@ -959,7 +964,7 @@ abstract class Shop_Builder_Constants {
                                     'options' => [ 'icon' => 'Icons only', 'icon_label' => 'Icons + labels' ] ],
                             'new_tab'   => [ 'type' => 'toggle', 'label' => 'Open links in a new tab', 'tab' => 'content', 'default' => true ],
                             'alignment' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
-                                    'options' => self::ALIGN_OPTIONS, 'default' => 'left' ],
+                                    'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
 
                             'shape'      => [ 'type' => 'select', 'label' => 'Icon Shape', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'circle',
                                     'options' => [ 'none' => 'No background', 'circle' => 'Circle', 'rounded' => 'Rounded square', 'square' => 'Square' ] ],

@@ -68,7 +68,10 @@ trait SB_Admin_Fields {
             switch ( $spec['type'] ?? '' ) {
                 case 'image':
                 case 'video':
-                    if ( $value ) $refs['media'][ (int) $value ] = true;
+                    // One ID, or one per screen size.
+                    foreach ( is_array( $value ) ? $value : [ $value ] as $id ) {
+                        if ( is_scalar( $id ) && (int) $id > 0 ) $refs['media'][ (int) $id ] = true;
+                    }
                     break;
                 case 'products':
                     foreach ( (array) $value as $id ) $refs['products'][ (int) $id ] = true;

@@ -85,6 +85,8 @@ trait SB_Platform {
                 'extra'       => class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::extra() : [],
                 'prefixes'    => class_exists( 'Qwoo_Store_Language' ) ? (object) array_combine( Qwoo_Store_Language::extra(), array_map( [ 'Qwoo_Store_Language', 'prefix' ], Qwoo_Store_Language::extra() ) ) : (object) [],
                 'translation' => $lang !== '' ? self::translation_status( $all, $lang ) : null,
+                // Pages that always show another language's sections ({ key: language }).
+                'sync'        => (object) self::section_sync_of( $all, $lang !== '' ? $lang : ( class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::get() : 'en' ) ),
             ],
         ] + self::refs_payload( $refs );
     }
@@ -155,7 +157,7 @@ trait SB_Platform {
      * Saves the dashboard's draft: the option groups and every page's
      * sections go through sanitize_options(), exactly like Save Draft.
      */
-    public static function platform_save( array $options, array $pages, ?array $custom_pages = null, ?array $menus = null, ?array $layouts = null ) {
+    public static function platform_save( array $options, array $pages, ?array $custom_pages = null, ?array $menus = null, ?array $layouts = null, ?array $sync = null ) {
         $input = array_intersect_key( $options, array_flip( self::$platform_option_groups ) );
         if ( $custom_pages !== null ) {
             $input['custom_pages'] = $custom_pages;
@@ -177,6 +179,9 @@ trait SB_Platform {
             }
         }
         self::instance()->save_input( $input );
+        if ( $sync !== null ) {
+            self::save_section_sync( class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::get() : 'en', $sync );
+        }
         if ( isset( $input['checkout']['allow_signup'] ) ) {
             Qwoo_Checkout_Extras::sync_signup( ! empty( $input['checkout']['allow_signup'] ) );
         }

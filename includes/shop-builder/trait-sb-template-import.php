@@ -164,6 +164,8 @@ trait SB_Template_Import {
         }
         // Home (from the template's homepage), privacy policy, terms, shipping & returns.
         self::ensure_store_pages( true, trim( (string) ( $input['name'] ?? '' ) ) );
+        // Templates published before "Default" alignment existed say "left".
+        self::upgrade_default_alignment( true );
 
         $options  = (array) get_option( 'shop_builder_options', [] );
         $branding = (array) ( $options['branding'] ?? [] );
