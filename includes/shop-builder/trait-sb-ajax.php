@@ -199,6 +199,9 @@ trait SB_Ajax {
         if ( isset( $new_options['contact']['methods'] ) ) {
             $updated_options['contact']['methods'] = $new_options['contact']['methods'];
         }
+        if ( isset( $new_options['branding']['fonts'] ) ) {
+            $updated_options['branding']['fonts'] = $new_options['branding']['fonts'];
+        }
         foreach ( array_keys( self::LAYOUT_PAGES ) as $page_slug ) {
             if ( isset( $new_options[ $page_slug ]['layouts'] ) ) {
                 $updated_options[ $page_slug ]['layouts'] = $new_options[ $page_slug ]['layouts'];

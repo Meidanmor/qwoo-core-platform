@@ -357,6 +357,19 @@
                 case 'color':
                     return ShopBuilder.colorFieldTemplate('', '', '#000000', value || '');
 
+                case 'font': {
+                    // A brand font (set in the dashboard: Store builder → Branding), or the default.
+                    const fonts = (window.shopBuilder && shopBuilder.brandFonts) || {};
+                    const def = fonts[spec.default_font] || spec.default_font || '';
+                    let opts = `<option value="">${esc('Default' + (def ? ' (' + def + ')' : ''))}</option>`;
+                    Object.keys(fonts).forEach(function (val) {
+                        const sel = String(value) === String(val) ? ' selected' : '';
+                        opts += `<option value="${escA(val)}"${sel}>${esc(fonts[val])}</option>`;
+                    });
+                    if (value && !(value in fonts)) opts += `<option value="${escA(value)}" selected>${esc(value)}</option>`;
+                    return `<select class="sbf-input"${dev}>${opts}</select>`;
+                }
+
                 case 'image':
                     return F.imageControlHtml(value, dev, 'image');
 

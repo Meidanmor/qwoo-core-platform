@@ -178,6 +178,10 @@ trait SB_Sanitizers {
             case 'color':
                 return self::sanitize_color_value( $value );
 
+            case 'font':
+                // A brand font (Branding → Brand fonts), or '' for the item's default.
+                return Qwoo_Brand_Fonts::sanitize_choice( $value );
+
             case 'select':
                 $options = $spec['options'] ?? [];
                 $value   = is_scalar( $value ) ? (string) $value : '';
@@ -697,6 +701,10 @@ trait SB_Sanitizers {
                     'logo_id'       => self::sanitize_attachment_id( $input['branding']['logo_id'] ?? 0 ),
                     'app_icon_id'   => self::sanitize_attachment_id( $input['branding']['app_icon_id'] ?? 0 ),
             ];
+            // Brand fonts: only from the dashboard (wp-admin's Branding form keeps them as they are).
+            if ( isset( $input['branding']['fonts'] ) ) {
+                $clean['branding']['fonts'] = Qwoo_Brand_Fonts::sanitize( $input['branding']['fonts'] );
+            }
         }
 
         // PWA manifest

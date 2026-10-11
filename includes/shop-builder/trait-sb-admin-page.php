@@ -149,6 +149,8 @@ trait SB_Admin_Page {
                 'pageSectionLocations' => self::PAGE_SECTION_LOCATIONS,
                 'globalColors'         => self::get_global_colors(),
                 'globalColorKeys'      => self::GLOBAL_COLOR_KEYS,
+                // Brand fonts a block's "Font" can use ({ key: label }); they're set in the dashboard.
+                'brandFonts'           => self::brand_font_labels(),
                 'frontendDomain'       => $frontend_domain,
                 'pages'                => $bootstrap['pages'],
                 'media'                => $bootstrap['media'],

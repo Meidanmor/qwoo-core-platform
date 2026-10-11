@@ -66,6 +66,12 @@ trait SB_Platform {
                 'section_style'    => self::SECTION_STYLE_FIELDS,
                 'block_common'     => self::BLOCK_COMMON_FIELDS,
                 'global_colors'    => self::GLOBAL_COLOR_KEYS,
+                // Brand fonts: the built-in ones and the font names this store can publish.
+                'fonts'            => [
+                    'builtin'    => Qwoo_Brand_Fonts::BUILTIN,
+                    'families'   => Qwoo_Brand_Fonts::families(),
+                    'max_custom' => Qwoo_Brand_Fonts::MAX_CUSTOM,
+                ],
                 'icon_sets'        => self::ICON_SETS,
                 'page_locations'   => self::PAGE_SECTION_LOCATIONS,
                 'padding_presets'  => self::SECTION_PADDING_PRESETS,
@@ -124,6 +130,7 @@ trait SB_Platform {
             ],
             'branding' => [
                 'global_colors' => self::get_global_colors(),
+                'fonts'         => Qwoo_Brand_Fonts::get( $o ),
                 'logo_id'       => (int) ( $o['branding']['logo_id'] ?? 0 ),
                 'app_icon_id'   => (int) ( $o['branding']['app_icon_id'] ?? 0 ),
             ],

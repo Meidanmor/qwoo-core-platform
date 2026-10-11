@@ -325,6 +325,13 @@ trait SB_Github_Push {
                     }
                 }
 
+                // Brand fonts: their files, served by the storefront itself.
+                $fonts = Qwoo_Brand_Fonts::stage( $batch, (array) ( $page_data['fonts'] ?? [] ), $path_to_label, $label );
+                unset( $page_data['fonts'] );
+                if ( $fonts ) {
+                    $page_data['fonts'] = $fonts;
+                }
+
                 // Logo and app icon share the folder: anything else in it was replaced or removed.
                 foreach ( array_keys( $batch['existing'] ) as $old ) {
                     if ( strpos( $old, 'public/branding/' ) === 0 && ! isset( $branding_kept[ $old ] ) ) {

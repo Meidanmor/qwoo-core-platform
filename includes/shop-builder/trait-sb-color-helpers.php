@@ -22,6 +22,19 @@ trait SB_Color_Helpers {
         return $colors;
     }
 
+    /** The brand fonts a block's "Font" can pick, { key: "Headings (Playfair Display)" }. */
+    private static function brand_font_labels() {
+        $fonts  = Qwoo_Brand_Fonts::get();
+        $labels = [];
+        foreach ( Qwoo_Brand_Fonts::BUILTIN as $key => $label ) {
+            $labels[ $key ] = $label . ( $fonts[ $key ] ? " ({$fonts[ $key ]})" : '' );
+        }
+        foreach ( $fonts['custom'] as $font ) {
+            $labels[ $font['id'] ] = ( $font['name'] ?: 'Font' ) . ( $font['family'] ? " ({$font['family']})" : '' );
+        }
+        return $labels;
+    }
+
     /**
      * Shared sanitizer for every color field (block/section colors, header
      * announcement, PWA colors). Accepts:

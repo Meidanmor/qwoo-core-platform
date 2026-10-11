@@ -46,10 +46,10 @@ class Qwoo_Site_Content {
     const STOREFRONT_VERSION = 2;
 
     /** Folders (and root files) of public/ that are the store's content. */
-    const CONTENT = [ 'config/', 'data/', 'sections/', 'homepage-hero/', 'branding/', 'icons/', 'favicon.ico' ];
+    const CONTENT = [ 'config/', 'data/', 'sections/', 'homepage-hero/', 'branding/', 'brand-fonts/', 'icons/', 'favicon.ico' ];
 
     /** File types kept; anything else is stored as .bin (never runnable on the server). */
-    const EXTENSIONS = [ 'json', 'png', 'jpg', 'jpeg', 'webp', 'avif', 'gif', 'svg', 'ico', 'mp4', 'webm', 'txt', 'xml' ];
+    const EXTENSIONS = [ 'json', 'png', 'jpg', 'jpeg', 'webp', 'avif', 'gif', 'svg', 'ico', 'mp4', 'webm', 'txt', 'xml', 'woff2' ];
 
     /** Why the last batch couldn't start (shown to the owner). */
     public static $last_error = '';
