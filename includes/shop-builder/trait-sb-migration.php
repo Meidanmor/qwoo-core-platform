@@ -85,7 +85,7 @@ trait SB_Migration {
     /** { block type: [ field, … ] } whose alignment now starts at "Default". */
     private static function default_align_fields() {
         $out = [];
-        foreach ( self::BLOCK_SCHEMA as $type => $schema ) {
+        foreach ( self::block_schema() as $type => $schema ) {
             foreach ( (array) ( $schema['fields'] ?? [] ) as $key => $spec ) {
                 if ( ( $spec['type'] ?? '' ) === 'select' && isset( $spec['options']['default'] ) && ( $spec['default'] ?? '' ) === 'default' ) {
                     $out[ $type ][] = $key;

@@ -228,13 +228,26 @@ trait SB_Github_Push {
         $allowed_pages = self::publishable_pages();
         $page_labels   = self::$push_page_labels;
 
-        // The menus (Design → Menus): header.json "menu", footer.json "columns".
+        // The menus (Design → Menus): header.json "menu", footer.json "columns", and all menus in "menus".
         $menus = self::published_menus( $options );
-        foreach ( [ 'header' => 'menu', 'footer' => 'columns' ] as $slot => $key ) {
-            $options[ $slot ]         = is_array( $options[ $slot ] ?? null ) ? $options[ $slot ] : [];
-            $options[ $slot ][ $key ] = $menus[ $slot ];
-            unset( $options[ $slot ]['pages'] );
-        }
+        $options['header']            = is_array( $options['header'] ?? null ) ? $options['header'] : [];
+        $options['header']['menu']    = $menus['header'];
+        $options['header']['menus']   = $menus['menus'];
+        unset( $options['header']['pages'] );
+
+        $options['footer']            = is_array( $options['footer'] ?? null ) ? $options['footer'] : [];
+        $options['footer']['columns'] = $menus['footer'];
+        $options['footer']['menus']   = $menus['menus'];
+        unset( $options['footer']['pages'] );
+
+        // Stage config/menus.json for direct access
+        $menus_path = "{$dir}menus.json";
+        $menus_json = aps_normalize_json( json_encode( [
+            'menus'      => $menus['menus'],
+            'menus_list' => $menus['menus_list'],
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
+        aps_github_batch_put_file( $batch, $menus_path, $menus_json );
+        $path_to_label[ $menus_path ] = $label_prefix . 'Menus';
 
         // checkout.json always goes out: it carries the legal pages the terms checkbox links to.
         $options['checkout'] = is_array( $options['checkout'] ?? null ) ? $options['checkout'] : [];

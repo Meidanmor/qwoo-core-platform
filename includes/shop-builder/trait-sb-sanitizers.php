@@ -91,7 +91,7 @@ trait SB_Sanitizers {
 
     /** BLOCK_SCHEMA with its text defaults in the store's language. */
     public static function localized_block_schema() {
-        $schema = self::BLOCK_SCHEMA;
+        $schema = self::block_schema();
         if ( ! class_exists( 'Qwoo_Store_Language' ) || Qwoo_Store_Language::get() === 'en' ) {
             return $schema;
         }
@@ -182,14 +182,21 @@ trait SB_Sanitizers {
                 // A brand font (Branding → Brand fonts), or '' for the item's default.
                 return Qwoo_Brand_Fonts::sanitize_choice( $value );
 
+            case 'menu':
+                $value = is_scalar( $value ) ? trim( (string) $value ) : '';
+                return preg_match( '/^menu_[A-Za-z0-9_]{3,30}$/', $value ) ? $value : ( in_array( $value, [ 'menu_header', 'menu_footer' ], true ) ? $value : '' );
+
             case 'select':
-                $options = $spec['options'] ?? [];
+                $options = is_array( $spec['options'] ?? null ) ? $spec['options'] : [];
                 $value   = is_scalar( $value ) ? (string) $value : '';
-                if ( array_key_exists( $value, $options ) ) return $value;
+                if ( ! empty( $options ) && array_key_exists( $value, $options ) ) return $value;
+                if ( empty( $options ) && ( $spec['options'] ?? '' ) === 'menus' ) {
+                    return preg_match( '/^menu_[A-Za-z0-9_]{3,30}$/', $value ) || in_array( $value, [ 'menu_header', 'menu_footer' ], true ) ? $value : '';
+                }
                 if ( $allow_empty && $value === '' ) return '';
                 $default = $spec['default'] ?? null;
                 if ( is_array( $default ) ) $default = $default['desktop'] ?? null;
-                if ( $default !== null && array_key_exists( (string) $default, $options ) ) return (string) $default;
+                if ( $default !== null && ! empty( $options ) && array_key_exists( (string) $default, $options ) ) return (string) $default;
                 $first = array_key_first( $options );
                 return $first === null ? '' : (string) $first;
 

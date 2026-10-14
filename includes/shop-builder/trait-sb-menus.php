@@ -5,8 +5,11 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * The storefront's menus, edited in the dashboard (Design → Menus).
  *
  * Stored in shop_builder_options['menus']:
- *   header: { items: [ item… ] }
- *   footer: { columns: [ { id, title, items: [ item… ] } ] }
+ *   An array of named menus:
+ *   [
+ *     { id: 'menu_…', name: 'Main menu', items: [ item… ] },
+ *     { id: 'menu_…', name: 'Footer menu', items: [ item… ] }
+ *   ]
  * an item:
  *   { id: mi_…, type: page | builtin | category | product | blog_category | custom,
  *     ref:   the page id, builtin key, category id or product id,
@@ -14,19 +17,16 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *     url:   custom links only, new_tab, children: [ item… ] }
  * Items nest without a fixed limit (MAX_MENU_DEPTH is a safety cap).
  *
- * A store that never saved menus gets the defaults: Home, Products, Cart,
- * Checkout and My account in the header, and pages that had the old "Show in
- * the menu / footer" ticks are added (that's where those settings went).
+ * A store that never saved menus gets the defaults: "Main menu" and "Footer menu".
  *
- * Publishing resolves every item to { label, url, new_tab, external,
- * children } — header.json "menu" and footer.json "columns" — and leaves
- * out links to things the storefront doesn't have (a draft page, a deleted
- * product…).
+ * Publishing resolves every item to { label, url, new_tab, external, children }
+ * and outputs the menus map and list for the storefront.
  */
 trait SB_Menus {
 
     private static $max_menu_depth = 8;
     private static $max_menu_items = 200;
+    private static $max_menus      = 30;
 
     /** Built-in storefront pages a menu can link to: key => [ label, path ]. */
     private static $menu_builtins = [
@@ -44,42 +44,89 @@ trait SB_Menus {
     /** The menus as stored, or the defaults for a store that never saved any. */
     private static function menus_of( array $options ) {
         $menus = $options['menus'] ?? null;
-        if ( is_array( $menus ) && isset( $menus['header'], $menus['footer'] ) ) {
-            return $menus;
+        if ( is_array( $menus ) ) {
+            // Already a list of named menus
+            if ( isset( $menus[0] ) || empty( $menus ) ) {
+                $count = 0;
+                $out   = [];
+                foreach ( array_slice( $menus, 0, self::$max_menus ) as $m ) {
+                    if ( ! is_array( $m ) ) continue;
+                    $out[] = [
+                        'id'    => is_string( $m['id'] ?? null ) && preg_match( '/^menu_[A-Za-z0-9_]{3,30}$/', $m['id'] ) ? $m['id'] : self::new_id( 'menu' ),
+                        'name'  => mb_substr( sanitize_text_field( (string) ( $m['name'] ?? '' ) ), 0, 60 ) ?: Qwoo_I18n::t( 'Menu' ),
+                        'items' => self::sanitize_menu_items( $m['items'] ?? [], 1, $count ),
+                    ];
+                }
+                if ( ! empty( $out ) ) return $out;
+            }
+            // Legacy structure: { header: { items: [...] }, footer: { columns: [...] } }
+            if ( isset( $menus['header'] ) || isset( $menus['footer'] ) ) {
+                $count = 0;
+                $out   = [];
+                $header_items = self::sanitize_menu_items( $menus['header']['items'] ?? [], 1, $count );
+                $out[] = [
+                    'id'    => 'menu_header',
+                    'name'  => Qwoo_I18n::t( 'Main menu' ),
+                    'items' => $header_items,
+                ];
+                $footer_items = [];
+                foreach ( (array) ( $menus['footer']['columns'] ?? [] ) as $col ) {
+                    foreach ( (array) ( $col['items'] ?? [] ) as $it ) {
+                        $footer_items[] = $it;
+                    }
+                }
+                $out[] = [
+                    'id'    => 'menu_footer',
+                    'name'  => Qwoo_I18n::t( 'Footer menu' ),
+                    'items' => self::sanitize_menu_items( $footer_items, 1, $count ),
+                ];
+                return $out;
+            }
         }
+
         $item = static fn( $type, $ref ) => [ 'id' => self::new_id( 'mi' ), 'type' => $type, 'ref' => (string) $ref, 'label' => '', 'url' => '', 'new_tab' => false, 'children' => [] ];
 
-        $header = [];
+        $main_items = [];
         foreach ( self::$menu_default_builtins as $key ) {
-            $header[] = $item( 'builtin', $key );
+            $main_items[] = $item( 'builtin', $key );
         }
-        $columns = [ [ 'id' => self::new_id( 'mc' ), 'title' => Qwoo_I18n::t( 'Shop' ), 'items' => [ $item( 'builtin', 'products' ) ] ] ];
+        $footer_items = [ $item( 'builtin', 'products' ) ];
+
         // Pages that had the old "Show in the menu / footer" ticks.
-        $footer_pages = [];
         foreach ( self::custom_pages_of( $options ) as $page ) {
-            if ( ! empty( $page['in_menu'] ) ) $header[] = $item( 'page', $page['id'] );
-            if ( ! empty( $page['in_footer'] ) ) $footer_pages[] = $item( 'page', $page['id'] );
+            if ( ! empty( $page['in_menu'] ) ) $main_items[] = $item( 'page', $page['id'] );
+            if ( ! empty( $page['in_footer'] ) ) $footer_items[] = $item( 'page', $page['id'] );
         }
-        if ( $footer_pages ) {
-            $columns[] = [ 'id' => self::new_id( 'mc' ), 'title' => '', 'items' => $footer_pages ];
-        }
-        return [ 'header' => [ 'items' => $header ], 'footer' => [ 'columns' => $columns ] ];
+
+        return [
+            [
+                'id'    => self::new_id( 'menu' ),
+                'name'  => Qwoo_I18n::t( 'Main menu' ),
+                'items' => $main_items,
+            ],
+            [
+                'id'    => self::new_id( 'menu' ),
+                'name'  => Qwoo_I18n::t( 'Footer menu' ),
+                'items' => $footer_items,
+            ],
+        ];
     }
 
     /** Sanitizes posted menus (sanitize_options() calls this). */
     private function sanitize_menus( $raw ) {
-        $raw   = is_array( $raw ) ? $raw : [];
+        $raw = is_array( $raw ) ? $raw : [];
+        if ( isset( $raw['header'] ) || isset( $raw['footer'] ) ) {
+            return self::menus_of( [ 'menus' => $raw ] );
+        }
+        $raw   = isset( $raw['list'] ) && is_array( $raw['list'] ) ? $raw['list'] : $raw;
         $count = 0;
-        $out   = [
-            'header' => [ 'items' => self::sanitize_menu_items( $raw['header']['items'] ?? [], 1, $count ) ],
-            'footer' => [ 'columns' => [] ],
-        ];
-        foreach ( array_slice( array_values( (array) ( $raw['footer']['columns'] ?? [] ) ), 0, 8 ) as $column ) {
-            if ( ! is_array( $column ) ) continue;
-            $out['footer']['columns'][] = [
-                'id'    => is_string( $column['id'] ?? null ) && preg_match( '/^mc_[A-Za-z0-9]{6,20}$/', $column['id'] ) ? $column['id'] : self::new_id( 'mc' ),
-                'title' => mb_substr( sanitize_text_field( (string) ( $column['title'] ?? '' ) ), 0, 60 ),
-                'items' => self::sanitize_menu_items( $column['items'] ?? [], 1, $count ),
+        $out   = [];
+        foreach ( array_slice( array_values( $raw ), 0, self::$max_menus ) as $menu ) {
+            if ( ! is_array( $menu ) ) continue;
+            $out[] = [
+                'id'    => is_string( $menu['id'] ?? null ) && preg_match( '/^menu_[A-Za-z0-9_]{3,30}$/', $menu['id'] ) ? $menu['id'] : self::new_id( 'menu' ),
+                'name'  => mb_substr( sanitize_text_field( (string) ( $menu['name'] ?? '' ) ), 0, 60 ) ?: Qwoo_I18n::t( 'Menu' ),
+                'items' => self::sanitize_menu_items( $menu['items'] ?? [], 1, $count ),
             ];
         }
         return $out;
@@ -145,9 +192,8 @@ trait SB_Menus {
             }
             return $items;
         };
-        $menus['header']['items'] = $explain( (array) ( $menus['header']['items'] ?? [] ) );
-        foreach ( $menus['footer']['columns'] as $c => $column ) {
-            $menus['footer']['columns'][ $c ]['items'] = $explain( (array) ( $column['items'] ?? [] ) );
+        foreach ( $menus as $k => $m ) {
+            $menus[ $k ]['items'] = $explain( (array) ( $m['items'] ?? [] ) );
         }
         return $menus;
     }
@@ -183,8 +229,11 @@ trait SB_Menus {
     }
 
     /**
-     * What the storefront gets: header.json "menu" and footer.json "columns",
-     * every item { label, url, new_tab, external, children }.
+     * What the storefront gets:
+     * - 'menus': map of [ menu_id => resolved_items ]
+     * - 'menus_list': list of [ { id, name, items } ]
+     * - 'header': resolved items of the primary menu
+     * - 'footer': columns
      */
     private static function published_menus( array $options ) {
         $menus  = self::menus_of( $options );
@@ -199,6 +248,7 @@ trait SB_Menus {
                 // Anything that isn't an address on the store ("/…") opens as a normal link.
                 $external = $href[0] !== '/' || strpos( $href, '//' ) === 0;
                 $out[]    = [
+                    'id'       => $item['id'] ?? '',
                     'label'    => ( $item['label'] ?? '' ) !== '' ? $item['label'] : $name,
                     'url'      => $href,
                     'new_tab'  => ! empty( $item['new_tab'] ),
@@ -208,10 +258,35 @@ trait SB_Menus {
             }
             return $out;
         };
-        $columns = [];
-        foreach ( (array) ( $menus['footer']['columns'] ?? [] ) as $column ) {
-            $columns[] = [ 'title' => (string) ( $column['title'] ?? '' ), 'links' => $resolve( (array) ( $column['items'] ?? [] ) ) ];
+
+        $map  = [];
+        $list = [];
+        foreach ( $menus as $m ) {
+            $m_id     = (string) ( $m['id'] ?? '' );
+            $resolved = $resolve( (array) ( $m['items'] ?? [] ) );
+            if ( $m_id !== '' ) {
+                $map[ $m_id ] = $resolved;
+            }
+            $list[] = [
+                'id'    => $m_id,
+                'name'  => (string) ( $m['name'] ?? '' ),
+                'items' => $resolved,
+            ];
         }
-        return [ 'header' => $resolve( (array) ( $menus['header']['items'] ?? [] ) ), 'footer' => $columns ];
+
+        $header_items = $list[0]['items'] ?? [];
+        foreach ( $list as $entry ) {
+            if ( $entry['id'] === 'menu_header' || stripos( $entry['name'], 'header' ) !== false || stripos( $entry['name'], 'main' ) !== false ) {
+                $header_items = $entry['items'];
+                break;
+            }
+        }
+
+        return [
+            'header'     => $header_items,
+            'footer'     => [],
+            'menus'      => $map,
+            'menus_list' => $list,
+        ];
     }
 }

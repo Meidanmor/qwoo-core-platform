@@ -133,6 +133,7 @@ abstract class Shop_Builder_Constants {
             'right top'     => 'Top right',
             'left bottom'   => 'Bottom left',
             'right bottom'  => 'Bottom right',
+            'custom'        => 'Custom',
     ];
 
     /**
@@ -184,6 +185,12 @@ abstract class Shop_Builder_Constants {
                     'options' => [ 'cover' => 'Cover', 'contain' => 'Contain', 'auto' => 'Original size' ], 'default' => 'cover', 'show_if' => [ 'bg_type' => 'image' ] ],
             'bg_image_position' => [ 'type' => 'select', 'label' => 'Image / Video Position', 'tab' => 'style', 'group' => 'Background', 'responsive' => true,
                     'options' => self::BG_POSITION_OPTIONS, 'default' => 'center center', 'show_if' => [ 'bg_type' => [ 'image', 'video' ] ] ],
+            'bg_pos_x' => [ 'type' => 'length', 'label' => 'Horizontal Position', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'allow_negative' => true,
+                    'placeholder' => 'e.g. 30% or 120px', 'show_if' => [ 'bg_type' => [ 'image', 'video' ], 'bg_image_position' => 'custom' ],
+                    'help' => 'From the left edge. 0% = left, 50% = center, 100% = right.' ],
+            'bg_pos_y' => [ 'type' => 'length', 'label' => 'Vertical Position', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'allow_negative' => true,
+                    'placeholder' => 'e.g. 70% or 40px', 'show_if' => [ 'bg_type' => [ 'image', 'video' ], 'bg_image_position' => 'custom' ],
+                    'help' => 'From the top edge. 0% = top, 50% = center, 100% = bottom.' ],
             'bg_fixed' => [ 'type' => 'toggle', 'label' => 'Fixed (parallax) on desktop', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'image' ] ],
             'bg_overlay_color' => [ 'type' => 'color', 'label' => 'Overlay Color', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => [ 'image', 'video' ] ] ],
             'bg_overlay_opacity' => [ 'type' => 'number', 'label' => 'Overlay Opacity (%)', 'tab' => 'style', 'group' => 'Background', 'min' => 0, 'max' => 100, 'default' => 50,
@@ -394,13 +401,8 @@ abstract class Shop_Builder_Constants {
                                     'options' => [ 'h1' => 'H1 — page title (use once per page)', 'h2' => 'H2 — large', 'h3' => 'H3 — medium', 'h4' => 'H4 — small', 'h5' => 'H5', 'h6' => 'H6' ] ],
                             'alignment' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
-                            'title_color'    => [ 'type' => 'color', 'label' => 'Title Color', 'tab' => 'style', 'group' => 'Colors' ],
-                            'subtitle_color' => [ 'type' => 'color', 'label' => 'Subtitle Color', 'tab' => 'style', 'group' => 'Colors' ],
-                            'title_font'     => [ 'type' => 'font', 'label' => 'Title Font', 'tab' => 'style', 'group' => 'Typography', 'default_font' => 'headings' ],
-                            'subtitle_font'  => [ 'type' => 'font', 'label' => 'Subtitle Font', 'tab' => 'style', 'group' => 'Typography', 'default_font' => 'text' ],
-                            'font_size'      => [ 'type' => 'length', 'label' => 'Title Size', 'tab' => 'style', 'group' => 'Typography', 'responsive' => true, 'placeholder' => 'e.g. 48px or 3rem' ],
-                            'font_weight'    => [ 'type' => 'select', 'label' => 'Title Weight', 'tab' => 'style', 'group' => 'Typography', 'options' => self::FONT_WEIGHT_OPTIONS, 'default' => '' ],
-                            'subtitle_size'  => [ 'type' => 'length', 'label' => 'Subtitle Size', 'tab' => 'style', 'group' => 'Typography', 'responsive' => true ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings', 'keys' => [ 'size' => 'font_size', 'weight' => 'font_weight' ], 'placeholders' => [ 'size' => 'e.g. 48px or 3rem' ] ],
+                            'ts:subtitle' => [ 'type' => 'text_style', 'label' => 'Subtitle' ],
                     ],
             ],
 
@@ -413,10 +415,7 @@ abstract class Shop_Builder_Constants {
                             'text'       => [ 'type' => 'html', 'label' => 'Text', 'tab' => 'content' ],
                             'alignment'  => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
-                            'text_color' => [ 'type' => 'color', 'label' => 'Text Color', 'tab' => 'style', 'group' => 'Colors' ],
-                            'font'       => [ 'type' => 'font', 'label' => 'Font', 'tab' => 'style', 'group' => 'Typography', 'default_font' => 'text' ],
-                            'font_size'  => [ 'type' => 'length', 'label' => 'Font Size', 'tab' => 'style', 'group' => 'Typography', 'responsive' => true, 'placeholder' => 'e.g. 18px' ],
-                            'line_height' => [ 'type' => 'length', 'label' => 'Line Height', 'tab' => 'style', 'group' => 'Typography', 'responsive' => true, 'placeholder' => 'e.g. 1.6', 'unitless' => true ],
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'line_height', 'color' ], 'keys' => [ 'font' => 'font', 'size' => 'font_size', 'weight' => 'font_weight', 'line_height' => 'line_height', 'color' => 'text_color' ] ],
                     ],
             ],
 
@@ -455,6 +454,7 @@ abstract class Shop_Builder_Constants {
                             'alignment'    => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'group' => 'Size', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS, 'default' => 'center' ],
                             'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Border', 'placeholder' => 'e.g. 8px' ],
+                            'ts:caption' => [ 'type' => 'text_style', 'label' => 'Captions' ],
                     ],
             ],
 
@@ -474,9 +474,8 @@ abstract class Shop_Builder_Constants {
                             'size'      => [ 'type' => 'select', 'label' => 'Size', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'md',
                                     'options' => [ 'sm' => 'Small', 'md' => 'Medium', 'lg' => 'Large' ] ],
                             'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Appearance', 'placeholder' => 'e.g. 999px for a pill' ],
-                            'font'      => [ 'type' => 'font', 'label' => 'Font', 'tab' => 'style', 'group' => 'Appearance', 'default_font' => 'buttons' ],
                             'bg_color'   => [ 'type' => 'color', 'label' => 'Background Color', 'tab' => 'style', 'group' => 'Colors' ],
-                            'text_color' => [ 'type' => 'color', 'label' => 'Text Color', 'tab' => 'style', 'group' => 'Colors' ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'keys' => [ 'font' => 'font', 'size' => 'text_size', 'weight' => 'font_weight', 'color' => 'text_color' ] ],
                     ],
             ],
 
@@ -525,13 +524,18 @@ abstract class Shop_Builder_Constants {
                                     'options' => [ 'stacked' => 'Stacked', 'inline' => 'Inline (fields + button on one row)' ] ],
                             'button_style' => [ 'type' => 'select', 'label' => 'Button Style', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'primary',
                                     'options' => [ 'primary' => 'Primary (filled)', 'secondary' => 'Secondary (filled)', 'outline' => 'Outline' ] ],
+                            'button_size'  => [ 'type' => 'select', 'label' => 'Button Size', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'md',
+                                    'options' => [ 'sm' => 'Small', 'md' => 'Medium', 'lg' => 'Large' ] ],
                             'button_align' => [ 'type' => 'select', 'label' => 'Button Alignment', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'default' ],
                             'max_width'    => [ 'type' => 'length', 'label' => 'Form Max Width', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true, 'placeholder' => 'e.g. 560px' ],
                             'accent_color'      => [ 'type' => 'color', 'label' => 'Accent Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary',
                                     'help' => 'Focused input borders, checked boxes/radios and the default button fill.' ],
                             'button_bg_color'   => [ 'type' => 'color', 'label' => 'Button Background', 'tab' => 'style', 'group' => 'Colors' ],
-                            'button_text_color' => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'group' => 'Colors' ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Labels' ],
+                            'ts:input' => [ 'type' => 'text_style', 'label' => 'Input Text', 'parts' => [ 'font', 'size', 'color' ] ],
+                            'ts:button' => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'keys' => [ 'size' => 'button_text_size', 'color' => 'button_text_color' ] ],
+                            'ts:message' => [ 'type' => 'text_style', 'label' => 'Thank-You Message', 'parts' => [ 'font', 'size', 'color' ] ],
                     ],
             ],
 
@@ -558,6 +562,7 @@ abstract class Shop_Builder_Constants {
                             'tag'   => [ 'type' => 'select', 'label' => 'Heading Level', 'tab' => 'content', 'default' => 'h1',
                                     'options' => [ 'h1' => 'H1 (recommended)', 'h2' => 'H2' ] ],
                             'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
                     ],
             ],
             'post_meta' => [
@@ -569,6 +574,7 @@ abstract class Shop_Builder_Constants {
                             'show_date'       => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
                             'show_categories' => [ 'type' => 'toggle', 'label' => 'Show the categories', 'tab' => 'content', 'default' => true ],
                             'align'           => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:meta' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'color' ] ],
                     ],
             ],
             'post_featured_image' => [
@@ -597,6 +603,8 @@ abstract class Shop_Builder_Constants {
                     'fields' => [
                             'title' => [ 'type' => 'text', 'label' => 'Heading', 'tab' => 'content', 'default' => 'More to read' ],
                             'count' => [ 'type' => 'number', 'label' => 'Posts', 'tab' => 'content', 'min' => 1, 'max' => 3, 'default' => 3 ],
+                            'ts:heading' => [ 'type' => 'text_style', 'label' => 'Heading', 'default_font' => 'headings' ],
+                            'ts:card_title' => [ 'type' => 'text_style', 'label' => 'Post Titles', 'default_font' => 'headings' ],
                     ],
             ],
             'post_back' => [
@@ -606,6 +614,7 @@ abstract class Shop_Builder_Constants {
                     'icon'   => 'arrow-back',
                     'fields' => [
                             'label' => [ 'type' => 'text', 'label' => 'Text', 'tab' => 'content', 'default' => '← Blog' ],
+                            'ts:link' => [ 'type' => 'text_style', 'label' => 'Link Text' ],
                     ],
             ],
             'blog_title' => [
@@ -618,6 +627,8 @@ abstract class Shop_Builder_Constants {
                                     'help' => 'A category page shows the category\'s name.' ],
                             'show_description' => [ 'type' => 'toggle', 'label' => 'Show the category\'s description', 'tab' => 'content', 'default' => true ],
                             'align'            => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+                            'ts:desc' => [ 'type' => 'text_style', 'label' => 'Description', 'parts' => [ 'font', 'size', 'color' ] ],
                     ],
             ],
             'blog_categories' => [
@@ -627,6 +638,7 @@ abstract class Shop_Builder_Constants {
                     'icon'   => 'category',
                     'fields' => [
                             'all_label' => [ 'type' => 'text', 'label' => 'Label for all posts', 'tab' => 'content', 'default' => 'All' ],
+                            'ts:link' => [ 'type' => 'text_style', 'label' => 'Links', 'parts' => [ 'font', 'size', 'weight' ] ],
                     ],
             ],
             'blog_posts' => [
@@ -641,6 +653,8 @@ abstract class Shop_Builder_Constants {
                             'show_excerpt' => [ 'type' => 'toggle', 'label' => 'Show the summary', 'tab' => 'content', 'default' => true ],
                             'show_date'    => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
                             'show_image'   => [ 'type' => 'toggle', 'label' => 'Show the cover image', 'tab' => 'content', 'default' => true ],
+                            'ts:card_title' => [ 'type' => 'text_style', 'label' => 'Post Titles', 'default_font' => 'headings' ],
+                            'ts:excerpt' => [ 'type' => 'text_style', 'label' => 'Summaries', 'parts' => [ 'font', 'size', 'color' ] ],
                     ],
             ],
 
@@ -656,6 +670,8 @@ abstract class Shop_Builder_Constants {
                             'show_date'    => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
                             'button_label' => [ 'type' => 'text', 'label' => 'Link to the blog', 'tab' => 'content', 'default' => 'All posts',
                                     'help' => 'Leave empty for no link.' ],
+                            'ts:card_title' => [ 'type' => 'text_style', 'label' => 'Post Titles', 'default_font' => 'headings' ],
+                            'ts:excerpt' => [ 'type' => 'text_style', 'label' => 'Summaries', 'parts' => [ 'font', 'size', 'color' ] ],
                     ],
             ],
             'category_grid' => [
@@ -684,6 +700,9 @@ abstract class Shop_Builder_Constants {
                                             'review_text' => [ 'type' => 'textarea', 'label' => 'Review Text' ],
                                     ],
                             ],
+                            'star_color' => [ 'type' => 'color', 'label' => 'Star Color', 'tab' => 'style', 'group' => 'Colors' ],
+                            'ts:name' => [ 'type' => 'text_style', 'label' => 'Names', 'default_font' => 'headings' ],
+                            'ts:review' => [ 'type' => 'text_style', 'label' => 'Reviews', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
                     ],
             ],
             'advantages' => [
@@ -701,7 +720,11 @@ abstract class Shop_Builder_Constants {
                                     ],
                             ],
                             'icon_color' => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Colors' ],
-                            'text_color' => [ 'type' => 'color', 'label' => 'Text Color', 'tab' => 'style', 'group' => 'Colors' ],
+                            'text_color' => [ 'type' => 'color', 'label' => 'Text Color', 'tab' => 'style', 'group' => 'Colors',
+                                    'help' => 'Titles and descriptions, unless they have their own color below.' ],
+                            'mobile_divider' => [ 'type' => 'toggle', 'label' => 'Line between cards on phones', 'tab' => 'style', 'group' => 'Colors', 'default' => true ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Card Titles' ],
+                            'ts:desc' => [ 'type' => 'text_style', 'label' => 'Descriptions', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
                     ],
             ],
 
@@ -757,11 +780,10 @@ abstract class Shop_Builder_Constants {
                                     'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
 
                             'icon_size'  => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'default' => '20px' ],
-                            'font_size'  => [ 'type' => 'length', 'label' => 'Text Size', 'tab' => 'style', 'group' => 'Size', 'responsive' => true ],
                             'gap'        => [ 'type' => 'length', 'label' => 'Space Between Items', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'placeholder' => '12px' ],
                             'divider'    => [ 'type' => 'toggle', 'label' => 'Divider between items', 'tab' => 'style', 'group' => 'Size' ],
                             'icon_color' => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary' ],
-                            'text_color' => [ 'type' => 'color', 'label' => 'Text Color', 'tab' => 'style', 'group' => 'Colors' ],
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'keys' => [ 'size' => 'font_size' ] ],
                     ],
             ],
 
@@ -787,11 +809,10 @@ abstract class Shop_Builder_Constants {
                                     'options' => [ 'chevron' => 'Chevron', 'plus' => 'Plus / minus' ] ],
                             'style'          => [ 'type' => 'select', 'label' => 'Style', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'lines',
                                     'options' => [ 'lines' => 'Divider lines', 'boxed' => 'Boxed cards' ] ],
-                            'question_size'  => [ 'type' => 'length', 'label' => 'Question Size', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true ],
-                            'question_color' => [ 'type' => 'color', 'label' => 'Question Color', 'tab' => 'style', 'group' => 'Colors' ],
-                            'answer_color'   => [ 'type' => 'color', 'label' => 'Answer Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'accent_color'   => [ 'type' => 'color', 'label' => 'Icon / Divider Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'item_bg'        => [ 'type' => 'color', 'label' => 'Card Background', 'tab' => 'style', 'group' => 'Colors', 'show_if' => [ 'style' => 'boxed' ] ],
+                            'ts:question' => [ 'type' => 'text_style', 'label' => 'Questions' ],
+                            'ts:answer' => [ 'type' => 'text_style', 'label' => 'Answers', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
                     ],
             ],
 
@@ -814,8 +835,8 @@ abstract class Shop_Builder_Constants {
                             'alignment'    => [ 'type' => 'select', 'label' => 'Tab Alignment', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'default' ],
                             'active_color' => [ 'type' => 'color', 'label' => 'Active Tab Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary' ],
-                            'text_color'   => [ 'type' => 'color', 'label' => 'Tab Text Color', 'tab' => 'style', 'group' => 'Colors' ],
-                            'content_color' => [ 'type' => 'color', 'label' => 'Content Text Color', 'tab' => 'style', 'group' => 'Colors' ],
+                            'ts:tab' => [ 'type' => 'text_style', 'label' => 'Tab Titles', 'keys' => [ 'color' => 'text_color' ] ],
+                            'ts:content' => [ 'type' => 'text_style', 'label' => 'Content', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
                     ],
             ],
 
@@ -839,13 +860,11 @@ abstract class Shop_Builder_Constants {
 
                             'style'        => [ 'type' => 'select', 'label' => 'Style', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'boxes',
                                     'options' => [ 'boxes' => 'Boxes', 'plain' => 'Plain numbers' ] ],
-                            'number_size'  => [ 'type' => 'length', 'label' => 'Number Size', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true,
-                                    'default' => [ 'desktop' => '40px', 'tablet' => '', 'mobile' => '28px' ] ],
                             'alignment'    => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS, 'default' => 'center' ],
-                            'number_color' => [ 'type' => 'color', 'label' => 'Number Color', 'tab' => 'style', 'group' => 'Colors' ],
-                            'label_color'  => [ 'type' => 'color', 'label' => 'Label Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'box_bg'       => [ 'type' => 'color', 'label' => 'Box Background', 'tab' => 'style', 'group' => 'Colors', 'show_if' => [ 'style' => 'boxes' ] ],
+                            'ts:number' => [ 'type' => 'text_style', 'label' => 'Numbers', 'defaults' => [ 'size' => [ 'desktop' => '40px', 'tablet' => '', 'mobile' => '28px' ] ] ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Labels & Message' ],
                     ],
             ],
 
@@ -933,8 +952,6 @@ abstract class Shop_Builder_Constants {
 
                             'slide_height'  => [ 'type' => 'length', 'label' => 'Slide Height', 'tab' => 'style', 'group' => 'Size', 'responsive' => true,
                                     'default' => [ 'desktop' => '560px', 'tablet' => '440px', 'mobile' => '380px' ], 'show_if' => [ 'source' => 'slides' ] ],
-                            'title_size'    => [ 'type' => 'length', 'label' => 'Slide Title Size', 'tab' => 'style', 'group' => 'Size', 'responsive' => true,
-                                    'show_if' => [ 'source' => 'slides' ] ],
                             'image_height'  => [ 'type' => 'length', 'label' => 'Image Height', 'tab' => 'style', 'group' => 'Size', 'responsive' => true,
                                     'placeholder' => 'e.g. 60px for logos', 'show_if' => [ 'source' => [ 'images', 'logos' ] ] ],
                             'gap'           => [ 'type' => 'length', 'label' => 'Gap Between Items', 'tab' => 'style', 'group' => 'Size', 'responsive' => true,
@@ -945,6 +962,11 @@ abstract class Shop_Builder_Constants {
                             'button_style'  => [ 'type' => 'select', 'label' => 'Slide Button Style', 'tab' => 'style', 'group' => 'Colors', 'default' => 'light',
                                     'options' => [ 'light' => 'Light (white)', 'secondary' => 'Secondary color', 'outline' => 'Outline' ], 'show_if' => [ 'source' => 'slides' ] ],
                             'control_color' => [ 'type' => 'color', 'label' => 'Arrows / Dots Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary' ],
+                            'button_size'   => [ 'type' => 'select', 'label' => 'Slide Button Size', 'tab' => 'style', 'group' => 'Colors', 'default' => 'lg',
+                                    'options' => [ 'sm' => 'Small', 'md' => 'Medium', 'lg' => 'Large' ], 'show_if' => [ 'source' => 'slides' ] ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Slide Titles', 'parts' => [ 'font', 'size', 'weight' ], 'default_font' => 'headings', 'show_if' => [ 'source' => 'slides' ] ],
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Slide Text', 'parts' => [ 'font', 'size', 'weight' ], 'show_if' => [ 'source' => 'slides' ] ],
+                            'ts:button' => [ 'type' => 'text_style', 'label' => 'Slide Button Text', 'parts' => [ 'font', 'size', 'weight' ], 'default_font' => 'buttons', 'keys' => [ 'size' => 'button_text_size' ], 'show_if' => [ 'source' => 'slides' ] ],
                     ],
             ],
 
@@ -979,6 +1001,97 @@ abstract class Shop_Builder_Constants {
                             'icon_color' => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Colors', 'show_if' => [ 'color_mode' => 'custom' ] ],
                             'bg_color'   => [ 'type' => 'color', 'label' => 'Shape Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary',
                                     'show_if' => [ 'color_mode' => 'custom' ] ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Labels', 'show_if' => [ 'display' => 'icon_label' ] ],
+                    ],
+            ],
+
+            'menu_widget' => [
+                    'label'    => 'Menu',
+                    'category' => 'basic',
+                    'fields'   => [
+                            'menu_id' => [
+                                    'type'    => 'menu',
+                                    'label'   => 'Menu',
+                                    'tab'     => 'content',
+                                    'default' => '',
+                                    'help'    => 'Choose which menu to display.',
+                            ],
+                            'layout' => [
+                                    'type'        => 'select',
+                                    'label'       => 'Layout',
+                                    'tab'         => 'content',
+                                    'responsive'  => true,
+                                    'options'     => [
+                                            'horizontal' => 'Horizontal (Navbar)',
+                                            'vertical'   => 'Vertical (List)',
+                                    ],
+                                    'default'     => 'horizontal',
+                            ],
+                            'alignment' => [
+                                    'type'        => 'select',
+                                    'label'       => 'Alignment',
+                                    'tab'         => 'content',
+                                    'responsive'  => true,
+                                    'options'     => self::ALIGN_OPTIONS,
+                                    'default'     => 'default',
+                            ],
+                            'gap' => [
+                                    'type'        => 'length',
+                                    'label'       => 'Space Between Links',
+                                    'tab'         => 'content',
+                                    'responsive'  => true,
+                                    'placeholder' => '16px',
+                            ],
+                            'enable_mobile_menu' => [
+                                    'type'    => 'toggle',
+                                    'label'   => 'Enable Mobile Hamburger Button',
+                                    'tab'     => 'content',
+                                    'default' => true,
+                            ],
+                            'mobile_menu_breakpoint' => [
+                                    'type'    => 'select',
+                                    'label'   => 'Show Hamburger Under',
+                                    'tab'     => 'content',
+                                    'options' => [
+                                            '991'    => 'Tablet & Mobile (under 992px)',
+                                            '767'    => 'Mobile only (under 768px)',
+                                            'custom' => 'Custom width',
+                                            'none'   => 'Never (always show full menu)',
+                                    ],
+                                    'default' => '991',
+                                    'show_if' => [ 'enable_mobile_menu' => true ],
+                            ],
+                            'mobile_menu_custom_breakpoint' => [
+                                    'type'        => 'number',
+                                    'label'       => 'Custom Breakpoint (px)',
+                                    'tab'         => 'content',
+                                    'min'         => 320,
+                                    'max'         => 2400,
+                                    'default'     => 990,
+                                    'show_if'     => [ 'enable_mobile_menu' => true, 'mobile_menu_breakpoint' => 'custom' ],
+                            ],
+
+                            /* Style tab */
+                            'ts:link' => [
+                                    'type'         => 'text_style',
+                                    'label'        => 'Menu Links',
+                                    'parts'        => [ 'font', 'size', 'weight', 'color' ],
+                                    'default_font' => 'text',
+                            ],
+                            'link_hover_color' => [
+                                    'type'    => 'color',
+                                    'label'   => 'Link Hover Color',
+                                    'tab'     => 'style',
+                                    'group'   => 'Colors',
+                                    'default' => 'global:primary',
+                            ],
+                            'dropdown_bg_color' => [
+                                    'type'    => 'color',
+                                    'label'   => 'Dropdown Background',
+                                    'tab'     => 'style',
+                                    'group'   => 'Colors',
+                                    'show_if' => [ 'layout' => 'horizontal' ],
+                            ],
                     ],
             ],
     ];
@@ -1107,8 +1220,63 @@ abstract class Shop_Builder_Constants {
 
     const CONTACT_METHOD_TYPES = [ 'whatsapp', 'phone', 'email', 'telegram', 'custom' ];
 
+    /**
+     * The parts of a text style ('ts:{prefix}' => [ 'type' => 'text_style' … ] in
+     * BLOCK_SCHEMA). Each becomes a plain field, '{prefix}_{part}' unless the
+     * entry's `keys` names an older field ('size' => 'question_size').
+     */
+    const TEXT_STYLE_PARTS = [
+            'font'        => [ 'type' => 'font', 'label' => 'Font' ],
+            'size'        => [ 'type' => 'length', 'label' => 'Size', 'responsive' => true, 'placeholder' => 'e.g. 18px' ],
+            'weight'      => [ 'type' => 'select', 'label' => 'Weight', 'options' => self::FONT_WEIGHT_OPTIONS, 'default' => '' ],
+            'line_height' => [ 'type' => 'length', 'label' => 'Line Height', 'responsive' => true, 'unitless' => true, 'placeholder' => 'e.g. 1.6' ],
+            'color'       => [ 'type' => 'color', 'label' => 'Color' ],
+    ];
+
+    private static $block_schema = null;
+
+    /**
+     * BLOCK_SCHEMA with every text style turned into its fields (Font, Size,
+     * Weight, Line Height, Color), grouped under the text's name on the Style
+     * tab. Everything that reads block fields goes through this.
+     */
+    public static function block_schema() {
+        if ( self::$block_schema !== null ) return self::$block_schema;
+        $schema = self::BLOCK_SCHEMA;
+        foreach ( $schema as &$block ) {
+            $fields = [];
+            foreach ( (array) ( $block['fields'] ?? [] ) as $key => $spec ) {
+                if ( ( $spec['type'] ?? '' ) !== 'text_style' ) {
+                    $fields[ $key ] = $spec;
+                    continue;
+                }
+                $prefix = substr( $key, 3 );
+                foreach ( $spec['parts'] ?? [ 'font', 'size', 'weight', 'color' ] as $part ) {
+                    $field = self::TEXT_STYLE_PARTS[ $part ] + [ 'tab' => 'style', 'group' => $spec['label'] ];
+                    $field['group'] = $spec['label'];
+                    // The dashboard folds a text's settings under its name.
+                    $field['text_style'] = $prefix;
+                    if ( $part === 'font' ) $field['default_font'] = $spec['default_font'] ?? 'text';
+                    if ( isset( $spec['defaults'][ $part ] ) ) $field['default'] = $spec['defaults'][ $part ];
+                    if ( isset( $spec['placeholders'][ $part ] ) ) $field['placeholder'] = $spec['placeholders'][ $part ];
+                    if ( isset( $spec['show_if'] ) ) $field['show_if'] = $spec['show_if'];
+                    $name = $spec['keys'][ $part ] ?? "{$prefix}_{$part}";
+                    // A part never replaces a field of its own name (give it another in `keys`).
+                    if ( isset( $block['fields'][ $name ] ) || isset( $fields[ $name ] ) ) {
+                        error_log( "Qwoo: text style {$key} would replace the field {$name}; skipped." );
+                        continue;
+                    }
+                    $fields[ $name ] = $field;
+                }
+            }
+            $block['fields'] = $fields;
+        }
+        unset( $block );
+        return self::$block_schema = $schema;
+    }
+
     /** Returns the schema entry (label + fields) for a block type, or null. */
     public static function get_type_schema( $type ) {
-        return self::BLOCK_SCHEMA[ $type ] ?? null;
+        return self::block_schema()[ $type ] ?? null;
     }
 }

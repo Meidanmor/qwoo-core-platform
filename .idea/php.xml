@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="MessDetectorOptionsConfiguration">
+    <option name="transferred" value="true" />
+  </component>
+  <component name="PHPCSFixerOptionsConfiguration">
+    <option name="transferred" value="true" />
+  </component>
+  <component name="PHPCodeSnifferOptionsConfiguration">
+    <option name="highlightLevel" value="WARNING" />
+    <option name="transferred" value="true" />
+  </component>
+  <component name="PhpIncludePathManager">
+    <include_path>
+      <path value="$PROJECT_DIR$/includes/vendor/minishlink/web-push" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/deprecation-contracts" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/console" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/polyfill-mbstring" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/polyfill-ctype" />
+      <path value="$PROJECT_DIR$/includes/vendor/spomky-labs/base64url" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/string" />
+      <path value="$PROJECT_DIR$/includes/vendor/guzzlehttp/promises" />
+      <path value="$PROJECT_DIR$/includes/vendor/spomky-labs/pki-framework" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/http-client-contracts" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/service-contracts" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/polyfill-intl-grapheme" />
+      <path value="$PROJECT_DIR$/includes/vendor/ralouphie/getallheaders" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/polyfill-intl-normalizer" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/http-client" />
+      <path value="$PROJECT_DIR$/includes/vendor/guzzlehttp/psr7" />
+      <path value="$PROJECT_DIR$/includes/vendor/symfony/polyfill-php83" />
+      <path value="$PROJECT_DIR$/includes/vendor/guzzlehttp/guzzle" />
+      <path value="$PROJECT_DIR$/includes/vendor/web-token/jwt-util-ecc" />
+      <path value="$PROJECT_DIR$/includes/vendor/web-token/jwt-signature-algorithm-ecdsa" />
+      <path value="$PROJECT_DIR$/includes/vendor/web-token/jwt-signature" />
+      <path value="$PROJECT_DIR$/includes/vendor/web-token/jwt-key-mgmt" />
+      <path value="$PROJECT_DIR$/includes/vendor/composer" />
+      <path value="$PROJECT_DIR$/includes/vendor/web-token/jwt-library" />
+      <path value="$PROJECT_DIR$/includes/vendor/paragonie/constant_time_encoding" />
+      <path value="$PROJECT_DIR$/includes/vendor/paragonie/sodium_compat" />
+      <path value="$PROJECT_DIR$/includes/vendor/psr/clock" />
+      <path value="$PROJECT_DIR$/includes/vendor/psr/http-factory" />
+      <path value="$PROJECT_DIR$/includes/vendor/psr/http-message" />
+      <path value="$PROJECT_DIR$/includes/vendor/psr/cache" />
+      <path value="$PROJECT_DIR$/includes/vendor/psr/container" />
+      <path value="$PROJECT_DIR$/includes/vendor/psr/http-client" />
+      <path value="$PROJECT_DIR$/includes/vendor/psr/log" />
+      <path value="$PROJECT_DIR$/includes/vendor/brick/math" />
+    </include_path>
+  </component>
+  <component name="PhpProjectSharedConfiguration" php_language_level="7.4">
+    <option name="suggestChangeDefaultLanguageLevel" value="false" />
+  </component>
+  <component name="PhpStanOptionsConfiguration">
+    <option name="transferred" value="true" />
+  </component>
+  <component name="PsalmOptionsConfiguration">
+    <option name="transferred" value="true" />
+  </component>
+</project>

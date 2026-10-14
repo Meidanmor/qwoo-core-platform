@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="WEB_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/includes/src" isTestSource="false" packagePrefix="QwooCore\" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/brick/math" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/composer" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/guzzlehttp/guzzle" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/guzzlehttp/promises" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/guzzlehttp/psr7" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/minishlink/web-push" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/paragonie/constant_time_encoding" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/paragonie/sodium_compat" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/psr/cache" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/psr/clock" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/psr/container" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/psr/http-client" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/psr/http-factory" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/psr/http-message" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/psr/log" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/ralouphie/getallheaders" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/spomky-labs/base64url" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/spomky-labs/pki-framework" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/console" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/deprecation-contracts" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/http-client" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/http-client-contracts" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/polyfill-ctype" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/polyfill-intl-grapheme" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/polyfill-intl-normalizer" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/polyfill-mbstring" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/polyfill-php83" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/service-contracts" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/symfony/string" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/web-token/jwt-key-mgmt" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/web-token/jwt-library" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/web-token/jwt-signature" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/web-token/jwt-signature-algorithm-ecdsa" />
+      <excludeFolder url="file://$MODULE_DIR$/includes/vendor/web-token/jwt-util-ecc" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

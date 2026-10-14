@@ -135,7 +135,7 @@ trait SB_Admin_Page {
         $data = [
                 'nonce'                => wp_create_nonce( 'shop_builder_nonce' ),
                 'ajax_url'             => admin_url( 'admin-ajax.php' ),
-                'blockSchema'          => self::BLOCK_SCHEMA,
+                'blockSchema'          => self::block_schema(),
                 'sectionStyleFields'   => self::SECTION_STYLE_FIELDS,
                 'blockCommonFields'    => self::BLOCK_COMMON_FIELDS,
                 'devices'              => self::DEVICES,
