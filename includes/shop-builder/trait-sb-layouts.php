@@ -24,7 +24,7 @@ trait SB_Layouts {
 
     /** Every page that keeps a `sections` list. */
     private static function sectionable_pages() {
-        return array_merge( [ 'home' ], array_keys( self::PAGE_SECTION_LOCATIONS ), self::TEMPLATE_PAGES );
+        return array_merge( [ 'home', 'header', 'footer' ], array_keys( self::PAGE_SECTION_LOCATIONS ), self::TEMPLATE_PAGES );
     }
 
     /** A template page's starting sections (like the storefront's built-in layout). */
