@@ -351,8 +351,8 @@ abstract class Shop_Builder_Constants {
             'menu'      => self::MENU_ICONS,
     ];
 
-    /** What a swipe from the screen's left or right edge opens (Header settings). */
-    const SWIPE_RE = '/^(|none|cart|wishlist|menu|menu:menu_[A-Za-z0-9_]{3,30})$/';
+    /** Whether a header widget's drawer opens by swiping in from an edge of the screen (phones). */
+    const SWIPE_OPTIONS = [ 'auto' => 'Automatic', 'none' => 'No', 'left' => 'From the left edge', 'right' => 'From the right edge' ];
 
     /** Social Links networks — mirrored in the frontend's src/utils/builder-icons.js. */
     const SOCIAL_NETWORKS = [
@@ -1113,6 +1113,9 @@ abstract class Shop_Builder_Constants {
                             'drawer_text_color' => [ 'type' => 'color', 'label' => 'Drawer Text Color', 'tab' => 'style', 'group' => 'Drawer', 'show_if' => [ 'enable_mobile_menu' => true ] ],
                             'drawer_show_languages' => [ 'type' => 'toggle', 'label' => 'Show the language switcher in the drawer', 'tab' => 'content', 'group' => 'Drawer', 'default' => true, 'show_if' => [ 'enable_mobile_menu' => true ] ],
                             'drawer_show_notifications' => [ 'type' => 'toggle', 'label' => 'Offer push notifications in the drawer', 'tab' => 'content', 'group' => 'Drawer', 'default' => true, 'show_if' => [ 'enable_mobile_menu' => true ] ],
+                            'swipe'        => [ 'type' => 'select', 'label' => 'Open by Swiping (Phones)', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'auto',
+                                    'options' => self::SWIPE_OPTIONS, 'show_if' => [ 'enable_mobile_menu' => true ], 'swipe' => true,
+                                    'help' => 'Automatic: the menu from the start side of the screen (left in English, right in Hebrew), the cart and wishlist from the other side. One drawer per edge: the first in the header wins.' ],
 
                             /* Style tab */
                             'ts:link' => [
@@ -1121,7 +1124,7 @@ abstract class Shop_Builder_Constants {
                                     'parts'        => [ 'font', 'size', 'weight', 'color' ],
                                     'default_font' => 'text',
                             ],
-                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Phone Button', 'responsive' => true, 'placeholder' => '24px', 'show_if' => [ 'enable_mobile_menu' => true ] ],
+                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Phone Button', 'responsive' => true, 'placeholder' => '14px', 'show_if' => [ 'enable_mobile_menu' => true ] ],
                             'icon_color'  => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Phone Button', 'show_if' => [ 'enable_mobile_menu' => true ] ],
                             'ts:label' => [ 'type' => 'text_style', 'label' => 'Phone Button Text', 'show_if' => [ 'enable_mobile_menu' => true ] ],
                             'link_hover_color' => [
@@ -1167,9 +1170,12 @@ abstract class Shop_Builder_Constants {
                             'hide_when_empty' => [ 'type' => 'toggle', 'label' => 'Hide while the cart is empty', 'tab' => 'content' ],
                             'drawer_title' => [ 'type' => 'text', 'label' => 'Drawer Title', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'Cart', 'show_if' => [ 'click_action' => 'drawer' ],
                                     'help' => 'Leave empty for no title.' ],
+                            'swipe'        => [ 'type' => 'select', 'label' => 'Open by Swiping (Phones)', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'auto',
+                                    'options' => self::SWIPE_OPTIONS, 'show_if' => [ 'click_action' => 'drawer' ], 'swipe' => true,
+                                    'help' => 'Automatic: the menu from the start side of the screen (left in English, right in Hebrew), the cart and wishlist from the other side. One drawer per edge: the first in the header wins.' ],
                             'drawer_bg'    => [ 'type' => 'color', 'label' => 'Drawer Background', 'tab' => 'style', 'group' => 'Drawer', 'show_if' => [ 'click_action' => 'drawer' ] ],
                             'drawer_text_color' => [ 'type' => 'color', 'label' => 'Drawer Text Color', 'tab' => 'style', 'group' => 'Drawer', 'show_if' => [ 'click_action' => 'drawer' ] ],
-                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'placeholder' => '24px' ],
+                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'placeholder' => '14px' ],
                             'icon_color'  => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Icon' ],
                             'badge_bg'    => [ 'type' => 'color', 'label' => 'Count Background', 'tab' => 'style', 'group' => 'Count' ],
                             'badge_color' => [ 'type' => 'color', 'label' => 'Count Text Color', 'tab' => 'style', 'group' => 'Count' ],
@@ -1188,9 +1194,12 @@ abstract class Shop_Builder_Constants {
                             'hide_when_empty' => [ 'type' => 'toggle', 'label' => 'Hide while the wishlist is empty', 'tab' => 'content' ],
                             'drawer_title' => [ 'type' => 'text', 'label' => 'Drawer Title', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'Wishlist',
                                     'help' => 'Leave empty for no title.' ],
+                            'swipe'        => [ 'type' => 'select', 'label' => 'Open by Swiping (Phones)', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'none',
+                                    'options' => self::SWIPE_OPTIONS, 'swipe' => true,
+                                    'help' => 'Automatic: the menu from the start side of the screen (left in English, right in Hebrew), the cart and wishlist from the other side. One drawer per edge: the first in the header wins.' ],
                             'drawer_bg'    => [ 'type' => 'color', 'label' => 'Drawer Background', 'tab' => 'style', 'group' => 'Drawer' ],
                             'drawer_text_color' => [ 'type' => 'color', 'label' => 'Drawer Text Color', 'tab' => 'style', 'group' => 'Drawer' ],
-                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'placeholder' => '24px' ],
+                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'placeholder' => '14px' ],
                             'icon_color'  => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Icon' ],
                             'badge_bg'    => [ 'type' => 'color', 'label' => 'Count Background', 'tab' => 'style', 'group' => 'Count' ],
                             'badge_color' => [ 'type' => 'color', 'label' => 'Count Text Color', 'tab' => 'style', 'group' => 'Count' ],

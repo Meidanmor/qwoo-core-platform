@@ -615,12 +615,6 @@ trait SB_Sanitizers {
                     'sticky'      => ! empty( $input['header']['settings']['sticky'] ),
                     'show_search' => ! empty( $input['header']['settings']['show_search'] ),
             ];
-            // What a swipe from each edge of the screen opens ('' = automatic: the menu from
-            // the start side, the cart from the end side).
-            foreach ( [ 'swipe_left', 'swipe_right' ] as $edge ) {
-                $v = (string) ( $input['header']['settings'][ $edge ] ?? '' );
-                $header['settings'][ $edge ] = preg_match( self::SWIPE_RE, $v ) ? $v : '';
-            }
             if ( isset( $input['header']['navigation'] ) && is_array( $input['header']['navigation'] ) ) {
                 $nav = [];
                 foreach ( $input['header']['navigation'] as $key => $item ) {

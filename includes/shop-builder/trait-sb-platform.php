@@ -111,8 +111,6 @@ trait SB_Platform {
                 'settings'     => [
                     'sticky'      => (bool) ( $o['header']['settings']['sticky'] ?? true ),
                     'show_search' => ! empty( $o['header']['settings']['show_search'] ),
-                    'swipe_left'  => (string) ( $o['header']['settings']['swipe_left'] ?? '' ),
-                    'swipe_right' => (string) ( $o['header']['settings']['swipe_right'] ?? '' ),
                 ],
             ],
             'footer'   => [ 'footer_text' => (string) ( $o['footer']['footer_text'] ?? '' ) ],
