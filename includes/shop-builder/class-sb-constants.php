@@ -1094,6 +1094,10 @@ abstract class Shop_Builder_Constants {
                             ],
                     ],
             ],
+        'language_switcher' => [
+            'label'    => 'Language Switcher',
+            'category' => 'basic',
+        ]
     ];
 
     /**
