@@ -1101,6 +1101,10 @@ abstract class Shop_Builder_Constants {
         'mini_cart' => [
             'label'    => 'Mini Cart',
             'category' => 'basic',
+        ],
+        'mini_wishlist' => [
+            'label'    => 'Mini Wishlist',
+            'category' => 'basic',
         ]
     ];
 
