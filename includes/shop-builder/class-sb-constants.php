@@ -316,11 +316,43 @@ abstract class Shop_Builder_Constants {
             'globe'        => [ 'label' => 'Worldwide',     'icon' => 'public' ],
     ];
 
+    /**
+     * Icons for the header widgets' buttons (Mini Cart, Mini Wishlist, the Menu's
+     * phone button). Same format; mirrored in the frontend's src/utils/builder-icons.js.
+     */
+    const CART_ICONS = [
+            'cart'         => [ 'label' => 'Cart',          'icon' => 'shopping_cart' ],
+            'cart_outline' => [ 'label' => 'Cart outline',  'icon' => 'shopping_cart' ],
+            'bag'          => [ 'label' => 'Bag',           'icon' => 'shopping_bag' ],
+            'bag_outline'  => [ 'label' => 'Bag outline',   'icon' => 'shopping_bag' ],
+            'basket'       => [ 'label' => 'Basket',        'icon' => 'shopping_basket' ],
+            'tote'         => [ 'label' => 'Tote',          'icon' => 'local_mall' ],
+    ];
+    const WISHLIST_ICONS = [
+            'heart_outline' => [ 'label' => 'Heart outline', 'icon' => 'favorite_border' ],
+            'heart'         => [ 'label' => 'Heart',         'icon' => 'favorite' ],
+            'bookmark'      => [ 'label' => 'Bookmark',      'icon' => 'bookmark_border' ],
+            'star'          => [ 'label' => 'Star',          'icon' => 'star_border' ],
+    ];
+    const MENU_ICONS = [
+            'menu'      => [ 'label' => 'Three lines',  'icon' => 'menu' ],
+            'menu_open' => [ 'label' => 'Lines with arrow', 'icon' => 'menu_open' ],
+            'short'     => [ 'label' => 'Short lines',  'icon' => 'segment' ],
+            'dots'      => [ 'label' => 'Dots',         'icon' => 'more_vert' ],
+            'grid'      => [ 'label' => 'Grid',         'icon' => 'apps' ],
+    ];
+
     /** Icon sets selectable by an `icon` field's `icon_set` key. */
     const ICON_SETS = [
             'advantage' => self::ADVANTAGE_ICONS,
             'general'   => self::GENERAL_ICONS,
+            'cart'      => self::CART_ICONS,
+            'wishlist'  => self::WISHLIST_ICONS,
+            'menu'      => self::MENU_ICONS,
     ];
+
+    /** What a swipe from the screen's left or right edge opens (Header settings). */
+    const SWIPE_RE = '/^(|none|cart|wishlist|menu|menu:menu_[A-Za-z0-9_]{3,30})$/';
 
     /** Social Links networks — mirrored in the frontend's src/utils/builder-icons.js. */
     const SOCIAL_NETWORKS = [
@@ -1070,6 +1102,17 @@ abstract class Shop_Builder_Constants {
                                     'default'     => 990,
                                     'show_if'     => [ 'enable_mobile_menu' => true, 'mobile_menu_breakpoint' => 'custom' ],
                             ],
+                            'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'menu', 'default' => 'menu', 'show_if' => [ 'enable_mobile_menu' => true ] ],
+                            'custom_icon' => [ 'type' => 'image', 'label' => 'Your Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ] + [ 'enable_mobile_menu' => true ],
+                                    'help' => 'A small square image or SVG. It keeps its own colors.' ],
+                            'label'       => [ 'type' => 'text', 'label' => 'Text Next to the Icon', 'tab' => 'content', 'placeholder' => 'e.g. Menu', 'show_if' => [ 'enable_mobile_menu' => true ],
+                                    'help' => 'Optional. Leave empty to show only the icon.' ],
+                            'drawer_title' => [ 'type' => 'text', 'label' => 'Drawer Title', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'Menu', 'show_if' => [ 'enable_mobile_menu' => true ],
+                                    'help' => 'Leave empty for no title.' ],
+                            'drawer_bg'    => [ 'type' => 'color', 'label' => 'Drawer Background', 'tab' => 'style', 'group' => 'Drawer', 'show_if' => [ 'enable_mobile_menu' => true ] ],
+                            'drawer_text_color' => [ 'type' => 'color', 'label' => 'Drawer Text Color', 'tab' => 'style', 'group' => 'Drawer', 'show_if' => [ 'enable_mobile_menu' => true ] ],
+                            'drawer_show_languages' => [ 'type' => 'toggle', 'label' => 'Show the language switcher in the drawer', 'tab' => 'content', 'group' => 'Drawer', 'default' => true, 'show_if' => [ 'enable_mobile_menu' => true ] ],
+                            'drawer_show_notifications' => [ 'type' => 'toggle', 'label' => 'Offer push notifications in the drawer', 'tab' => 'content', 'group' => 'Drawer', 'default' => true, 'show_if' => [ 'enable_mobile_menu' => true ] ],
 
                             /* Style tab */
                             'ts:link' => [
@@ -1078,6 +1121,9 @@ abstract class Shop_Builder_Constants {
                                     'parts'        => [ 'font', 'size', 'weight', 'color' ],
                                     'default_font' => 'text',
                             ],
+                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Phone Button', 'responsive' => true, 'placeholder' => '24px', 'show_if' => [ 'enable_mobile_menu' => true ] ],
+                            'icon_color'  => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Phone Button', 'show_if' => [ 'enable_mobile_menu' => true ] ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Phone Button Text', 'show_if' => [ 'enable_mobile_menu' => true ] ],
                             'link_hover_color' => [
                                     'type'    => 'color',
                                     'label'   => 'Link Hover Color',
@@ -1097,14 +1143,59 @@ abstract class Shop_Builder_Constants {
         'language_switcher' => [
             'label'    => 'Language Switcher',
             'category' => 'basic',
+            'fields'   => [
+                            'display'   => [ 'type' => 'select', 'label' => 'Show', 'tab' => 'content', 'default' => 'flag',
+                                    'options' => [ 'flag' => 'Flag only', 'flag_name' => 'Flag and name', 'name' => 'Name only' ] ],
+                            'flag_size' => [ 'type' => 'length', 'label' => 'Flag Width', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'placeholder' => '22px',
+                                    'show_if' => [ 'display' => [ 'flag', 'flag_name' ] ] ],
+                            'gap'       => [ 'type' => 'length', 'label' => 'Space Between Languages', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'placeholder' => '14px' ],
+                            'ts:name'   => [ 'type' => 'text_style', 'label' => 'Language Names', 'show_if' => [ 'display' => [ 'flag_name', 'name' ] ] ],
+            ],
         ],
         'mini_cart' => [
             'label'    => 'Mini Cart',
             'category' => 'basic',
+            'fields'   => [
+                            'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'cart', 'default' => 'cart' ],
+                            'custom_icon' => [ 'type' => 'image', 'label' => 'Your Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],
+                                    'help' => 'A small square image or SVG. It keeps its own colors.' ],
+                            'label'       => [ 'type' => 'text', 'label' => 'Text Next to the Icon', 'tab' => 'content', 'placeholder' => 'e.g. Cart',
+                                    'help' => 'Optional. Leave empty to show only the icon.' ],
+                            'show_total'      => [ 'type' => 'toggle', 'label' => 'Show the cart total', 'tab' => 'content' ],
+                            'click_action'    => [ 'type' => 'select', 'label' => 'When Clicked', 'tab' => 'content', 'default' => 'drawer',
+                                    'options' => [ 'drawer' => 'Open the cart drawer', 'page' => 'Go to the cart page' ] ],
+                            'hide_when_empty' => [ 'type' => 'toggle', 'label' => 'Hide while the cart is empty', 'tab' => 'content' ],
+                            'drawer_title' => [ 'type' => 'text', 'label' => 'Drawer Title', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'Cart', 'show_if' => [ 'click_action' => 'drawer' ],
+                                    'help' => 'Leave empty for no title.' ],
+                            'drawer_bg'    => [ 'type' => 'color', 'label' => 'Drawer Background', 'tab' => 'style', 'group' => 'Drawer', 'show_if' => [ 'click_action' => 'drawer' ] ],
+                            'drawer_text_color' => [ 'type' => 'color', 'label' => 'Drawer Text Color', 'tab' => 'style', 'group' => 'Drawer', 'show_if' => [ 'click_action' => 'drawer' ] ],
+                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'placeholder' => '24px' ],
+                            'icon_color'  => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Icon' ],
+                            'badge_bg'    => [ 'type' => 'color', 'label' => 'Count Background', 'tab' => 'style', 'group' => 'Count' ],
+                            'badge_color' => [ 'type' => 'color', 'label' => 'Count Text Color', 'tab' => 'style', 'group' => 'Count' ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Text & Total' ],
+            ],
         ],
         'mini_wishlist' => [
             'label'    => 'Mini Wishlist',
             'category' => 'basic',
+            'fields'   => [
+                            'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'wishlist', 'default' => 'heart_outline' ],
+                            'custom_icon' => [ 'type' => 'image', 'label' => 'Your Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],
+                                    'help' => 'A small square image or SVG. It keeps its own colors.' ],
+                            'label'       => [ 'type' => 'text', 'label' => 'Text Next to the Icon', 'tab' => 'content', 'placeholder' => 'e.g. Wishlist',
+                                    'help' => 'Optional. Leave empty to show only the icon.' ],
+                            'hide_when_empty' => [ 'type' => 'toggle', 'label' => 'Hide while the wishlist is empty', 'tab' => 'content' ],
+                            'drawer_title' => [ 'type' => 'text', 'label' => 'Drawer Title', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'Wishlist',
+                                    'help' => 'Leave empty for no title.' ],
+                            'drawer_bg'    => [ 'type' => 'color', 'label' => 'Drawer Background', 'tab' => 'style', 'group' => 'Drawer' ],
+                            'drawer_text_color' => [ 'type' => 'color', 'label' => 'Drawer Text Color', 'tab' => 'style', 'group' => 'Drawer' ],
+                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'placeholder' => '24px' ],
+                            'icon_color'  => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Icon' ],
+                            'badge_bg'    => [ 'type' => 'color', 'label' => 'Count Background', 'tab' => 'style', 'group' => 'Count' ],
+                            'badge_color' => [ 'type' => 'color', 'label' => 'Count Text Color', 'tab' => 'style', 'group' => 'Count' ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Text' ],
+            ],
         ]
     ];
 
