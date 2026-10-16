@@ -122,8 +122,61 @@ trait SB_Store_Pages {
         return [ 'id' => self::new_id( 'sec' ), 'label' => Qwoo_I18n::t( 'Opening' ), 'enabled' => true, 'style' => $style, 'blocks' => $blocks ];
     }
 
-    private static function store_page_block( $type, array $data ) {
-        return [ 'id' => self::new_id( 'blk' ), 'type' => $type, 'label' => '', 'enabled' => true, 'style' => [], 'data' => $data ];
+    private static function store_page_block( $type, array $data, array $style = [] ) {
+        return [ 'id' => self::new_id( 'blk' ), 'type' => $type, 'label' => '', 'enabled' => true, 'style' => $style, 'data' => $data ];
+    }
+
+    /**
+     * A new store's header, when its template has none (the storefront
+     * draws the header from these sections only): the logo (or the store's
+     * name) and the menu on one side; the language switcher, the phone menu
+     * button, the wishlist and the cart on the other. Runs at setup only.
+     */
+    private static function ensure_default_header( array &$options, $logo_id, $name ) {
+        if ( ! empty( $options['header']['sections'] ) ) {
+            return;
+        }
+        $rwd    = static fn( $d, $t = null, $m = null ) => [ 'desktop' => $d, 'tablet' => $t ?? $d, 'mobile' => $m ?? $t ?? $d ];
+        $hide   = static fn( $d, $t, $m ) => [ 'hide_on' => [ 'desktop' => $d, 'tablet' => $t, 'mobile' => $m ] ];
+        $row    = static fn( $justify, $gap, $wrap = 'wrap' ) => [
+            'direction' => $rwd( 'row' ), 'wrap' => $rwd( $wrap ), 'justify' => $rwd( $justify ), 'align_items' => $rwd( 'center' ), 'gap' => $rwd( $gap ),
+        ];
+        $nested = static fn( array $style, array $blocks ) => [ 'id' => self::new_id( 'blk' ), 'type' => 'section', 'label' => '', 'enabled' => true, 'style' => $style, 'blocks' => $blocks ];
+
+        $name = trim( (string) $name ) !== '' ? trim( (string) $name ) : html_entity_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
+        $logo = (int) $logo_id > 0
+            ? self::store_page_block( 'image_block', [
+                'images'       => [ [ 'image' => (int) $logo_id, 'alt' => $name, 'link_url' => '/' ] ],
+                'layout'       => $rwd( 'row' ),
+                'image_height' => $rwd( '40px', '36px', '32px' ),
+                'object_fit'   => 'contain',
+                'alignment'    => $rwd( 'default' ),
+            ] )
+            : self::store_page_block( 'text_block', [ 'text' => '<p><a href="/"><strong>' . esc_html( $name ) . '</strong></a></p>', 'font_size' => $rwd( '20px', '18px' ) ] );
+        $menu = [ 'menu_id' => '', 'layout' => $rwd( 'horizontal' ), 'enable_mobile_menu' => true, 'icon' => 'menu', 'drawer_title' => Qwoo_I18n::t( 'Menu' ), 'swipe' => 'auto' ];
+
+        $left  = $nested( [ 'width_mode' => 'full', 'padding_preset' => 'none' ] + $row( 'flex-start', '10' ), [
+            $logo,
+            self::store_page_block( 'menu_widget', $menu + [ 'mobile_menu_breakpoint' => '767', 'drawer_show_languages' => true ], $hide( false, true, true ) ),
+        ] );
+        $right = $nested( [ 'width_mode' => 'full', 'padding_preset' => 'none' ] + $row( 'flex-start', '5', 'nowrap' ), [
+            self::store_page_block( 'language_switcher', [ 'display' => 'flag' ], $hide( false, true, true ) ),
+            self::store_page_block( 'menu_widget', $menu + [ 'mobile_menu_breakpoint' => 'custom', 'mobile_menu_custom_breakpoint' => 1024, 'drawer_show_languages' => true ], $hide( true, false, false ) ),
+            self::store_page_block( 'mini_wishlist', [ 'icon' => 'heart_outline', 'drawer_title' => Qwoo_I18n::t( 'Wishlist' ), 'swipe' => 'none' ] ),
+            self::store_page_block( 'mini_cart', [ 'icon' => 'cart', 'click_action' => 'drawer', 'drawer_title' => Qwoo_I18n::t( 'Cart' ), 'swipe' => 'auto' ] ),
+        ] );
+        $section = [ 'id' => self::new_id( 'sec' ), 'label' => Qwoo_I18n::t( 'Header' ), 'enabled' => true, 'style' => [
+            'width_mode'     => 'contained',
+            'padding_preset' => 'custom',
+            'padding'        => $rwd( [ 'top' => '5', 'right' => '15', 'bottom' => '5', 'left' => '15' ] ),
+        ] + $row( 'space-between', '20' ), 'blocks' => [ $left, $right ] ];
+
+        $header = (array) ( $options['header'] ?? [] );
+        $clean  = self::instance()->sanitize_options( [ 'header' => [ 'sections' => [ $section ] ] + $header ] );
+        if ( ! empty( $clean['header']['sections'] ) ) {
+            $options['header'] = $header;
+            $options['header']['sections'] = $clean['header']['sections'];
+        }
     }
 
     /** One text section holding the whole page, for the ready-made pages. */

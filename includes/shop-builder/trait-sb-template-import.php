@@ -152,6 +152,13 @@ trait SB_Template_Import {
             if ( is_wp_error( $set ) && $set->get_error_code() !== 'qwoo_lang_partial' ) {
                 return [ 'error' => $set->get_error_message() ];
             }
+            // A Hebrew store sells in Israel: WooCommerce's own defaults are the USA, dollars, lbs and inches.
+            if ( $input['lang'] === 'he' ) {
+                update_option( 'woocommerce_default_country', 'IL' );
+                update_option( 'woocommerce_currency', 'ILS' );
+                update_option( 'woocommerce_weight_unit', 'kg' );
+                update_option( 'woocommerce_dimension_unit', 'cm' );
+            }
             $state['lang_done'] = true;
             $state['warnings']  = is_wp_error( $set ) ? [ $set->get_error_message() ] : [];
             update_option( self::$branding_option, $state, false );
@@ -210,6 +217,9 @@ trait SB_Template_Import {
 
         $clean = self::instance()->sanitize_options( [ 'branding' => $branding, 'pwa' => $pwa ] );
         $final = array_merge( $options, $clean );
+        // Templates made before the header was built from blocks have none. Only the owner's
+        // own logo goes in it (the template's logo isn't theirs); without one, the store's name.
+        self::ensure_default_header( $final, (int) ( $state['logo_id'] ?? 0 ), $name );
         update_option( 'shop_builder_options', $final );
         self::record_revision( $final );
 
