@@ -32,7 +32,18 @@ trait Qwoo_Platform_Payments {
         foreach ( self::$offline_gateways as $id ) {
             $out[ $id ] = self::offline_gateway( $id );
         }
+        // Grow (Israeli stores): the dashboard shows it instead of "Coming soon" once the store has it.
+        $out['grow'] = Qwoo_Grow::dashboard_state();
         return $out;
+    }
+
+    /** Grow's settings (Qwoo_Grow::save). The platform asks for the owner's password when the identifiers change. */
+    private static function action_grow_save( array $params ) {
+        $error = Qwoo_Grow::save( $params );
+        if ( $error !== null ) {
+            return self::bad( $error );
+        }
+        return self::action_payments_get();
     }
 
     /** Settings of cash on delivery or bank transfer (with its accounts). */
@@ -262,7 +273,11 @@ trait Qwoo_Platform_Payments {
         $config   = [ 'stripe' => null, 'methods' => [] ];
         $gateways = class_exists( 'WooCommerce' ) && WC()->payment_gateways() ? WC()->payment_gateways()->payment_gateways() : [];
         foreach ( $gateways as $id => $gateway ) {
-            if ( $gateway->enabled !== 'yes' || ! in_array( $id, [ 'stripe', 'cod', 'bacs' ], true ) ) {
+            $grow = strpos( (string) $id, 'grow_' ) === 0;
+            if ( $gateway->enabled !== 'yes' || ( ! $grow && ! in_array( $id, [ 'stripe', 'cod', 'bacs' ], true ) ) ) {
+                continue;
+            }
+            if ( $grow && ! $gateway->is_available() ) {
                 continue;
             }
             $config['methods'][ $id ] = [

@@ -91,6 +91,7 @@ require_once QWOO_PATH . 'includes/class-platform-connection.php';
 require_once QWOO_PATH . 'includes/class-site-content.php';
 require_once QWOO_PATH . 'includes/class-brand-fonts.php';
 require_once QWOO_PATH . 'includes/trait-platform-payments.php';
+require_once QWOO_PATH . 'includes/class-grow.php';
 require_once QWOO_PATH . 'includes/trait-platform-coupons.php';
 require_once QWOO_PATH . 'includes/trait-platform-media.php';
 require_once QWOO_PATH . 'includes/class-media-support.php';

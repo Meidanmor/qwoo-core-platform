@@ -123,6 +123,7 @@ class Qwoo_Platform_Dashboard {
         'video_upload'    => 'action_video_upload',
         'payments_get'          => 'action_payments_get',
         'payment_save'          => 'action_payment_save',
+        'grow_save'             => 'action_grow_save',
         'stripe_install'        => 'action_stripe_install',
         'stripe_connect_start'  => 'action_stripe_connect_start',
         'stripe_connect_finish' => 'action_stripe_connect_finish',
