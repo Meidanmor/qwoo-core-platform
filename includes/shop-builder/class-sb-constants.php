@@ -159,7 +159,7 @@ abstract class Shop_Builder_Constants {
      */
     const BACKGROUND_FIELDS = [
             'bg_type' => [ 'type' => 'select', 'label' => 'Background', 'tab' => 'style', 'group' => 'Background',
-                    'options' => [ 'none' => 'None', 'color' => 'Color', 'gradient' => 'Gradient', 'image' => 'Image', 'video' => 'Video' ], 'default' => 'none' ],
+                    'options' => [ 'none' => 'None', 'color' => 'Color', 'gradient' => 'Gradient', 'image' => 'Image', 'slideshow' => 'Slideshow (several images)', 'video' => 'Video' ], 'default' => 'none' ],
             'bg_color' => [ 'type' => 'color', 'label' => 'Background Color', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'color' ] ],
             'bg_gradient_color1' => [ 'type' => 'color', 'label' => 'Gradient Start', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'gradient' ] ],
             'bg_gradient_color2' => [ 'type' => 'color', 'label' => 'Gradient End', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'gradient' ] ],
@@ -167,6 +167,19 @@ abstract class Shop_Builder_Constants {
                     'show_if' => [ 'bg_type' => 'gradient' ] ],
             'bg_image' => [ 'type' => 'image', 'label' => 'Background Image', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'show_if' => [ 'bg_type' => 'image' ],
                     'help' => 'Pick another image for tablets or phones, or leave it empty to use the bigger screen\'s image.' ],
+            // Slideshow: images that change by themselves behind the content (SectionBgSlides.vue).
+            'bg_slides' => [ 'type' => 'repeater', 'label' => 'Slideshow Images', 'tab' => 'style', 'group' => 'Background', 'max_items' => 8,
+                    'require' => 'image', 'item_label' => 'Image', 'add_label' => '+ Add Image', 'show_if' => [ 'bg_type' => 'slideshow' ],
+                    'fields' => [
+                            'image'        => [ 'type' => 'image', 'label' => 'Image' ],
+                            'mobile_image' => [ 'type' => 'image', 'label' => 'Phone Image (optional)' ],
+                    ] ],
+            'bg_slide_seconds' => [ 'type' => 'number', 'label' => 'Seconds Per Image', 'tab' => 'style', 'group' => 'Background', 'min' => 2, 'max' => 30, 'default' => 6,
+                    'show_if' => [ 'bg_type' => 'slideshow' ] ],
+            'bg_slide_effect' => [ 'type' => 'select', 'label' => 'Change Effect', 'tab' => 'style', 'group' => 'Background', 'default' => 'zoom',
+                    'options' => [ 'fade' => 'Fade', 'zoom' => 'Fade with a slow zoom' ], 'show_if' => [ 'bg_type' => 'slideshow' ] ],
+            'bg_slide_counter' => [ 'type' => 'toggle', 'label' => 'Show a counter (01 / 03) and a progress line', 'tab' => 'style', 'group' => 'Background',
+                    'show_if' => [ 'bg_type' => 'slideshow' ] ],
             'bg_video_source' => [ 'type' => 'select', 'label' => 'Video Source', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'video' ],
                     'options' => [ 'upload' => 'Upload (media library)', 'youtube' => 'YouTube', 'vimeo' => 'Vimeo' ], 'default' => 'upload' ],
             'bg_video' => [ 'type' => 'video', 'label' => 'Background Video', 'tab' => 'style', 'group' => 'Background',
@@ -184,17 +197,17 @@ abstract class Shop_Builder_Constants {
             'bg_image_size' => [ 'type' => 'select', 'label' => 'Image Size', 'tab' => 'style', 'group' => 'Background', 'responsive' => true,
                     'options' => [ 'cover' => 'Cover', 'contain' => 'Contain', 'auto' => 'Original size' ], 'default' => 'cover', 'show_if' => [ 'bg_type' => 'image' ] ],
             'bg_image_position' => [ 'type' => 'select', 'label' => 'Image / Video Position', 'tab' => 'style', 'group' => 'Background', 'responsive' => true,
-                    'options' => self::BG_POSITION_OPTIONS, 'default' => 'center center', 'show_if' => [ 'bg_type' => [ 'image', 'video' ] ] ],
+                    'options' => self::BG_POSITION_OPTIONS, 'default' => 'center center', 'show_if' => [ 'bg_type' => [ 'image', 'slideshow', 'video' ] ] ],
             'bg_pos_x' => [ 'type' => 'length', 'label' => 'Horizontal Position', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'allow_negative' => true,
-                    'placeholder' => 'e.g. 30% or 120px', 'show_if' => [ 'bg_type' => [ 'image', 'video' ], 'bg_image_position' => 'custom' ],
+                    'placeholder' => 'e.g. 30% or 120px', 'show_if' => [ 'bg_type' => [ 'image', 'slideshow', 'video' ], 'bg_image_position' => 'custom' ],
                     'help' => 'From the left edge. 0% = left, 50% = center, 100% = right.' ],
             'bg_pos_y' => [ 'type' => 'length', 'label' => 'Vertical Position', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'allow_negative' => true,
-                    'placeholder' => 'e.g. 70% or 40px', 'show_if' => [ 'bg_type' => [ 'image', 'video' ], 'bg_image_position' => 'custom' ],
+                    'placeholder' => 'e.g. 70% or 40px', 'show_if' => [ 'bg_type' => [ 'image', 'slideshow', 'video' ], 'bg_image_position' => 'custom' ],
                     'help' => 'From the top edge. 0% = top, 50% = center, 100% = bottom.' ],
             'bg_fixed' => [ 'type' => 'toggle', 'label' => 'Fixed (parallax) on desktop', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'image' ] ],
-            'bg_overlay_color' => [ 'type' => 'color', 'label' => 'Overlay Color', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => [ 'image', 'video' ] ] ],
+            'bg_overlay_color' => [ 'type' => 'color', 'label' => 'Overlay Color', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => [ 'image', 'slideshow', 'video' ] ] ],
             'bg_overlay_opacity' => [ 'type' => 'number', 'label' => 'Overlay Opacity (%)', 'tab' => 'style', 'group' => 'Background', 'min' => 0, 'max' => 100, 'default' => 50,
-                    'show_if' => [ 'bg_type' => [ 'image', 'video' ] ] ],
+                    'show_if' => [ 'bg_type' => [ 'image', 'slideshow', 'video' ] ] ],
     ];
 
     /**
@@ -856,6 +869,42 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
 
+            // A moving line of short texts (a marquee / ticker). Rendered by RunningTextBlock.vue.
+            'running_text' => [
+                    'label'    => 'Running Text',
+                    'category' => 'basic',
+                    'summary'  => 'items',
+                    'fields'   => [
+                            'items' => [ 'type' => 'repeater', 'label' => 'Texts', 'tab' => 'content', 'max_items' => 12,
+                                    'require' => 'text', 'title_field' => 'text', 'item_label' => 'Text', 'add_label' => '+ Add Text',
+                                    'fields' => [
+                                            'text'     => [ 'type' => 'text', 'label' => 'Text' ],
+                                            'link_url' => [ 'type' => 'url', 'label' => 'Link (optional)', 'placeholder' => '/products or https://…' ],
+                                    ],
+                            ],
+                            'direction' => [ 'type' => 'select', 'label' => 'Movement', 'tab' => 'content', 'default' => 'left',
+                                    'options' => [ 'left' => 'Sideways, to the left', 'right' => 'Sideways, to the right', 'up' => 'Upward, one text at a time' ] ],
+                            'speed' => [ 'type' => 'number', 'label' => 'Speed (pixels per second)', 'tab' => 'content', 'min' => 10, 'max' => 300, 'default' => 40,
+                                    'show_if' => [ 'direction' => [ 'left', 'right' ] ] ],
+                            'seconds' => [ 'type' => 'number', 'label' => 'Seconds per text', 'tab' => 'content', 'min' => 1, 'max' => 30, 'default' => 3,
+                                    'show_if' => [ 'direction' => 'up' ] ],
+                            'separator' => [ 'type' => 'text', 'label' => 'Separator', 'tab' => 'content', 'default' => '—',
+                                    'placeholder' => '—, •, ✦ or leave empty', 'show_if' => [ 'direction' => [ 'left', 'right' ] ] ],
+                            'pause_on_hover' => [ 'type' => 'toggle', 'label' => 'Pause while the mouse is over it', 'tab' => 'content', 'default' => true ],
+                            'alignment' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'options' => self::ALIGN_OPTIONS, 'default' => 'center',
+                                    'show_if' => [ 'direction' => 'up' ] ],
+
+                            'gap' => [ 'type' => 'length', 'label' => 'Space Between Texts', 'tab' => 'style', 'group' => 'Layout', 'responsive' => true, 'placeholder' => '32px' ],
+                            'padding_y' => [ 'type' => 'length', 'label' => 'Space Above and Below', 'tab' => 'style', 'group' => 'Layout', 'responsive' => true, 'placeholder' => '12px' ],
+                            'lines' => [ 'type' => 'toggle', 'label' => 'Thin lines above and below', 'tab' => 'style', 'group' => 'Layout' ],
+                            'line_color' => [ 'type' => 'color', 'label' => 'Line Color', 'tab' => 'style', 'group' => 'Layout', 'show_if' => [ 'lines' => true ] ],
+                            'uppercase' => [ 'type' => 'toggle', 'label' => 'Capital letters', 'tab' => 'style', 'group' => 'Layout' ],
+                            'letter_spacing' => [ 'type' => 'length', 'label' => 'Letter Spacing', 'tab' => 'style', 'group' => 'Layout', 'placeholder' => 'e.g. 0.1em' ],
+                            'separator_color' => [ 'type' => 'color', 'label' => 'Separator Color', 'tab' => 'style', 'group' => 'Layout' ],
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Text' ],
+                    ],
+            ],
+
             /* ---- Interactive ---- */
 
             'faq' => [
@@ -1018,6 +1067,11 @@ abstract class Shop_Builder_Constants {
                             'loop'   => [ 'type' => 'toggle', 'label' => 'Loop back to the start', 'tab' => 'content', 'default' => true ],
                             'arrows' => [ 'type' => 'toggle', 'label' => 'Show arrows', 'tab' => 'content', 'default' => true ],
                             'dots'   => [ 'type' => 'toggle', 'label' => 'Show dots', 'tab' => 'content', 'default' => true ],
+                            'counter' => [ 'type' => 'toggle', 'label' => 'Show a counter (01 / 03) and a progress line', 'tab' => 'content',
+                                    'show_if' => [ 'source' => 'slides' ] ],
+                            'slide_transition' => [ 'type' => 'select', 'label' => 'Change Effect', 'tab' => 'content', 'default' => 'slide',
+                                    'options' => [ 'slide' => 'Slide', 'fade' => 'Fade' ], 'show_if' => [ 'source' => 'slides' ] ],
+                            'slow_zoom' => [ 'type' => 'toggle', 'label' => 'Slow zoom on each slide', 'tab' => 'content', 'show_if' => [ 'source' => 'slides' ] ],
 
                             'slide_height'  => [ 'type' => 'length', 'label' => 'Slide Height', 'tab' => 'style', 'group' => 'Size', 'responsive' => true,
                                     'default' => [ 'desktop' => '560px', 'tablet' => '440px', 'mobile' => '380px' ], 'show_if' => [ 'source' => 'slides' ] ],
