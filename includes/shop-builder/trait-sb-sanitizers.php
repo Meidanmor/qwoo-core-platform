@@ -611,9 +611,19 @@ trait SB_Sanitizers {
                     'bg_color'   => self::sanitize_color_value( $ann['bg_color'] ?? '' ),
                     'text_color' => self::sanitize_color_value( $ann['text_color'] ?? '' ),
             ];
+            // Sticky: in the page, stays at the top. Fixed: floats over the
+            // first section (a hero), with its own colours once scrolled or on
+            // pages that don't start with one. wp-admin's form doesn't send
+            // the mode or colours, so missing ones keep what was saved.
+            $in_settings  = (array) ( $input['header']['settings'] ?? [] );
+            $old_settings = (array) ( $existing['header']['settings'] ?? [] );
+            $mode         = $in_settings['sticky_mode'] ?? ( $old_settings['sticky_mode'] ?? 'sticky' );
             $header['settings'] = [
-                    'sticky'      => ! empty( $input['header']['settings']['sticky'] ),
-                    'show_search' => ! empty( $input['header']['settings']['show_search'] ),
+                    'sticky'      => ! empty( $in_settings['sticky'] ),
+                    'show_search' => ! empty( $in_settings['show_search'] ),
+                    'sticky_mode' => in_array( $mode, [ 'sticky', 'fixed' ], true ) ? $mode : 'sticky',
+                    'solid_bg'    => self::sanitize_color_value( $in_settings['solid_bg'] ?? ( $old_settings['solid_bg'] ?? '' ) ),
+                    'solid_text'  => self::sanitize_color_value( $in_settings['solid_text'] ?? ( $old_settings['solid_text'] ?? '' ) ),
             ];
             if ( isset( $input['header']['navigation'] ) && is_array( $input['header']['navigation'] ) ) {
                 $nav = [];

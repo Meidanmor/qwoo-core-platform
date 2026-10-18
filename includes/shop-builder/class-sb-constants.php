@@ -197,6 +197,26 @@ abstract class Shop_Builder_Constants {
                     'show_if' => [ 'bg_type' => [ 'image', 'video' ] ] ],
     ];
 
+    /**
+     * Box shadow, full control, shared by containers and every block.
+     * Rendered by buildShadow() in the frontend's useSectionStyle.js.
+     */
+    const SHADOW_FIELDS = [
+            'shadow' => [ 'type' => 'toggle', 'label' => 'Add a shadow', 'tab' => 'style', 'group' => 'Shadow' ],
+            'shadow_x' => [ 'type' => 'length', 'label' => 'Horizontal Offset', 'tab' => 'style', 'group' => 'Shadow', 'allow_negative' => true,
+                    'default' => '0px', 'show_if' => [ 'shadow' => true ] ],
+            'shadow_y' => [ 'type' => 'length', 'label' => 'Vertical Offset', 'tab' => 'style', 'group' => 'Shadow', 'allow_negative' => true,
+                    'default' => '8px', 'show_if' => [ 'shadow' => true ] ],
+            'shadow_blur' => [ 'type' => 'length', 'label' => 'Blur', 'tab' => 'style', 'group' => 'Shadow',
+                    'default' => '24px', 'show_if' => [ 'shadow' => true ] ],
+            'shadow_spread' => [ 'type' => 'length', 'label' => 'Spread', 'tab' => 'style', 'group' => 'Shadow', 'allow_negative' => true,
+                    'default' => '0px', 'show_if' => [ 'shadow' => true ] ],
+            'shadow_color' => [ 'type' => 'color', 'label' => 'Shadow Color', 'tab' => 'style', 'group' => 'Shadow',
+                    'default' => '#0000001f', 'show_if' => [ 'shadow' => true ],
+                    'help' => 'Pick a colour with some transparency for a soft shadow.' ],
+            'shadow_inset' => [ 'type' => 'toggle', 'label' => 'Inside the box (inset)', 'tab' => 'style', 'group' => 'Shadow', 'show_if' => [ 'shadow' => true ] ],
+    ];
+
     /* ------------------------------------------------------------------
        Container (section) style fields — top-level sections AND nested
        `section` blocks share this exact list.
@@ -238,6 +258,18 @@ abstract class Shop_Builder_Constants {
             'text_color' => [ 'type' => 'color', 'label' => 'Default Text Color', 'tab' => 'style', 'group' => 'Colors & Border' ],
             'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Colors & Border', 'placeholder' => 'e.g. 12px' ],
 
+    ] + self::SHADOW_FIELDS + [
+
+            // The whole section as one link (buttons and links inside it keep working).
+            'link_url' => [ 'type' => 'url', 'label' => 'Make the whole section a link', 'tab' => 'style', 'group' => 'Link & hover',
+                    'placeholder' => '/products or https://...', 'help' => 'Leave empty for no link. Buttons and links inside the section still work.' ],
+            'link_new_tab' => [ 'type' => 'toggle', 'label' => 'Open the link in a new tab', 'tab' => 'style', 'group' => 'Link & hover' ],
+            'link_label' => [ 'type' => 'text', 'label' => 'Link description (for screen readers)', 'tab' => 'style', 'group' => 'Link & hover',
+                    'placeholder' => 'e.g. Shop necklaces' ],
+            'hover_effect' => [ 'type' => 'select', 'label' => 'Hover Effect', 'tab' => 'style', 'group' => 'Link & hover', 'default' => 'none',
+                    'options' => [ 'none' => 'None', 'zoom' => 'Zoom the background', 'darken' => 'Darken', 'lift' => 'Lift' ],
+                    'help' => 'Plays when the mouse is over the section (not on phones).' ],
+
             // --- Advanced tab ---
             'hide_on' => [ 'type' => 'devices', 'label' => 'Hide On', 'tab' => 'advanced' ],
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced',
@@ -254,7 +286,7 @@ abstract class Shop_Builder_Constants {
             'box_padding' => [ 'type' => 'sides', 'label' => 'Inner Padding', 'tab' => 'style', 'group' => 'Box', 'responsive' => true,
                     'help' => 'Space between the block\'s edge (or background) and its content.' ],
             'box_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Box', 'placeholder' => 'e.g. 12px' ],
-    ] + self::BACKGROUND_FIELDS + [
+    ] + self::SHADOW_FIELDS + self::BACKGROUND_FIELDS + [
             'margin_top' => [ 'type' => 'length', 'label' => 'Space Above', 'tab' => 'advanced', 'group' => 'Spacing', 'responsive' => true, 'allow_negative' => true ],
             'margin_bottom' => [ 'type' => 'length', 'label' => 'Space Below', 'tab' => 'advanced', 'group' => 'Spacing', 'responsive' => true, 'allow_negative' => true ],
             'width' => [ 'type' => 'length', 'label' => 'Block Width', 'tab' => 'advanced', 'group' => 'Size', 'responsive' => true,
@@ -464,8 +496,13 @@ abstract class Shop_Builder_Constants {
                                             'caption'  => [ 'type' => 'text', 'label' => 'Caption (optional)' ],
                                             'link_url' => [ 'type' => 'url', 'label' => 'Link URL (optional)', 'placeholder' => '/products or https://...' ],
                                             'new_tab'  => [ 'type' => 'toggle', 'label' => 'Open link in a new tab' ],
+                                            'hover_image' => [ 'type' => 'image', 'label' => 'Second image (optional)',
+                                                    'help' => 'Shown on hover when the Hover Effect is "Show the second image".' ],
                                     ],
                             ],
+                            'hover_effect' => [ 'type' => 'select', 'label' => 'Hover Effect', 'tab' => 'style', 'group' => 'Hover', 'default' => 'none',
+                                    'options' => [ 'none' => 'None', 'zoom' => 'Zoom in', 'darken' => 'Darken', 'swap' => 'Show the second image' ],
+                                    'help' => 'Plays when the mouse is over an image (not on phones).' ],
                             'layout'  => [ 'type' => 'select', 'label' => 'Layout', 'tab' => 'content', 'responsive' => true, 'default' => 'row',
                                     'options' => [ 'row' => 'Row (side by side)', 'grid' => 'Grid', 'stacked' => 'Stacked' ] ],
                             'columns' => [ 'type' => 'number', 'label' => 'Grid Columns', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
