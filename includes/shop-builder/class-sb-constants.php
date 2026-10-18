@@ -148,6 +148,16 @@ abstract class Shop_Builder_Constants {
     ];
 
     /**
+     * Product tags on an image ("shop the look"): the owner places products on
+     * the photo; the storefront shows an animated dot there that opens the
+     * product's name and price (ProductTags.vue). `image_field` /
+     * `mobile_image_field` name the sibling image fields the dashboard shows
+     * for placing them. Values: sanitize_product_tags().
+     */
+    const PRODUCT_TAGS_FIELD = [ 'type' => 'product_tags', 'label' => 'Product Tags', 'max_items' => 6,
+            'help' => 'Point at products in the photo: shoppers see a small dot that opens the product\'s name and price.' ];
+
+    /**
      * Background fields shared by containers (SECTION_STYLE_FIELDS) and
      * every block (BLOCK_COMMON_FIELDS). Rendered by buildBackground() in
      * the frontend's useSectionStyle.js.
@@ -167,12 +177,14 @@ abstract class Shop_Builder_Constants {
                     'show_if' => [ 'bg_type' => 'gradient' ] ],
             'bg_image' => [ 'type' => 'image', 'label' => 'Background Image', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'show_if' => [ 'bg_type' => 'image' ],
                     'help' => 'Pick another image for tablets or phones, or leave it empty to use the bigger screen\'s image.' ],
+            'bg_tags' => self::PRODUCT_TAGS_FIELD + [ 'tab' => 'style', 'group' => 'Background', 'image_field' => 'bg_image', 'show_if' => [ 'bg_type' => 'image' ] ],
             // Slideshow: images that change by themselves behind the content (SectionBgSlides.vue).
             'bg_slides' => [ 'type' => 'repeater', 'label' => 'Slideshow Images', 'tab' => 'style', 'group' => 'Background', 'max_items' => 8,
                     'require' => 'image', 'item_label' => 'Image', 'add_label' => '+ Add Image', 'show_if' => [ 'bg_type' => 'slideshow' ],
                     'fields' => [
                             'image'        => [ 'type' => 'image', 'label' => 'Image' ],
                             'mobile_image' => [ 'type' => 'image', 'label' => 'Phone Image (optional)' ],
+                            'tags'         => self::PRODUCT_TAGS_FIELD + [ 'image_field' => 'image', 'mobile_image_field' => 'mobile_image' ],
                     ] ],
             'bg_slide_seconds' => [ 'type' => 'number', 'label' => 'Seconds Per Image', 'tab' => 'style', 'group' => 'Background', 'min' => 2, 'max' => 30, 'default' => 6,
                     'show_if' => [ 'bg_type' => 'slideshow' ] ],
@@ -308,6 +320,12 @@ abstract class Shop_Builder_Constants {
             'max_width' => [ 'type' => 'length', 'label' => 'Max Width', 'tab' => 'advanced', 'group' => 'Size', 'responsive' => true, 'placeholder' => 'e.g. 640px' ],
             'hide_on' => [ 'type' => 'devices', 'label' => 'Hide On', 'tab' => 'advanced', 'group' => 'Visibility' ],
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced', 'group' => 'Visibility' ],
+            // Entrance animation: this block only (never whole sections), once, when it scrolls into view.
+            'animation' => [ 'type' => 'select', 'label' => 'Entrance Animation', 'tab' => 'advanced', 'group' => 'Animation', 'default' => 'none',
+                    'options' => [ 'none' => 'None', 'fade_up' => 'Fade in and rise', 'fade' => 'Fade in', 'zoom_in' => 'Grow in', 'reveal' => 'Reveal from the bottom' ],
+                    'help' => 'Plays once when the block scrolls into view. Not in the page\'s first section, and never for visitors who turned animations off.' ],
+            'animation_delay' => [ 'type' => 'number', 'label' => 'Delay (milliseconds)', 'tab' => 'advanced', 'group' => 'Animation', 'min' => 0, 'max' => 1500, 'default' => 0,
+                    'show_if' => [ 'animation' => [ 'fade_up', 'fade', 'zoom_in', 'reveal' ] ] ],
     ];
 
     /**
@@ -511,6 +529,7 @@ abstract class Shop_Builder_Constants {
                                             'new_tab'  => [ 'type' => 'toggle', 'label' => 'Open link in a new tab' ],
                                             'hover_image' => [ 'type' => 'image', 'label' => 'Second image (optional)',
                                                     'help' => 'Shown on hover when the Hover Effect is "Show the second image".' ],
+                                            'tags' => self::PRODUCT_TAGS_FIELD + [ 'image_field' => 'image' ],
                                     ],
                             ],
                             'hover_effect' => [ 'type' => 'select', 'label' => 'Hover Effect', 'tab' => 'style', 'group' => 'Hover', 'default' => 'none',
@@ -1032,6 +1051,7 @@ abstract class Shop_Builder_Constants {
                                             'text_color'      => [ 'type' => 'color', 'label' => 'Text Color', 'default' => '#ffffff' ],
                                             'overlay_color'   => [ 'type' => 'color', 'label' => 'Overlay Color', 'default' => '#000000' ],
                                             'overlay_opacity' => [ 'type' => 'number', 'label' => 'Overlay Opacity (%)', 'min' => 0, 'max' => 90, 'default' => 30 ],
+                                            'tags'            => self::PRODUCT_TAGS_FIELD + [ 'image_field' => 'image', 'mobile_image_field' => 'mobile_image' ],
                                     ],
                             ],
 

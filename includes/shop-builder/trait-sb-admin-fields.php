@@ -76,6 +76,11 @@ trait SB_Admin_Fields {
                 case 'products':
                     foreach ( (array) $value as $id ) $refs['products'][ (int) $id ] = true;
                     break;
+                case 'product_tags':
+                    foreach ( (array) $value as $tag ) {
+                        if ( is_array( $tag ) && (int) ( $tag['product'] ?? 0 ) > 0 ) $refs['products'][ (int) $tag['product'] ] = true;
+                    }
+                    break;
                 case 'categories':
                     foreach ( (array) $value as $id ) $refs['categories'][ (int) $id ] = true;
                     break;

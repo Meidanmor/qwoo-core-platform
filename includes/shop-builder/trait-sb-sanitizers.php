@@ -133,6 +133,32 @@ trait SB_Sanitizers {
     }
 
     /**
+     * Product tags on an image ("shop the look"): [ { product, x, y, mx, my } ].
+     * x / y: where the product is in the image, in % from its left / top edge;
+     * mx / my: the same on the phone image, '' when it's the same spot.
+     */
+    private static function sanitize_product_tags( $value, $max ) {
+        $pct = static function ( $v, $allow_empty ) {
+            if ( $allow_empty && ( $v === '' || $v === null ) ) return '';
+            return is_numeric( $v ) ? round( min( 100, max( 0, (float) $v ) ), 2 ) : ( $allow_empty ? '' : 50 );
+        };
+        $out = [];
+        foreach ( is_array( $value ) ? array_values( $value ) : [] as $tag ) {
+            if ( count( $out ) >= max( 1, $max ) ) break;
+            $product = is_array( $tag ) ? absint( $tag['product'] ?? 0 ) : 0;
+            if ( ! $product ) continue;
+            $out[] = [
+                    'product' => $product,
+                    'x'       => $pct( $tag['x'] ?? 50, false ),
+                    'y'       => $pct( $tag['y'] ?? 50, false ),
+                    'mx'      => $pct( $tag['mx'] ?? '', true ),
+                    'my'      => $pct( $tag['my'] ?? '', true ),
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Sanitizes one (non-responsive) value. $allow_empty: '' is a valid,
      * meaningful value (a tablet/mobile value inheriting from the device above).
      */
@@ -160,6 +186,9 @@ trait SB_Sanitizers {
 
             case 'email':
                 return sanitize_email( is_scalar( $value ) ? (string) $value : '' );
+
+            case 'product_tags':
+                return self::sanitize_product_tags( $value, (int) ( $spec['max_items'] ?? 6 ) );
 
             case 'number':
                 if ( $allow_empty && ( $value === '' || $value === null ) ) return '';
