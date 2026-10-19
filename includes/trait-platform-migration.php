@@ -41,6 +41,8 @@ trait Qwoo_Platform_Migration {
         'reviews'         => [ 'Reviews', 'reviews' ],
         'post_categories' => [ 'Blog categories', 'blog' ],
         'posts'           => [ 'Blog posts', 'blog' ],
+        // Only when the source is a store file (trait-platform-package.php).
+        'builder'         => [ 'Store builder', 'builder' ],
     ];
 
     private static $mig_options = [ 'orders', 'coupons', 'reviews', 'blog', 'remove_existing' ];
@@ -91,8 +93,17 @@ trait Qwoo_Platform_Migration {
     /** The phases this move runs, in order. */
     private static function mig_run_phases( array $what ) {
         $out = [];
+        // A store file: only the phases of the parts chosen.
+        $package = in_array( 'package', $what, true );
         foreach ( self::$mig_phases as $key => [ $label, $part ] ) {
-            if ( $part === 'always' || in_array( $part, $what, true ) ) {
+            if ( $package ) {
+                $need = self::$mig_package_parts[ $key ] ?? '';
+                if ( $need !== '' && in_array( $need, $what, true ) ) {
+                    $out[] = $key;
+                }
+                continue;
+            }
+            if ( $part !== 'builder' && ( $part === 'always' || in_array( $part, $what, true ) ) ) {
                 $out[] = $key;
             }
         }
@@ -104,6 +115,7 @@ trait Qwoo_Platform_Migration {
         $c = (array) ( $s['summary']['counts'] ?? [] );
         switch ( $phase ) {
             case 'settings':
+            case 'builder':
                 return 1;
             case 'remove':
                 return count( (array) ( $s['remove_ids'] ?? [] ) );
@@ -127,7 +139,7 @@ trait Qwoo_Platform_Migration {
             $done     = (array) ( $s['counts'][ $key ] ?? [] );
             $phases[] = [
                 'key'     => $key,
-                'label'   => self::$mig_phases[ $key ][0],
+                'label'   => $key === 'remove' && in_array( 'package', $what, true ) ? 'Removing what isn\'t in the file (to the trash)' : self::$mig_phases[ $key ][0],
                 'total'   => self::mig_total( $key, $s ),
                 'done'    => (int) ( $done['done'] ?? 0 ),
                 'created' => (int) ( $done['created'] ?? 0 ),
@@ -137,6 +149,7 @@ trait Qwoo_Platform_Migration {
             ];
         }
         return [
+            'kind'              => (string) ( $s['source']['kind'] ?? 'mover' ),
             'connected'         => ! empty( $s['secret'] ),
             'status'            => (string) ( $s['status'] ?? 'checked' ), // checked | running | done | cancelled | failed
             'source'            => array_intersect_key( (array) $s['source'], array_flip( [ 'name', 'url', 'host' ] ) ),
@@ -171,7 +184,8 @@ trait Qwoo_Platform_Migration {
     /* ---------------- dashboard actions ---------------- */
 
     private static function action_migrate_status( array $params ) {
-        return self::mig_public();
+        $s = self::mig_state();
+        return ( $s['source']['kind'] ?? '' ) === 'package' && ( $s['status'] ?? '' ) !== 'running' ? self::mig_public( [] ) : self::mig_public( $s );
     }
 
     /** { code }: connects to the old site and reads what it has. */
@@ -433,6 +447,9 @@ trait Qwoo_Platform_Migration {
             }
         }
         wc_delete_product_transients();
+        if ( self::mig_is_package() ) {
+            Qwoo_Store_Package::import_mark( 'done' );
+        }
         // The old site's code stops working, and this store forgets it.
         $secret = self::mig_secret( self::$mig );
         if ( $secret !== '' ) {
@@ -449,6 +466,9 @@ trait Qwoo_Platform_Migration {
 
     /** Asks the old site for the current phase's next page. */
     private static function mig_fetch( $type, $limit = 0 ) {
+        if ( self::mig_is_package() ) {
+            return Qwoo_Store_Package::fetch( $type, (int) ( self::$mig['cursor'] ?? 0 ), $limit );
+        }
         $secret = self::mig_secret( self::$mig );
         if ( $secret === '' ) {
             return new WP_Error( 'qwoo_migration_code', 'The connection to your old site was lost. Paste a new code to go on.', [ 'status' => 400 ] );
@@ -629,11 +649,11 @@ trait Qwoo_Platform_Migration {
         $c   = [
             'title'       => mb_substr( sanitize_text_field( (string) ( $seo['title'] ?? '' ) ), 0, Qwoo_Seo::MAX_TITLE ),
             'description' => mb_substr( sanitize_text_field( (string) ( $seo['description'] ?? '' ) ), 0, Qwoo_Seo::MAX_DESCRIPTION ),
-            'image_id'    => 0,
+            'image_id'    => ! empty( $seo['image'] ) ? self::mig_image( $seo['image'] ) : 0,
             'keyphrase'   => mb_substr( sanitize_text_field( (string) ( $seo['keyphrase'] ?? '' ) ), 0, 100 ),
             'noindex'     => ! empty( $seo['noindex'] ),
         ];
-        if ( $c['title'] === '' && $c['description'] === '' && $c['keyphrase'] === '' && ! $c['noindex'] ) {
+        if ( $c['title'] === '' && $c['description'] === '' && $c['keyphrase'] === '' && ! $c['noindex'] && ! $c['image_id'] ) {
             return;
         }
         Qwoo_Seo::save( (int) $id, $kind, $c );
@@ -645,6 +665,12 @@ trait Qwoo_Platform_Migration {
      */
     private static function mig_image( $img ) {
         global $wpdb;
+        if ( self::mig_is_package() ) {
+            if ( is_string( $img ) && preg_match( '/^qwoo-pkg:(\d{1,12})$/', $img, $m ) ) {
+                $img = [ 'id' => (int) $m[1], 'package' => 1 ];
+            }
+            return is_array( $img ) && ! empty( $img['package'] ) ? self::mig_package_media( $img ) : 0;
+        }
         $url = is_array( $img ) ? (string) ( $img['url'] ?? '' ) : (string) $img;
         $url = esc_url_raw( $url, [ 'https', 'http' ] );
         if ( $url === '' ) {
@@ -726,7 +752,7 @@ trait Qwoo_Platform_Migration {
             update_option( $name, $value );
         }
         if ( get_woocommerce_currency() !== $old_currency ) {
-            self::mig_note( 'Your store\'s currency is now ' . get_woocommerce_currency() . ', like your old store.' );
+            self::mig_note( 'Your store\'s currency is now ' . get_woocommerce_currency() . ( self::mig_is_package() ? ', like the file\'s store.' : ', like your old store.' ) );
         }
 
         // Shipping classes.
@@ -784,6 +810,9 @@ trait Qwoo_Platform_Migration {
         $maps['zone'] = $zones;
 
         self::$mig['maps'] = $maps;
+        if ( self::mig_is_package() && is_array( $data['qwoo'] ?? null ) ) {
+            self::mig_package_settings( $data['qwoo'] );
+        }
         self::mig_count( 'settings', 'updated' );
         return true;
     }
@@ -880,9 +909,13 @@ trait Qwoo_Platform_Migration {
         $ids = array_values( (array) ( self::$mig['remove_ids'] ?? [] ) );
         $pos = (int) ( self::$mig['cursor'] ?? 0 );
         while ( $pos < count( $ids ) && self::mig_time_left() > 3 ) {
-            $product = wc_get_product( (int) $ids[ $pos ] );
-            if ( $product && ! $product->get_meta( Qwoo_Migration::META ) ) {
+            $id   = (int) $ids[ $pos ];
+            $type = get_post_type( $id );
+            $product = $type === 'product' ? wc_get_product( $id ) : null;
+            if ( $product && ( self::mig_is_package() || ! $product->get_meta( Qwoo_Migration::META ) ) ) {
                 $product->delete( false ); // to the trash
+                self::mig_count( 'remove', 'updated' );
+            } elseif ( self::mig_is_package() && in_array( $type, [ 'post', 'shop_coupon' ], true ) && wp_trash_post( $id ) ) {
                 self::mig_count( 'remove', 'updated' );
             } else {
                 self::mig_count( 'remove', 'skipped' );
@@ -949,6 +982,10 @@ trait Qwoo_Platform_Migration {
                 self::mig_seo( $id, 'term', $t['seo'] ?? [] );
             } elseif ( $taxonomy === 'category' ) {
                 self::mig_remember_path( 'term', $id, $t['link'] ?? '', 'blog/category/' . $term->slug );
+                if ( self::mig_is_package() ) self::mig_seo( $id, 'term', $t['seo'] ?? [] );
+            }
+            if ( in_array( $taxonomy, [ 'product_cat', 'product_tag', 'category' ], true ) ) {
+                self::mig_save_i18n( 'term', $id, $t['i18n'] ?? [], true );
             }
         }
         self::$mig_last_state = $state;
@@ -1100,8 +1137,9 @@ trait Qwoo_Platform_Migration {
         if ( in_array( $p['catalog_visibility'] ?? '', [ 'visible', 'catalog', 'search', 'hidden' ], true ) ) {
             $product->set_catalog_visibility( $p['catalog_visibility'] );
         }
-        $product->set_description( self::mig_html( $p['description'] ?? '' ) );
-        $product->set_short_description( self::mig_html( $p['short_description'] ?? '' ) );
+        $text = static fn( $html ) => self::mig_html( self::mig_is_package() ? self::mig_content_images( (string) $html ) : $html );
+        $product->set_description( $text( $p['description'] ?? '' ) );
+        $product->set_short_description( $text( $p['short_description'] ?? '' ) );
         $product->set_sold_individually( ! empty( $p['sold_individually'] ) );
         $product->set_reviews_allowed( ! array_key_exists( 'reviews_allowed', $p ) || ! empty( $p['reviews_allowed'] ) );
         $product->set_purchase_note( wp_kses_post( (string) ( $p['purchase_note'] ?? '' ) ) );
@@ -1159,6 +1197,13 @@ trait Qwoo_Platform_Migration {
 
         if ( $type === 'variable' ) {
             self::mig_variations( $product, (array) ( $p['variations'] ?? [] ), $name );
+        }
+        if ( self::mig_is_package() ) {
+            self::mig_save_i18n( 'product', $id, $p['i18n'] ?? [] );
+            // The gallery's order with its videos (photos stay WooCommerce's gallery).
+            $order = array_values( array_filter( array_map( [ __CLASS__, 'mig_image' ], (array) ( $p['media_order'] ?? [] ) ) ) );
+            $has_video = (bool) array_filter( $order, static fn( $m ) => strpos( (string) get_post_mime_type( $m ), 'video/' ) === 0 );
+            $has_video ? update_post_meta( $id, Qwoo_Media_Support::GALLERY_META, implode( ',', $order ) ) : delete_post_meta( $id, Qwoo_Media_Support::GALLERY_META );
         }
         wc_delete_product_transients( $id );
         return $state;
@@ -1791,6 +1836,7 @@ trait Qwoo_Platform_Migration {
         $cover ? set_post_thumbnail( $id, $cover ) : delete_post_thumbnail( $id );
         self::mig_remember_path( 'post', $id, $p['link'] ?? '', 'blog/' . get_post_field( 'post_name', $id ) );
         self::mig_seo( $id, 'post', $p['seo'] ?? [] );
+        self::mig_save_i18n( 'post', $id, $p['i18n'] ?? [] );
         return $state;
     }
 }

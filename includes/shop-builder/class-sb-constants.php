@@ -170,10 +170,10 @@ abstract class Shop_Builder_Constants {
     const BACKGROUND_FIELDS = [
             'bg_type' => [ 'type' => 'select', 'label' => 'Background', 'tab' => 'style', 'group' => 'Background',
                     'options' => [ 'none' => 'None', 'color' => 'Color', 'gradient' => 'Gradient', 'image' => 'Image', 'slideshow' => 'Slideshow (several images)', 'video' => 'Video' ], 'default' => 'none' ],
-            'bg_color' => [ 'type' => 'color', 'label' => 'Background Color', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'color' ] ],
-            'bg_gradient_color1' => [ 'type' => 'color', 'label' => 'Gradient Start', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'gradient' ] ],
-            'bg_gradient_color2' => [ 'type' => 'color', 'label' => 'Gradient End', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'gradient' ] ],
-            'bg_gradient_angle' => [ 'type' => 'number', 'label' => 'Gradient Angle (°)', 'tab' => 'style', 'group' => 'Background', 'min' => 0, 'max' => 360, 'default' => 180,
+            'bg_color' => [ 'type' => 'color', 'label' => 'Background Color', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'screens' => true, 'show_if' => [ 'bg_type' => 'color' ] ],
+            'bg_gradient_color1' => [ 'type' => 'color', 'label' => 'Gradient Start', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'screens' => true, 'show_if' => [ 'bg_type' => 'gradient' ] ],
+            'bg_gradient_color2' => [ 'type' => 'color', 'label' => 'Gradient End', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'screens' => true, 'show_if' => [ 'bg_type' => 'gradient' ] ],
+            'bg_gradient_angle' => [ 'type' => 'number', 'label' => 'Gradient Angle (°)', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'screens' => true, 'min' => 0, 'max' => 360, 'default' => 180,
                     'show_if' => [ 'bg_type' => 'gradient' ] ],
             'bg_image' => [ 'type' => 'image', 'label' => 'Background Image', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'show_if' => [ 'bg_type' => 'image' ],
                     'help' => 'Pick another image for tablets or phones, or leave it empty to use the bigger screen\'s image.' ],
@@ -191,6 +191,8 @@ abstract class Shop_Builder_Constants {
             'bg_slide_effect' => [ 'type' => 'select', 'label' => 'Change Effect', 'tab' => 'style', 'group' => 'Background', 'default' => 'zoom',
                     'options' => [ 'fade' => 'Fade', 'zoom' => 'Fade with a slow zoom' ], 'show_if' => [ 'bg_type' => 'slideshow' ] ],
             'bg_slide_counter' => [ 'type' => 'toggle', 'label' => 'Show a counter (01 / 03) and a progress line', 'tab' => 'style', 'group' => 'Background',
+                    'show_if' => [ 'bg_type' => 'slideshow' ] ],
+            'bg_slide_arrows' => [ 'type' => 'toggle', 'label' => 'Show arrows to change the image', 'tab' => 'style', 'group' => 'Background',
                     'show_if' => [ 'bg_type' => 'slideshow' ] ],
             'bg_video_source' => [ 'type' => 'select', 'label' => 'Video Source', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'video' ],
                     'options' => [ 'upload' => 'Upload (media library)', 'youtube' => 'YouTube', 'vimeo' => 'Vimeo' ], 'default' => 'upload' ],
@@ -217,8 +219,8 @@ abstract class Shop_Builder_Constants {
                     'placeholder' => 'e.g. 70% or 40px', 'show_if' => [ 'bg_type' => [ 'image', 'slideshow', 'video' ], 'bg_image_position' => 'custom' ],
                     'help' => 'From the top edge. 0% = top, 50% = center, 100% = bottom.' ],
             'bg_fixed' => [ 'type' => 'toggle', 'label' => 'Fixed (parallax) on desktop', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => 'image' ] ],
-            'bg_overlay_color' => [ 'type' => 'color', 'label' => 'Overlay Color', 'tab' => 'style', 'group' => 'Background', 'show_if' => [ 'bg_type' => [ 'image', 'slideshow', 'video' ] ] ],
-            'bg_overlay_opacity' => [ 'type' => 'number', 'label' => 'Overlay Opacity (%)', 'tab' => 'style', 'group' => 'Background', 'min' => 0, 'max' => 100, 'default' => 50,
+            'bg_overlay_color' => [ 'type' => 'color', 'label' => 'Overlay Color', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'screens' => true, 'show_if' => [ 'bg_type' => [ 'image', 'slideshow', 'video' ] ] ],
+            'bg_overlay_opacity' => [ 'type' => 'number', 'label' => 'Overlay Opacity (%)', 'tab' => 'style', 'group' => 'Background', 'responsive' => true, 'screens' => true, 'min' => 0, 'max' => 100, 'default' => 50,
                     'show_if' => [ 'bg_type' => [ 'image', 'slideshow', 'video' ] ] ],
     ];
 
@@ -227,19 +229,19 @@ abstract class Shop_Builder_Constants {
      * Rendered by buildShadow() in the frontend's useSectionStyle.js.
      */
     const SHADOW_FIELDS = [
-            'shadow' => [ 'type' => 'toggle', 'label' => 'Add a shadow', 'tab' => 'style', 'group' => 'Shadow' ],
-            'shadow_x' => [ 'type' => 'length', 'label' => 'Horizontal Offset', 'tab' => 'style', 'group' => 'Shadow', 'allow_negative' => true,
+            'shadow' => [ 'type' => 'toggle', 'label' => 'Add a shadow', 'tab' => 'style', 'group' => 'Shadow', 'responsive' => true, 'screens' => true ],
+            'shadow_x' => [ 'type' => 'length', 'label' => 'Horizontal Offset', 'tab' => 'style', 'group' => 'Shadow', 'responsive' => true, 'screens' => true, 'allow_negative' => true,
                     'default' => '0px', 'show_if' => [ 'shadow' => true ] ],
-            'shadow_y' => [ 'type' => 'length', 'label' => 'Vertical Offset', 'tab' => 'style', 'group' => 'Shadow', 'allow_negative' => true,
+            'shadow_y' => [ 'type' => 'length', 'label' => 'Vertical Offset', 'tab' => 'style', 'group' => 'Shadow', 'responsive' => true, 'screens' => true, 'allow_negative' => true,
                     'default' => '8px', 'show_if' => [ 'shadow' => true ] ],
-            'shadow_blur' => [ 'type' => 'length', 'label' => 'Blur', 'tab' => 'style', 'group' => 'Shadow',
+            'shadow_blur' => [ 'type' => 'length', 'label' => 'Blur', 'tab' => 'style', 'group' => 'Shadow', 'responsive' => true, 'screens' => true,
                     'default' => '24px', 'show_if' => [ 'shadow' => true ] ],
-            'shadow_spread' => [ 'type' => 'length', 'label' => 'Spread', 'tab' => 'style', 'group' => 'Shadow', 'allow_negative' => true,
+            'shadow_spread' => [ 'type' => 'length', 'label' => 'Spread', 'tab' => 'style', 'group' => 'Shadow', 'responsive' => true, 'screens' => true, 'allow_negative' => true,
                     'default' => '0px', 'show_if' => [ 'shadow' => true ] ],
-            'shadow_color' => [ 'type' => 'color', 'label' => 'Shadow Color', 'tab' => 'style', 'group' => 'Shadow',
+            'shadow_color' => [ 'type' => 'color', 'label' => 'Shadow Color', 'tab' => 'style', 'group' => 'Shadow', 'responsive' => true, 'screens' => true,
                     'default' => '#0000001f', 'show_if' => [ 'shadow' => true ],
                     'help' => 'Pick a colour with some transparency for a soft shadow.' ],
-            'shadow_inset' => [ 'type' => 'toggle', 'label' => 'Inside the box (inset)', 'tab' => 'style', 'group' => 'Shadow', 'show_if' => [ 'shadow' => true ] ],
+            'shadow_inset' => [ 'type' => 'toggle', 'label' => 'Inside the box (inset)', 'tab' => 'style', 'group' => 'Shadow', 'responsive' => true, 'screens' => true, 'show_if' => [ 'shadow' => true ] ],
     ];
 
     /* ------------------------------------------------------------------
@@ -280,8 +282,8 @@ abstract class Shop_Builder_Constants {
 
     ] + self::BACKGROUND_FIELDS + [
 
-            'text_color' => [ 'type' => 'color', 'label' => 'Default Text Color', 'tab' => 'style', 'group' => 'Colors & Border' ],
-            'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Colors & Border', 'placeholder' => 'e.g. 12px' ],
+            'text_color' => [ 'type' => 'color', 'label' => 'Default Text Color', 'tab' => 'style', 'group' => 'Colors & Border', 'responsive' => true, 'screens' => true ],
+            'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Colors & Border', 'responsive' => true, 'screens' => true, 'placeholder' => 'e.g. 12px' ],
 
     ] + self::SHADOW_FIELDS + [
 
@@ -310,7 +312,7 @@ abstract class Shop_Builder_Constants {
     const BLOCK_COMMON_FIELDS = [
             'box_padding' => [ 'type' => 'sides', 'label' => 'Inner Padding', 'tab' => 'style', 'group' => 'Box', 'responsive' => true,
                     'help' => 'Space between the block\'s edge (or background) and its content.' ],
-            'box_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Box', 'placeholder' => 'e.g. 12px' ],
+            'box_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Box', 'responsive' => true, 'screens' => true, 'placeholder' => 'e.g. 12px' ],
     ] + self::SHADOW_FIELDS + self::BACKGROUND_FIELDS + [
             'margin_top' => [ 'type' => 'length', 'label' => 'Space Above', 'tab' => 'advanced', 'group' => 'Spacing', 'responsive' => true, 'allow_negative' => true ],
             'margin_bottom' => [ 'type' => 'length', 'label' => 'Space Below', 'tab' => 'advanced', 'group' => 'Spacing', 'responsive' => true, 'allow_negative' => true ],

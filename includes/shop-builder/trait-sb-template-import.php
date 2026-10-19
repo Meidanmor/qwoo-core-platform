@@ -454,7 +454,18 @@ trait SB_Template_Import {
 
     private static function reverse_fields( array $specs, $data, array $map ) {
         $out = [];
-        foreach ( is_array( $data ) ? $data : [] as $key => $value ) {
+        $data = is_array( $data ) ? $data : [];
+        // Looks per screen size come back as { desktop, tablet, mobile } ('' = same as the bigger screen).
+        $screens = is_array( $data['_screens'] ?? null ) ? $data['_screens'] : [];
+        unset( $data['_screens'] );
+        foreach ( $screens as $key => $v ) {
+            if ( empty( $specs[ $key ]['screens'] ) || ! is_array( $v ) || ! array_key_exists( $key, $data ) ) continue;
+            $d = $data[ $key ];
+            $t = $v['tablet'] ?? $d;
+            $m = $v['mobile'] ?? $t;
+            $data[ $key ] = [ 'desktop' => $d, 'tablet' => $t === $d ? '' : $t, 'mobile' => $m === $t ? '' : $m ];
+        }
+        foreach ( $data as $key => $value ) {
             $spec = $specs[ $key ] ?? null;
             $type = $spec['type'] ?? '';
 

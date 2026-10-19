@@ -226,6 +226,15 @@
                 if (spec.type === 'image' || spec.type === 'video') value = value ? F.imagePayload(value) : null;
                 if (spec.type === 'datetime') value = F.datetimeToIso(value);
                 if (spec.responsive) value = F.resolveResponsive(value, spec.type);
+                if (spec.screens && F.isDeviceMap(value)) {
+                    // Desktop value + _screens[key] when another screen size differs (mirror of PHP output_fields()).
+                    out[key] = value.desktop;
+                    if (value.tablet !== value.desktop || value.mobile !== value.desktop) {
+                        out._screens = out._screens || {};
+                        out._screens[key] = { tablet: value.tablet, mobile: value.mobile };
+                    }
+                    return;
+                }
                 out[key] = value;
             });
             return out;
@@ -352,6 +361,12 @@
                 }
 
                 case 'toggle':
+                    if (device && device !== 'desktop') {
+                        // On a smaller screen: the same as the bigger screen, on, or off.
+                        const cur = value === '' ? '' : (value ? '1' : '0');
+                        const opt = (v, label) => `<option value="${v}"${cur === v ? ' selected' : ''}>${esc(label)}</option>`;
+                        return `<label class="sbf-toggle sbf-toggle--screens"><span>${esc(spec.label || key)}</span> <select class="sbf-input" data-toggle3="1"${dev}>${opt('', 'Same as the bigger screen')}${opt('1', 'On')}${opt('0', 'Off')}</select></label>`;
+                    }
                     return `<label class="sbf-toggle"><input type="checkbox" class="sbf-input qwoo-switch qwoo-switch--sm"${dev}${value ? ' checked' : ''} /> <span>${esc(spec.label || key)}</span></label>`;
 
                 case 'color':
@@ -717,6 +732,7 @@
 
         readInput: function ($input, spec) {
             if ($input.is(':checkbox')) return $input.is(':checked');
+            if ($input.data('toggle3')) return $input.val() === '' ? '' : $input.val() === '1';
             const v = $input.val();
             if (spec.type === 'number') return v === '' ? '' : Number(v);
             return v;

@@ -102,6 +102,8 @@ require_once QWOO_PATH . 'includes/class-reviews.php';
 require_once QWOO_PATH . 'includes/trait-platform-blog.php';
 require_once QWOO_PATH . 'includes/class-migration.php';
 require_once QWOO_PATH . 'includes/trait-platform-migration.php';
+require_once QWOO_PATH . 'includes/class-store-package.php';
+require_once QWOO_PATH . 'includes/trait-platform-package.php';
 require_once QWOO_PATH . 'includes/class-blog.php';
 require_once QWOO_PATH . 'includes/class-checkout-extras.php';
 require_once QWOO_PATH . 'includes/class-account-deletion.php';

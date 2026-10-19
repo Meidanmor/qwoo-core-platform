@@ -41,6 +41,7 @@ class Qwoo_Platform_Dashboard {
     use Qwoo_Platform_Reviews;
     use Qwoo_Platform_Blog;
     use Qwoo_Platform_Migration;
+    use Qwoo_Platform_Package;
 
     const KEY_OPTION   = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
@@ -142,6 +143,16 @@ class Qwoo_Platform_Dashboard {
         'migrate_run'           => 'action_migrate_run',
         'migrate_cancel'        => 'action_migrate_cancel',
         'migrate_forget'        => 'action_migrate_forget',
+        'package_status'         => 'action_package_status',
+        'package_export_start'   => 'action_package_export_start',
+        'package_export_step'    => 'action_package_export_step',
+        'package_chunk'          => 'action_package_chunk',
+        'package_export_discard' => 'action_package_export_discard',
+        'package_upload'         => 'action_package_upload',
+        'package_inspect'        => 'action_package_inspect',
+        'package_import_start'   => 'action_package_import_start',
+        'package_import_cancel'  => 'action_package_import_cancel',
+        'package_import_discard' => 'action_package_import_discard',
     ];
 
     const MAX_VIDEO_BYTES = 20971520; // 20 MB

@@ -151,6 +151,9 @@ trait SB_Sanitizers {
                     'product' => $product,
                     'x'       => $pct( $tag['x'] ?? 50, false ),
                     'y'       => $pct( $tag['y'] ?? 50, false ),
+                    // Own spots on tablets and phones ('' = the bigger screen's spot).
+                    'tx'      => $pct( $tag['tx'] ?? '', true ),
+                    'ty'      => $pct( $tag['ty'] ?? '', true ),
                     'mx'      => $pct( $tag['mx'] ?? '', true ),
                     'my'      => $pct( $tag['my'] ?? '', true ),
             ];
@@ -230,6 +233,8 @@ trait SB_Sanitizers {
                 return $first === null ? '' : (string) $first;
 
             case 'toggle':
+                // On a smaller screen, '' = the same as the bigger screen.
+                if ( $allow_empty && ( $value === '' || $value === null ) ) return '';
                 return ! empty( $value ) && $value !== 'false' && $value !== '0';
 
             case 'image':
@@ -546,6 +551,17 @@ trait SB_Sanitizers {
 
             if ( ! empty( $spec['responsive'] ) ) {
                 $value = self::resolve_responsive( $value, $type );
+            }
+
+            if ( ! empty( $spec['screens'] ) && is_array( $value ) ) {
+                // A look that can differ per screen size: published as the desktop value (what
+                // storefronts before per-screen looks read), plus _screens[key] = { tablet, mobile }
+                // only when another screen size differs.
+                $out[ $key ] = $value['desktop'] ?? '';
+                if ( ( $value['tablet'] ?? '' ) !== $out[ $key ] || ( $value['mobile'] ?? '' ) !== $out[ $key ] ) {
+                    $out['_screens'][ $key ] = [ 'tablet' => $value['tablet'] ?? '', 'mobile' => $value['mobile'] ?? '' ];
+                }
+                continue;
             }
 
             $out[ $key ] = $value;
