@@ -205,6 +205,7 @@ class Qwoo_Platform_Dashboard {
         'price'      => null,
         'price_desc' => null,
         'stock'      => null,
+        'best_selling' => null,
     ];
 
     public static function init() {
@@ -574,6 +575,7 @@ class Qwoo_Platform_Dashboard {
             'price_desc' => 'qwoo_lookup.max_price IS NULL, qwoo_lookup.max_price DESC',
             // Out of stock first, then the lowest tracked quantities.
             'stock'      => "qwoo_lookup.stock_status = 'outofstock' DESC, qwoo_lookup.stock_quantity IS NULL, qwoo_lookup.stock_quantity ASC",
+            'best_selling' => 'COALESCE(qwoo_lookup.total_sales, 0) DESC',
         ];
         $clauses['orderby'] = $orders[ $sort ] . ", {$wpdb->posts}.ID DESC";
         return $clauses;
@@ -2320,6 +2322,9 @@ class Qwoo_Platform_Dashboard {
             'quantity'     => $p->managing_stock() ? $p->get_stock_quantity() : null,
             'combinations' => $variable ? count( $p->get_children() ) : 0,
             'image'        => self::image_url( $p->get_image_id(), 'woocommerce_thumbnail' ),
+            'created'      => $p->get_date_created() ? $p->get_date_created()->getTimestamp() : null,
+            // WooCommerce's own count (paid orders; cancelled ones taken off).
+            'sold'         => (int) $p->get_total_sales(),
         ];
     }
 
