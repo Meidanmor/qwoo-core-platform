@@ -213,6 +213,11 @@ trait SB_Ajax {
         if ( isset( $new_options['menus'] ) ) {
             $updated_options['menus'] = $new_options['menus'];
         }
+        foreach ( [ 'loops', 'loops_default' ] as $key ) {
+            if ( isset( $new_options[ $key ] ) ) {
+                $updated_options[ $key ] = $new_options[ $key ];
+            }
+        }
 
         update_option( 'shop_builder_options', $updated_options );
         self::record_revision( $updated_options );

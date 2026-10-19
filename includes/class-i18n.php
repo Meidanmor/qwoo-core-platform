@@ -240,6 +240,11 @@ class Qwoo_I18n {
         'Seconds'                                                                                   => 'שניות',
         'This offer has ended.'                                                                     => 'המבצע הסתיים.',
         'View all'                                                                                  => 'לכל המוצרים',
+        // Card designs (loop templates): the blocks' starting texts.
+        'Add to cart'                                                                               => 'הוספה לעגלה',
+        'Choose options'                                                                            => 'בחירת אפשרויות',
+        '{count} products'                                                                          => '{count} מוצרים',
+        'Verified buyer'                                                                            => 'קנייה מאומתת',
         'Cart'                                                                                      => 'עגלה',
         'Wishlist'                                                                                  => 'רשימת משאלות',
         'Menu'                                                                                      => 'תפריט',

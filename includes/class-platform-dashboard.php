@@ -1562,7 +1562,10 @@ class Qwoo_Platform_Dashboard {
         if ( $lang !== '' ) {
             return Shop_Settings_Builder::platform_save_language( $lang, self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts, $sync );
         }
-        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts, $sync );
+        // Card designs (Store builder → Card designs): only saved from the main language.
+        $loops         = is_array( $params['loops'] ?? null ) ? self::to_arrays( $params['loops'] ) : null;
+        $loops_default = is_array( $params['loops_default'] ?? null ) ? self::to_arrays( $params['loops_default'] ) : null;
+        return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts, $sync, $loops, $loops_default );
     }
 
     private static function action_design_publish() {

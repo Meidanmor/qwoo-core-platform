@@ -246,7 +246,7 @@ trait SB_Package {
         }
 
         // Replace: everything the draft save knows, cleaned by its sanitizer.
-        $input = array_intersect_key( $in, array_flip( array_merge( self::$platform_option_groups, [ 'custom_pages', 'menus' ], self::sectionable_pages() ) ) );
+        $input = array_intersect_key( $in, array_flip( array_merge( self::$platform_option_groups, [ 'custom_pages', 'menus', 'loops', 'loops_default' ], self::sectionable_pages() ) ) );
         // Every page is sent, so a page the file has no sections or layouts for ends up with none.
         foreach ( self::sectionable_pages() as $page ) {
             $input[ $page ]             = is_array( $input[ $page ] ?? null ) ? $input[ $page ] : [];
@@ -257,6 +257,9 @@ trait SB_Package {
         }
         $input['custom_pages'] = is_array( $input['custom_pages'] ?? null ) ? $input['custom_pages'] : [];
         $input['menus']        = is_array( $input['menus'] ?? null ) ? $input['menus'] : [];
+        // Card designs (their sections were walked like a page's).
+        $input['loops']         = is_array( $input['loops'] ?? null ) ? $input['loops'] : [];
+        $input['loops_default'] = is_array( $input['loops_default'] ?? null ) ? $input['loops_default'] : [];
         // The app's name is this store's, not the file's.
         foreach ( [ 'name', 'short_name' ] as $key ) {
             if ( isset( $input['pwa'] ) && is_array( $input['pwa'] ) ) $input['pwa'][ $key ] = (string) ( $current['pwa'][ $key ] ?? '' );

@@ -228,6 +228,9 @@ trait SB_Github_Push {
         $allowed_pages = self::publishable_pages();
         $page_labels   = self::$push_page_labels;
 
+        // Card designs first: blocks that chose one carry its sections (output_blocks()).
+        $this->prepare_publish_loops( $batch, $options, $path_to_label, $kept_section_images );
+
         // The menus (Design → Menus): header.json "menu", footer.json "columns", and all menus in "menus".
         $menus = self::published_menus( $options );
         $options['header']            = is_array( $options['header'] ?? null ) ? $options['header'] : [];
@@ -251,6 +254,12 @@ trait SB_Github_Push {
 
         // checkout.json always goes out: it carries the legal pages the terms checkbox links to.
         $options['checkout'] = is_array( $options['checkout'] ?? null ) ? $options['checkout'] : [];
+
+        // shop.json / category.json always go out: they carry the product card (or its removal)
+        // even when those pages have no sections.
+        foreach ( [ 'shop', 'category' ] as $page_slug ) {
+            $options[ $page_slug ] = is_array( $options[ $page_slug ] ?? null ) ? $options[ $page_slug ] : [ 'sections' => [] ];
+        }
 
         foreach ( $allowed_pages as $page_slug ) {
             if ( ! isset( $options[ $page_slug ] ) ) continue;
@@ -361,6 +370,12 @@ trait SB_Github_Push {
             if ( isset( $page_data['layouts'] ) ) {
                 $resolver = $this->github_image_resolver( $batch, $label, $path_to_label, $kept_section_images );
                 $page_data['layouts'] = self::published_layouts( (array) $page_data['layouts'], $resolver );
+            }
+            if ( $page_slug === 'shop' || $page_slug === 'category' ) {
+                // The product card for these pages (Store builder → Card designs).
+                unset( $page_data['product_card'] );
+                $card = self::published_shop_card( $options );
+                if ( $card !== null ) $page_data['product_card'] = $card;
             }
             if ( $page_slug === 'checkout' ) {
                 // The terms and privacy pages the checkbox links to (only published ones).

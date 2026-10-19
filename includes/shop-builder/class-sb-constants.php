@@ -226,6 +226,78 @@ abstract class Shop_Builder_Constants {
                     'show_if' => [ 'bg_type' => [ 'image', 'slideshow', 'video' ] ] ],
     ];
 
+    /* ------------------------------------------------------------------
+       Loop templates (trait-sb-loops.php): the owner's own card designs
+       for products, categories, blog posts and reviews, built from
+       sections with that kind's blocks (pages 'loop_{type}').
+       ------------------------------------------------------------------ */
+    const LOOP_TYPES = [
+            'product'  => 'Products',
+            'category' => 'Categories',
+            'post'     => 'Blog posts',
+            'review'   => 'Reviews',
+    ];
+    const MAX_LOOPS = 30;
+
+    /** Text-style parts for a card's texts. */
+    const LOOP_TEXT_PARTS = [ 'font', 'size', 'weight', 'line_height', 'color', 'spacing', 'case' ];
+
+    /** Shared by the card blocks that show a text (name, summary, date…). */
+    const LOOP_TEXT_FIELDS = [
+            'tag' => [ 'type' => 'select', 'label' => 'HTML Tag', 'tab' => 'content', 'default' => 'p',
+                    'options' => [ 'h2' => 'Heading 2', 'h3' => 'Heading 3', 'h4' => 'Heading 4', 'p' => 'Paragraph', 'div' => 'Plain' ],
+                    'help' => 'For search engines and screen readers; the look comes from the Style tab.' ],
+            'max_lines' => [ 'type' => 'number', 'label' => 'Cut after this many lines', 'tab' => 'content', 'min' => 0, 'max' => 6, 'default' => 0,
+                    'help' => '0 shows all of it.' ],
+            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'group' => 'Layout', 'responsive' => true, 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+    ];
+
+    /** Stars (a product's rating, a review's stars). */
+    const LOOP_STARS_FIELDS = [
+            'star_color' => [ 'type' => 'color', 'label' => 'Star Color', 'tab' => 'style', 'group' => 'Stars' ],
+            'star_size' => [ 'type' => 'length', 'label' => 'Star Size', 'tab' => 'style', 'group' => 'Stars', 'responsive' => true, 'placeholder' => 'e.g. 14px' ],
+            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'group' => 'Stars', 'responsive' => true, 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+    ];
+
+    /** The image of a product, category or post card. */
+    const LOOP_IMAGE_FIELDS = [
+            'display' => [ 'type' => 'select', 'label' => 'Show the Image', 'tab' => 'content', 'default' => 'inline',
+                    'options' => [ 'inline' => 'In the card', 'background' => 'Behind the whole card' ],
+                    'help' => '"Behind the whole card" puts the other blocks over the image (e.g. a name at the bottom).' ],
+            'aspect_ratio' => [ 'type' => 'select', 'label' => 'Shape', 'tab' => 'style', 'group' => 'Image', 'responsive' => true, 'default' => '1/1',
+                    'options' => [ 'auto' => 'Original', '1/1' => 'Square (1:1)', '4/5' => 'Portrait (4:5)', '3/4' => 'Portrait (3:4)', '2/3' => 'Portrait (2:3)',
+                            '4/3' => 'Landscape (4:3)', '3/2' => 'Landscape (3:2)', '16/9' => 'Wide (16:9)', 'fill' => 'Fill the card\'s height' ],
+                    'help' => 'With "Behind the whole card" this is the card\'s shape. "Fill the card\'s height" stretches the image when the card is taller than its content.' ],
+            'image_height' => [ 'type' => 'length', 'label' => 'Fixed Height', 'tab' => 'style', 'group' => 'Image', 'responsive' => true,
+                    'placeholder' => 'e.g. 320px', 'help' => 'Takes the place of the shape.' ],
+            'object_fit' => [ 'type' => 'select', 'label' => 'Fit', 'tab' => 'style', 'group' => 'Image', 'default' => 'cover',
+                    'options' => [ 'cover' => 'Cover (crop to fill)', 'contain' => 'Contain (show the whole image)' ] ],
+            'image_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Image', 'responsive' => true, 'placeholder' => 'e.g. 8px' ],
+            'image_border' => [ 'type' => 'length', 'label' => 'Border Width', 'tab' => 'style', 'group' => 'Image', 'placeholder' => 'e.g. 1px' ],
+            'image_border_color' => [ 'type' => 'color', 'label' => 'Border Color', 'tab' => 'style', 'group' => 'Image' ],
+            'hover_effect' => [ 'type' => 'select', 'label' => 'When the Mouse Is Over the Card', 'tab' => 'style', 'group' => 'Image', 'default' => 'none',
+                    'options' => [ 'none' => 'Nothing', 'zoom' => 'Zoom in', 'darken' => 'Darken', 'swap' => 'Show the second photo (products)' ] ],
+            'overlay_color' => [ 'type' => 'color', 'label' => 'Shade Color', 'tab' => 'style', 'group' => 'Shade' ],
+            'overlay_style' => [ 'type' => 'select', 'label' => 'Shade', 'tab' => 'style', 'group' => 'Shade', 'default' => 'none',
+                    'options' => [ 'none' => 'None', 'full' => 'Even', 'bottom' => 'Darker at the bottom', 'top' => 'Darker at the top' ],
+                    'help' => 'Helps text over the image stand out.' ],
+            'overlay_opacity' => [ 'type' => 'number', 'label' => 'Shade Strength (%)', 'tab' => 'style', 'group' => 'Shade', 'min' => 0, 'max' => 100, 'default' => 40,
+                    'show_if' => [ 'overlay_style' => [ 'full', 'bottom', 'top' ] ] ],
+    ];
+
+    /**
+     * A border, shared by containers and every block: a width per side (only
+     * the bottom for a line under the box), a style and a colour. Rendered by
+     * setBorderVars() in the frontend's useSectionStyle.js.
+     */
+    const BORDER_FIELDS = [
+            'border_width' => [ 'type' => 'sides', 'label' => 'Border Width', 'tab' => 'style', 'group' => 'Border', 'responsive' => true,
+                    'help' => 'Each side on its own, e.g. 1px. Only the bottom draws a line under the box.' ],
+            'border_style' => [ 'type' => 'select', 'label' => 'Border Style', 'tab' => 'style', 'group' => 'Border', 'default' => 'solid',
+                    'options' => [ 'solid' => 'Solid', 'dashed' => 'Dashed', 'dotted' => 'Dotted', 'double' => 'Double' ] ],
+            'border_color' => [ 'type' => 'color', 'label' => 'Border Color', 'tab' => 'style', 'group' => 'Border', 'responsive' => true, 'screens' => true ],
+    ];
+
     /**
      * Box shadow, full control, shared by containers and every block.
      * Rendered by buildShadow() in the frontend's useSectionStyle.js.
@@ -287,7 +359,7 @@ abstract class Shop_Builder_Constants {
             'text_color' => [ 'type' => 'color', 'label' => 'Default Text Color', 'tab' => 'style', 'group' => 'Colors & Border', 'responsive' => true, 'screens' => true ],
             'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Colors & Border', 'responsive' => true, 'screens' => true, 'placeholder' => 'e.g. 12px' ],
 
-    ] + self::SHADOW_FIELDS + [
+    ] + self::BORDER_FIELDS + self::SHADOW_FIELDS + [
 
             // The whole section as one link (buttons and links inside it keep working).
             'link_url' => [ 'type' => 'url', 'label' => 'Make the whole section a link', 'tab' => 'style', 'group' => 'Link & hover',
@@ -315,7 +387,7 @@ abstract class Shop_Builder_Constants {
             'box_padding' => [ 'type' => 'sides', 'label' => 'Inner Padding', 'tab' => 'style', 'group' => 'Box', 'responsive' => true,
                     'help' => 'Space between the block\'s edge (or background) and its content.' ],
             'box_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Box', 'responsive' => true, 'screens' => true, 'placeholder' => 'e.g. 12px' ],
-    ] + self::SHADOW_FIELDS + self::BACKGROUND_FIELDS + [
+    ] + self::BORDER_FIELDS + self::SHADOW_FIELDS + self::BACKGROUND_FIELDS + [
             'margin_top' => [ 'type' => 'length', 'label' => 'Space Above', 'tab' => 'advanced', 'group' => 'Spacing', 'responsive' => true, 'allow_negative' => true ],
             'margin_bottom' => [ 'type' => 'length', 'label' => 'Space Below', 'tab' => 'advanced', 'group' => 'Spacing', 'responsive' => true, 'allow_negative' => true ],
             'width' => [ 'type' => 'length', 'label' => 'Block Width', 'tab' => 'advanced', 'group' => 'Size', 'responsive' => true,
@@ -514,7 +586,7 @@ abstract class Shop_Builder_Constants {
                             'text'       => [ 'type' => 'html', 'label' => 'Text', 'tab' => 'content' ],
                             'alignment'  => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
-                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'line_height', 'color' ], 'keys' => [ 'font' => 'font', 'size' => 'font_size', 'weight' => 'font_weight', 'line_height' => 'line_height', 'color' => 'text_color' ] ],
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'line_height', 'color', 'spacing', 'case' ], 'keys' => [ 'font' => 'font', 'size' => 'font_size', 'weight' => 'font_weight', 'line_height' => 'line_height', 'color' => 'text_color' ] ],
                     ],
             ],
 
@@ -533,6 +605,8 @@ abstract class Shop_Builder_Constants {
                                             'new_tab'  => [ 'type' => 'toggle', 'label' => 'Open link in a new tab' ],
                                             'hover_image' => [ 'type' => 'image', 'label' => 'Second image (optional)',
                                                     'help' => 'Shown on hover when the Hover Effect is "Show the second image".' ],
+                                            'solid_image' => [ 'type' => 'image', 'label' => 'Image on the solid header (optional)',
+                                                    'help' => 'Header only: a fixed header that turns solid when the page scrolls shows this one instead (e.g. a dark logo).' ],
                                             'tags' => self::PRODUCT_TAGS_FIELD + [ 'image_field' => 'image' ],
                                     ],
                             ],
@@ -637,7 +711,7 @@ abstract class Shop_Builder_Constants {
                             'accent_color'      => [ 'type' => 'color', 'label' => 'Accent Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary',
                                     'help' => 'Focused input borders, checked boxes/radios and the default button fill.' ],
                             'button_bg_color'   => [ 'type' => 'color', 'label' => 'Button Background', 'tab' => 'style', 'group' => 'Colors' ],
-                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Labels' ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Labels', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
                             'ts:input' => [ 'type' => 'text_style', 'label' => 'Input Text', 'parts' => [ 'font', 'size', 'color' ] ],
                             'ts:button' => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'keys' => [ 'size' => 'button_text_size', 'color' => 'button_text_color' ] ],
                             'ts:message' => [ 'type' => 'text_style', 'label' => 'Thank-You Message', 'parts' => [ 'font', 'size', 'color' ] ],
@@ -652,11 +726,133 @@ abstract class Shop_Builder_Constants {
                     'icon'   => 'products',
                     'fields' => [
                             'product_ids'    => [ 'type' => 'products', 'label' => 'Products', 'tab' => 'content' ],
+                            'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Card Design', 'tab' => 'content', 'default' => '' ],
                             'items_per_view' => [ 'type' => 'number', 'label' => 'Products Per Slide', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
                                     'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
                     ],
             ],
             /* ---- Dynamic blocks: only on their template page ('pages'), showing that page's content ---- */
+
+            /* ---- Loop template blocks: only in a card template of their kind (LOOP_TYPES), showing that card's item ---- */
+            'lp_image' => [
+                    'label' => 'Product Image', 'category' => 'dynamic', 'pages' => [ 'loop_product' ], 'icon' => 'format-image',
+                    'fields' => self::LOOP_IMAGE_FIELDS + [
+                            'show_badge' => [ 'type' => 'toggle', 'label' => 'Show the Sale / Sold out label', 'tab' => 'content', 'default' => true ],
+                            'badge_position' => [ 'type' => 'select', 'label' => 'Label Position', 'tab' => 'content', 'default' => 'top-start', 'show_if' => [ 'show_badge' => true ],
+                                    'options' => [ 'top-start' => 'Top, start', 'top-end' => 'Top, end', 'bottom-start' => 'Bottom, start', 'bottom-end' => 'Bottom, end' ] ],
+                            'show_wishlist' => [ 'type' => 'toggle', 'label' => 'Show the wishlist heart', 'tab' => 'content' ],
+                    ],
+            ],
+            'lp_title' => [
+                    'label' => 'Product Name', 'category' => 'dynamic', 'pages' => [ 'loop_product' ], 'icon' => 'title',
+                    'fields' => self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Name', 'default_font' => 'headings', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lp_price' => [
+                    'label' => 'Product Price', 'category' => 'dynamic', 'pages' => [ 'loop_product' ], 'icon' => 'products',
+                    'fields' => [
+                            'show_old' => [ 'type' => 'toggle', 'label' => 'Show the old price when on sale', 'tab' => 'content', 'default' => true ],
+                            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'group' => 'Layout', 'responsive' => true, 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:price' => [ 'type' => 'text_style', 'label' => 'Price' ],
+                            'ts:old' => [ 'type' => 'text_style', 'label' => 'Old Price', 'parts' => [ 'font', 'size', 'color' ] ],
+                    ],
+            ],
+            'lp_excerpt' => [
+                    'label' => 'Product Short Description', 'category' => 'dynamic', 'pages' => [ 'loop_product' ], 'icon' => 'article',
+                    'fields' => self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lp_category' => [
+                    'label' => 'Product Category', 'category' => 'dynamic', 'pages' => [ 'loop_product' ], 'icon' => 'category',
+                    'fields' => self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lp_rating' => [
+                    'label' => 'Product Rating', 'category' => 'dynamic', 'pages' => [ 'loop_product' ], 'icon' => 'star',
+                    'fields' => [
+                            'show_count' => [ 'type' => 'toggle', 'label' => 'Show the number of reviews', 'tab' => 'content', 'default' => true ],
+                    ] + self::LOOP_STARS_FIELDS,
+            ],
+            'lp_cart' => [
+                    'label' => 'Add to Cart Button', 'category' => 'dynamic', 'pages' => [ 'loop_product' ], 'icon' => 'cart',
+                    'fields' => [
+                            'text' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => 'Add to cart' ],
+                            'options_text' => [ 'type' => 'text', 'label' => 'Text for products with options', 'tab' => 'content', 'default' => 'Choose options',
+                                    'help' => 'Products with sizes or colours open their page instead.' ],
+                            'button_style' => [ 'type' => 'select', 'label' => 'Style', 'tab' => 'style', 'group' => 'Button', 'default' => 'primary',
+                                    'options' => [ 'primary' => 'Filled (main colour)', 'secondary' => 'Filled (second colour)', 'outline' => 'Outline', 'link' => 'Text link' ] ],
+                            'full_width' => [ 'type' => 'toggle', 'label' => 'Full width', 'tab' => 'style', 'group' => 'Button' ],
+                            'radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Button', 'placeholder' => 'e.g. 4px' ],
+                            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'group' => 'Button', 'responsive' => true, 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons' ],
+                    ],
+            ],
+
+            'lc_image' => [
+                    'label' => 'Category Image', 'category' => 'dynamic', 'pages' => [ 'loop_category' ], 'icon' => 'format-image',
+                    'fields' => self::LOOP_IMAGE_FIELDS,
+            ],
+            'lc_name' => [
+                    'label' => 'Category Name', 'category' => 'dynamic', 'pages' => [ 'loop_category' ], 'icon' => 'title',
+                    'fields' => self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Name', 'default_font' => 'headings', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lc_count' => [
+                    'label' => 'Number of Products', 'category' => 'dynamic', 'pages' => [ 'loop_category' ], 'icon' => 'products',
+                    'fields' => [
+                            'format' => [ 'type' => 'text', 'label' => 'Text', 'tab' => 'content', 'default' => '{count} products', 'help' => '{count} becomes the number.' ],
+                    ] + self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lc_description' => [
+                    'label' => 'Category Description', 'category' => 'dynamic', 'pages' => [ 'loop_category' ], 'icon' => 'article',
+                    'fields' => self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+
+            'lpo_image' => [
+                    'label' => 'Post Cover Image', 'category' => 'dynamic', 'pages' => [ 'loop_post' ], 'icon' => 'format-image',
+                    'fields' => self::LOOP_IMAGE_FIELDS,
+            ],
+            'lpo_title' => [
+                    'label' => 'Post Title', 'category' => 'dynamic', 'pages' => [ 'loop_post' ], 'icon' => 'title',
+                    'fields' => self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lpo_date' => [
+                    'label' => 'Post Date', 'category' => 'dynamic', 'pages' => [ 'loop_post' ], 'icon' => 'event',
+                    'fields' => self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lpo_excerpt' => [
+                    'label' => 'Post Summary', 'category' => 'dynamic', 'pages' => [ 'loop_post' ], 'icon' => 'article',
+                    'fields' => self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lpo_category' => [
+                    'label' => 'Post Category', 'category' => 'dynamic', 'pages' => [ 'loop_post' ], 'icon' => 'category',
+                    'fields' => self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+
+            'lr_stars' => [
+                    'label' => 'Review Stars', 'category' => 'dynamic', 'pages' => [ 'loop_review' ], 'icon' => 'star',
+                    'fields' => self::LOOP_STARS_FIELDS,
+            ],
+            'lr_text' => [
+                    'label' => 'Review Text', 'category' => 'dynamic', 'pages' => [ 'loop_review' ], 'icon' => 'format-quote',
+                    'fields' => [
+                            'quotes' => [ 'type' => 'toggle', 'label' => 'Add quotation marks', 'tab' => 'content' ],
+                    ] + self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lr_name' => [
+                    'label' => 'Reviewer Name', 'category' => 'dynamic', 'pages' => [ 'loop_review' ], 'icon' => 'title',
+                    'fields' => self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Name', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lr_verified' => [
+                    'label' => 'Verified Buyer Label', 'category' => 'dynamic', 'pages' => [ 'loop_review' ], 'icon' => 'check',
+                    'fields' => [
+                            'text' => [ 'type' => 'text', 'label' => 'Text', 'tab' => 'content', 'default' => 'Verified buyer',
+                                    'help' => 'Shows only on reviews marked "Verified buyer".' ],
+                    ] + self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+            'lr_product' => [
+                    'label' => 'Reviewed Product Link', 'category' => 'dynamic', 'pages' => [ 'loop_review' ], 'icon' => 'products',
+                    'fields' => [
+                            'suffix' => [ 'type' => 'text', 'label' => 'Text after the name', 'tab' => 'content', 'default' => ' ↗' ],
+                    ] + self::LOOP_TEXT_FIELDS + [ 'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => self::LOOP_TEXT_PARTS ] ],
+            ],
+
 
             'post_title' => [
                     'label'  => 'Post Title',
@@ -679,7 +875,7 @@ abstract class Shop_Builder_Constants {
                             'show_date'       => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
                             'show_categories' => [ 'type' => 'toggle', 'label' => 'Show the categories', 'tab' => 'content', 'default' => true ],
                             'align'           => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
-                            'ts:meta' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'color' ] ],
+                            'ts:meta' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'color', 'spacing', 'case' ] ],
                     ],
             ],
             'post_featured_image' => [
@@ -733,7 +929,7 @@ abstract class Shop_Builder_Constants {
                             'show_description' => [ 'type' => 'toggle', 'label' => 'Show the category\'s description', 'tab' => 'content', 'default' => true ],
                             'align'            => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
                             'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
-                            'ts:desc' => [ 'type' => 'text_style', 'label' => 'Description', 'parts' => [ 'font', 'size', 'color' ] ],
+                            'ts:desc' => [ 'type' => 'text_style', 'label' => 'Description', 'parts' => [ 'font', 'size', 'color', 'spacing', 'case' ] ],
                     ],
             ],
             'blog_categories' => [
@@ -753,13 +949,14 @@ abstract class Shop_Builder_Constants {
                     'icon'   => 'grid',
                     'fields' => [
                             'per_page'     => [ 'type' => 'number', 'label' => 'Posts per page', 'tab' => 'content', 'min' => 1, 'max' => 24, 'default' => 9 ],
+                            'card_template' => [ 'type' => 'loop_template', 'loop' => 'post', 'label' => 'Card Design', 'tab' => 'content', 'default' => '' ],
                             'columns'      => [ 'type' => 'number', 'label' => 'Posts Per Row', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 4,
                                     'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
                             'show_excerpt' => [ 'type' => 'toggle', 'label' => 'Show the summary', 'tab' => 'content', 'default' => true ],
                             'show_date'    => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
                             'show_image'   => [ 'type' => 'toggle', 'label' => 'Show the cover image', 'tab' => 'content', 'default' => true ],
                             'ts:card_title' => [ 'type' => 'text_style', 'label' => 'Post Titles', 'default_font' => 'headings' ],
-                            'ts:excerpt' => [ 'type' => 'text_style', 'label' => 'Summaries', 'parts' => [ 'font', 'size', 'color' ] ],
+                            'ts:excerpt' => [ 'type' => 'text_style', 'label' => 'Summaries', 'parts' => [ 'font', 'size', 'color', 'spacing', 'case' ] ],
                     ],
             ],
 
@@ -769,6 +966,7 @@ abstract class Shop_Builder_Constants {
                     'icon'   => 'article',
                     'fields' => [
                             'count'        => [ 'type' => 'number', 'label' => 'Posts', 'tab' => 'content', 'min' => 1, 'max' => 12, 'default' => 3 ],
+                            'card_template' => [ 'type' => 'loop_template', 'loop' => 'post', 'label' => 'Card Design', 'tab' => 'content', 'default' => '' ],
                             'columns'      => [ 'type' => 'number', 'label' => 'Posts Per Row', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 4,
                                     'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
                             'show_excerpt' => [ 'type' => 'toggle', 'label' => 'Show the summary', 'tab' => 'content', 'default' => true ],
@@ -776,7 +974,7 @@ abstract class Shop_Builder_Constants {
                             'button_label' => [ 'type' => 'text', 'label' => 'Link to the blog', 'tab' => 'content', 'default' => 'All posts',
                                     'help' => 'Leave empty for no link.' ],
                             'ts:card_title' => [ 'type' => 'text_style', 'label' => 'Post Titles', 'default_font' => 'headings' ],
-                            'ts:excerpt' => [ 'type' => 'text_style', 'label' => 'Summaries', 'parts' => [ 'font', 'size', 'color' ] ],
+                            'ts:excerpt' => [ 'type' => 'text_style', 'label' => 'Summaries', 'parts' => [ 'font', 'size', 'color', 'spacing', 'case' ] ],
                     ],
             ],
             'category_grid' => [
@@ -785,6 +983,10 @@ abstract class Shop_Builder_Constants {
                     'icon'   => 'category',
                     'fields' => [
                             'category_ids' => [ 'type' => 'categories', 'label' => 'Categories', 'tab' => 'content' ],
+                            'card_template' => [ 'type' => 'loop_template', 'loop' => 'category', 'label' => 'Card Design', 'tab' => 'content', 'default' => '' ],
+                            'columns' => [ 'type' => 'number', 'label' => 'Categories Per Row', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
+                                    'default' => [ 'desktop' => 4, 'tablet' => 2, 'mobile' => 2 ] ],
+                            'gap' => [ 'type' => 'length', 'label' => 'Gap Between Categories', 'tab' => 'style', 'group' => 'Layout', 'responsive' => true, 'placeholder' => '16px' ],
                     ],
             ],
             'testimonials' => [
@@ -794,6 +996,8 @@ abstract class Shop_Builder_Constants {
                     'fields' => [
                             'display_style'  => [ 'type' => 'select', 'label' => 'Display Style', 'tab' => 'content', 'default' => 'grid',
                                     'options' => [ 'grid' => 'Grid', 'carousel' => 'Carousel' ] ],
+                            'card_template' => [ 'type' => 'loop_template', 'loop' => 'review', 'label' => 'Card Design', 'tab' => 'content', 'default' => '' ],
+
                             'items_per_view' => [ 'type' => 'number', 'label' => 'Items Per Row / Slide', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
                                     'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
                             'items' => [ 'type' => 'repeater', 'label' => 'Testimonials', 'tab' => 'content', 'max_items' => 20,
@@ -803,11 +1007,14 @@ abstract class Shop_Builder_Constants {
                                             'rating'      => [ 'type' => 'select', 'label' => 'Rating', 'default' => '5',
                                                     'options' => [ '5' => '★★★★★', '4' => '★★★★', '3' => '★★★', '2' => '★★', '1' => '★' ] ],
                                             'review_text' => [ 'type' => 'textarea', 'label' => 'Review Text' ],
+                                            'verified'    => [ 'type' => 'toggle', 'label' => 'Verified buyer', 'help' => 'For card designs with a "Verified buyer" label.' ],
+                                            'product_label' => [ 'type' => 'text', 'label' => 'Product (optional)', 'placeholder' => 'e.g. Noa hoops' ],
+                                            'product_url' => [ 'type' => 'url', 'label' => 'Product Link (optional)', 'placeholder' => '/product/noa-hoops' ],
                                     ],
                             ],
                             'star_color' => [ 'type' => 'color', 'label' => 'Star Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'ts:name' => [ 'type' => 'text_style', 'label' => 'Names', 'default_font' => 'headings' ],
-                            'ts:review' => [ 'type' => 'text_style', 'label' => 'Reviews', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
+                            'ts:review' => [ 'type' => 'text_style', 'label' => 'Reviews', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
                     ],
             ],
             'advantages' => [
@@ -829,7 +1036,7 @@ abstract class Shop_Builder_Constants {
                                     'help' => 'Titles and descriptions, unless they have their own color below.' ],
                             'mobile_divider' => [ 'type' => 'toggle', 'label' => 'Line between cards on phones', 'tab' => 'style', 'group' => 'Colors', 'default' => true ],
                             'ts:title' => [ 'type' => 'text_style', 'label' => 'Card Titles' ],
-                            'ts:desc' => [ 'type' => 'text_style', 'label' => 'Descriptions', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
+                            'ts:desc' => [ 'type' => 'text_style', 'label' => 'Descriptions', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
                     ],
             ],
 
@@ -953,7 +1160,7 @@ abstract class Shop_Builder_Constants {
                             'accent_color'   => [ 'type' => 'color', 'label' => 'Icon / Divider Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'item_bg'        => [ 'type' => 'color', 'label' => 'Card Background', 'tab' => 'style', 'group' => 'Colors', 'show_if' => [ 'style' => 'boxed' ] ],
                             'ts:question' => [ 'type' => 'text_style', 'label' => 'Questions' ],
-                            'ts:answer' => [ 'type' => 'text_style', 'label' => 'Answers', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
+                            'ts:answer' => [ 'type' => 'text_style', 'label' => 'Answers', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
                     ],
             ],
 
@@ -977,7 +1184,7 @@ abstract class Shop_Builder_Constants {
                                     'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'default' ],
                             'active_color' => [ 'type' => 'color', 'label' => 'Active Tab Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary' ],
                             'ts:tab' => [ 'type' => 'text_style', 'label' => 'Tab Titles', 'keys' => [ 'color' => 'text_color' ] ],
-                            'ts:content' => [ 'type' => 'text_style', 'label' => 'Content', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
+                            'ts:content' => [ 'type' => 'text_style', 'label' => 'Content', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
                     ],
             ],
 
@@ -1024,6 +1231,8 @@ abstract class Shop_Builder_Constants {
                             'hide_out_of_stock' => [ 'type' => 'toggle', 'label' => 'Hide out-of-stock products', 'tab' => 'content' ],
                             'columns'      => [ 'type' => 'number', 'label' => 'Columns', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
                                     'default' => [ 'desktop' => 4, 'tablet' => 3, 'mobile' => 2 ] ],
+                            'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Card Design', 'tab' => 'content', 'default' => '' ],
+
                             'show_view_all' => [ 'type' => 'toggle', 'label' => 'Show a "View all" button', 'tab' => 'content' ],
                             'view_all_text' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => 'View all', 'show_if' => [ 'show_view_all' => true ] ],
                             'view_all_url'  => [ 'type' => 'url', 'label' => 'Button Link', 'tab' => 'content', 'default' => '/products', 'show_if' => [ 'show_view_all' => true ] ],
@@ -1462,7 +1671,12 @@ abstract class Shop_Builder_Constants {
             'weight'      => [ 'type' => 'select', 'label' => 'Weight', 'options' => self::FONT_WEIGHT_OPTIONS, 'default' => '' ],
             'line_height' => [ 'type' => 'length', 'label' => 'Line Height', 'responsive' => true, 'unitless' => true, 'placeholder' => 'e.g. 1.6' ],
             'color'       => [ 'type' => 'color', 'label' => 'Color' ],
+            'spacing'     => [ 'type' => 'length', 'label' => 'Letter Spacing', 'responsive' => true, 'allow_negative' => true, 'placeholder' => 'e.g. 0.1em or 2px' ],
+            'case'        => [ 'type' => 'select', 'label' => 'Letter Case', 'default' => '',
+                    'options' => [ '' => 'As typed', 'uppercase' => 'UPPERCASE', 'lowercase' => 'lowercase', 'capitalize' => 'Capitalize Words' ] ],
     ];
+    /** The parts a text style gets when it doesn't list its own. */
+    const TEXT_STYLE_DEFAULT_PARTS = [ 'font', 'size', 'weight', 'color', 'spacing', 'case' ];
 
     private static $block_schema = null;
 
@@ -1482,7 +1696,7 @@ abstract class Shop_Builder_Constants {
                     continue;
                 }
                 $prefix = substr( $key, 3 );
-                foreach ( $spec['parts'] ?? [ 'font', 'size', 'weight', 'color' ] as $part ) {
+                foreach ( $spec['parts'] ?? self::TEXT_STYLE_DEFAULT_PARTS as $part ) {
                     $field = self::TEXT_STYLE_PARTS[ $part ] + [ 'tab' => 'style', 'group' => $spec['label'] ];
                     $field['group'] = $spec['label'];
                     // The dashboard folds a text's settings under its name.

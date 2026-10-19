@@ -214,6 +214,11 @@ trait SB_Sanitizers {
                 // A brand font (Branding → Brand fonts), or '' for the item's default.
                 return Qwoo_Brand_Fonts::sanitize_choice( $value );
 
+            case 'loop_template':
+                // A card design (trait-sb-loops.php), or '' for the built-in card.
+                $value = is_scalar( $value ) ? trim( (string) $value ) : '';
+                return preg_match( '/^lt_[A-Za-z0-9]{6,20}$/', $value ) ? $value : '';
+
             case 'menu':
                 $value = is_scalar( $value ) ? trim( (string) $value ) : '';
                 return preg_match( '/^menu_[A-Za-z0-9_]{3,30}$/', $value ) ? $value : ( in_array( $value, [ 'menu_header', 'menu_footer' ], true ) ? $value : '' );
@@ -601,6 +606,9 @@ trait SB_Sanitizers {
             } else {
                 $row['style'] = self::output_fields( self::BLOCK_COMMON_FIELDS, $block['style'] ?? [], $image_cb );
                 $row['data']  = self::output_fields( $schema['fields'], $block['data'] ?? [], $image_cb );
+                // The card design it chose, ready to draw (trait-sb-loops.php).
+                $card = self::published_card( $type, (array) ( $block['data'] ?? [] ) );
+                if ( $card !== null ) $row['data']['card'] = $card;
             }
             $out[] = $row;
         }
@@ -669,6 +677,9 @@ trait SB_Sanitizers {
                     'sticky_mode' => in_array( $mode, [ 'sticky', 'fixed' ], true ) ? $mode : 'sticky',
                     'solid_bg'    => self::sanitize_color_value( $in_settings['solid_bg'] ?? ( $old_settings['solid_bg'] ?? '' ) ),
                     'solid_text'  => self::sanitize_color_value( $in_settings['solid_text'] ?? ( $old_settings['solid_text'] ?? '' ) ),
+                    // The header's top sections that leave with the page (an announcement bar), and the gap above it when it stays.
+                    'away_rows'   => max( 0, min( 3, (int) ( $in_settings['away_rows'] ?? ( $old_settings['away_rows'] ?? 0 ) ) ) ),
+                    'sticky_top'  => self::sanitize_css_length( $in_settings['sticky_top'] ?? ( $old_settings['sticky_top'] ?? '' ) ),
             ];
             if ( isset( $input['header']['navigation'] ) && is_array( $input['header']['navigation'] ) ) {
                 $nav = [];
@@ -738,6 +749,13 @@ trait SB_Sanitizers {
         }
         if ( isset( $input['menus'] ) ) {
             $clean['menus'] = $this->sanitize_menus( $input['menus'] );
+        }
+        // Card designs (trait-sb-loops.php); kept as stored when not sent.
+        if ( isset( $input['loops'] ) ) {
+            $clean['loops'] = $this->sanitize_loops( $input['loops'] );
+        }
+        if ( isset( $input['loops_default'] ) ) {
+            $clean['loops_default'] = self::sanitize_loops_default( $input['loops_default'], $clean['loops'] ?? (array) ( $existing['loops'] ?? [] ) );
         }
 
         // Checkout (its sections are set above: merged, not replaced)

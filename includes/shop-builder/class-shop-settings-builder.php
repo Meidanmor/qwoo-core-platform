@@ -21,6 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   trait-sb-template-import.php  Starter-template import from published files (platform stores)
  *   trait-sb-platform.php         The builder for the platform's owner dashboard (Design section)
  *   trait-sb-package.php          The Store builder's part of a store export / import file
+ *   trait-sb-loops.php            Card designs (loop templates) for products, categories, posts, reviews
  *   trait-sb-admin-fields.php     Builder mount points + data the JS builder needs
  *   trait-sb-admin-page.php       Menu, enqueue, and settings_page_html()
  */
@@ -43,6 +44,7 @@ require_once __DIR__ . '/trait-sb-layouts.php';
 require_once __DIR__ . '/trait-sb-store-pages.php';
 require_once __DIR__ . '/trait-sb-languages.php';
 require_once __DIR__ . '/trait-sb-package.php';
+require_once __DIR__ . '/trait-sb-loops.php';
 require_once __DIR__ . '/trait-sb-admin-fields.php';
 require_once __DIR__ . '/trait-sb-admin-page.php';
 
@@ -65,6 +67,7 @@ class Shop_Settings_Builder extends Shop_Builder_Constants {
     use SB_Store_Pages;
     use SB_Languages;
     use SB_Package;
+    use SB_Loops;
     use SB_Admin_Fields;
     use SB_Admin_Page;
 

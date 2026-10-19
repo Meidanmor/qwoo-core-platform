@@ -38,6 +38,7 @@ trait SB_Platform {
             self::collect_sections_refs( $pages[ $page_slug ], $refs );
         }
         $layouts = self::platform_layouts_data( $options, $pages, $refs );
+        $loops   = self::platform_loops_data( $all, $pages, $refs );
         $custom_pages = self::platform_pages_data( $options, $refs );
         foreach ( [ $options['home']['hero_image_id'] ?? 0, $options['branding']['logo_id'] ?? 0, $options['branding']['app_icon_id'] ?? 0 ] as $id ) {
             if ( (int) $id ) $refs['media'][ (int) $id ] = true;
@@ -58,6 +59,9 @@ trait SB_Platform {
             'menus'         => self::platform_menus_data( $options ),
             'layouts'       => $layouts,
             'layout_pages'  => self::LAYOUT_PAGES,
+            // Card designs: shared by every language, edited in the main one.
+            'loops'         => $loops,
+            'loops_default' => (object) ( $all['loops_default'] ?? [] ),
             'template_pages' => self::TEMPLATE_PAGES,
             'blog_categories' => self::blog_category_labels(),
             'schema'        => [
@@ -74,6 +78,8 @@ trait SB_Platform {
                 ],
                 'icon_sets'        => self::ICON_SETS,
                 'page_locations'   => self::PAGE_SECTION_LOCATIONS,
+                'loop_types'       => self::LOOP_TYPES,
+                'max_loops'        => self::MAX_LOOPS,
                 'padding_presets'  => self::SECTION_PADDING_PRESETS,
                 'contact_types'    => self::CONTACT_METHOD_TYPES,
                 'max_depth'        => self::MAX_NESTING_DEPTH,
@@ -114,6 +120,8 @@ trait SB_Platform {
                     'sticky_mode' => ( $o['header']['settings']['sticky_mode'] ?? '' ) === 'fixed' ? 'fixed' : 'sticky',
                     'solid_bg'    => (string) ( $o['header']['settings']['solid_bg'] ?? '' ),
                     'solid_text'  => (string) ( $o['header']['settings']['solid_text'] ?? '' ),
+                    'away_rows'   => (int) ( $o['header']['settings']['away_rows'] ?? 0 ),
+                    'sticky_top'  => (string) ( $o['header']['settings']['sticky_top'] ?? '' ),
                 ],
             ],
             'footer'   => [ 'footer_text' => (string) ( $o['footer']['footer_text'] ?? '' ) ],
@@ -167,8 +175,15 @@ trait SB_Platform {
      * Saves the dashboard's draft: the option groups and every page's
      * sections go through sanitize_options(), exactly like Save Draft.
      */
-    public static function platform_save( array $options, array $pages, ?array $custom_pages = null, ?array $menus = null, ?array $layouts = null, ?array $sync = null ) {
+    public static function platform_save( array $options, array $pages, ?array $custom_pages = null, ?array $menus = null, ?array $layouts = null, ?array $sync = null, ?array $loops = null, ?array $loops_default = null ) {
         $input = array_intersect_key( $options, array_flip( self::$platform_option_groups ) );
+        // Card designs: [ { id, type, name, sections } ] and { product: id }.
+        if ( $loops !== null ) {
+            $input['loops'] = $loops;
+        }
+        if ( $loops_default !== null ) {
+            $input['loops_default'] = $loops_default;
+        }
         if ( $custom_pages !== null ) {
             $input['custom_pages'] = $custom_pages;
         }
