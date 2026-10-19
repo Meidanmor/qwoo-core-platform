@@ -33,6 +33,7 @@
         testimonials: 'dashicons-format-quote',
         advantages: 'dashicons-awards',
         video: 'dashicons-video-alt3',
+        icon: 'dashicons-star-filled',
         icon_list: 'dashicons-editor-ul',
         faq: 'dashicons-editor-help',
         tabs: 'dashicons-index-card',

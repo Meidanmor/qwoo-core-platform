@@ -110,6 +110,115 @@ class Qwoo_Svg_Sanitizer {
 		}
 	}
 
+	private const INLINE_MAX_BYTES = 40 * 1024;
+
+	/**
+	 * The SVG made ready to sit inside a page (the Store builder's icons): cleaned
+	 * again, simple <style> class rules moved onto the elements (a <style> in a page
+	 * applies to the whole page), ids prefixed so two icons never share one, no
+	 * fixed size, hidden from screen readers. Null when it can't be done safely
+	 * (other CSS selectors, too big): the storefront then shows it as an image.
+	 * $recolor: every colour becomes currentColor, so the icon takes the text colour.
+	 */
+	public static function inline_markup( string $svg, string $prefix, bool $recolor = false ): ?string {
+		$clean = self::sanitize( $svg );
+		if ( $clean === null || strlen( $clean ) > self::INLINE_MAX_BYTES * 2 ) return null;
+		$prefix = preg_replace( '/[^A-Za-z0-9_-]/', '', $prefix );
+
+		$doc      = new DOMDocument();
+		$previous = libxml_use_internal_errors( true );
+		$loaded   = $doc->loadXML( $clean, LIBXML_NONET | LIBXML_COMPACT );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $previous );
+		if ( ! $loaded || ! $doc->documentElement ) return null;
+		$root = $doc->documentElement;
+
+		// <style> rules: only ".class" and element selectors, which can be written onto the elements.
+		$rules = [];
+		foreach ( iterator_to_array( $doc->getElementsByTagName( 'style' ) ) as $style ) {
+			$css = preg_replace( '/\/\*.*?\*\//s', '', (string) $style->textContent );
+			if ( strpos( $css, '@' ) !== false ) return null;
+			if ( trim( preg_replace( '/[^{}]*\{[^{}]*\}/', '', $css ) ) !== '' ) return null;
+			preg_match_all( '/([^{}]+)\{([^{}]*)\}/', $css, $m, PREG_SET_ORDER );
+			foreach ( $m as $rule ) {
+				$decls = trim( $rule[2] );
+				foreach ( explode( ',', $rule[1] ) as $sel ) {
+					$sel = trim( $sel );
+					if ( ! preg_match( '/^(\.[A-Za-z_][\w-]*|[a-z]+)$/i', $sel ) ) return null;
+					$rules[] = [ $sel, $decls ];
+				}
+			}
+			$style->parentNode->removeChild( $style );
+		}
+
+		$ids = [];
+		$all = iterator_to_array( $doc->getElementsByTagName( '*' ) );
+		foreach ( $all as $el ) {
+			if ( $el->hasAttribute( 'id' ) ) $ids[ $el->getAttribute( 'id' ) ] = true;
+		}
+		$swap = static function ( $value ) use ( $ids, $prefix ) {
+			return preg_replace_callback( '/#([\w.:-]+)/', static function ( $m ) use ( $ids, $prefix ) {
+				return isset( $ids[ $m[1] ] ) ? '#' . $prefix . '-' . $m[1] : $m[0];
+			}, $value );
+		};
+
+		foreach ( $all as $el ) {
+			$name = strtolower( $el->localName );
+			if ( $name === 'title' || $name === 'desc' ) {
+				if ( $el->parentNode ) $el->parentNode->removeChild( $el );
+				continue;
+			}
+			if ( $rules ) {
+				$classes = preg_split( '/\s+/', trim( (string) $el->getAttribute( 'class' ) ) );
+				$add     = '';
+				foreach ( $rules as [ $sel, $decls ] ) {
+					$hit = $sel[0] === '.' ? in_array( substr( $sel, 1 ), $classes, true ) : strtolower( $sel ) === $name;
+					if ( $hit && $decls !== '' ) $add .= rtrim( $decls, ';' ) . ';';
+				}
+				// The element's own style still wins, as it did over the class rules.
+				if ( $add !== '' ) $el->setAttribute( 'style', $add . (string) $el->getAttribute( 'style' ) );
+			}
+			$el->removeAttribute( 'class' );
+			if ( $el->hasAttribute( 'id' ) ) $el->setAttribute( 'id', $prefix . '-' . $el->getAttribute( 'id' ) );
+			foreach ( iterator_to_array( $el->attributes ) as $attr ) {
+				if ( $attr->nodeName === 'id' ) continue;
+				if ( strpos( $attr->value, '#' ) !== false ) $el->setAttribute( $attr->nodeName, $swap( $attr->value ) );
+			}
+		}
+
+		if ( $recolor ) {
+			$keep = '/^(none|transparent|currentcolor|inherit)$|^url\(/i';
+			foreach ( iterator_to_array( $doc->getElementsByTagName( '*' ) ) as $el ) {
+				foreach ( [ 'fill', 'stroke' ] as $prop ) {
+					if ( $el->hasAttribute( $prop ) && ! preg_match( $keep, trim( $el->getAttribute( $prop ) ) ) ) $el->setAttribute( $prop, 'currentColor' );
+				}
+				if ( $el->hasAttribute( 'style' ) ) {
+					$el->setAttribute( 'style', preg_replace_callback( '/\b(fill|stroke)\s*:\s*([^;]+)/i', static function ( $m ) use ( $keep ) {
+						return preg_match( $keep, trim( $m[2] ) ) ? $m[0] : $m[1] . ':currentColor';
+					}, $el->getAttribute( 'style' ) ) );
+				}
+			}
+			// Shapes with no colour of their own are black by default: make that the text colour too.
+			if ( ! $root->hasAttribute( 'fill' ) && ! preg_match( '/\bfill\s*:/i', (string) $root->getAttribute( 'style' ) ) ) $root->setAttribute( 'fill', 'currentColor' );
+		}
+
+		// Sized by the page's CSS, keeping its shape.
+		if ( ! $root->hasAttribute( 'viewBox' ) ) {
+			$w = (float) $root->getAttribute( 'width' );
+			$h = (float) $root->getAttribute( 'height' );
+			if ( $w <= 0 || $h <= 0 ) return null;
+			$root->setAttribute( 'viewBox', '0 0 ' . $w . ' ' . $h );
+		}
+		$root->removeAttribute( 'width' );
+		$root->removeAttribute( 'height' );
+		$root->setAttribute( 'aria-hidden', 'true' );
+		$root->setAttribute( 'focusable', 'false' );
+
+		$out = $doc->saveXML( $root );
+		if ( ! is_string( $out ) || $out === '' || strlen( $out ) > self::INLINE_MAX_BYTES ) return null;
+		return $out;
+	}
+
 	/** CSS with no imports, no remote or data URLs, no script. */
 	private static function css_is_safe( string $css ): bool {
 		$flat = strtolower( preg_replace( '/\\\\|\/\*.*?\*\/|[\s\x00-\x1f]+/s', '', $css ) );

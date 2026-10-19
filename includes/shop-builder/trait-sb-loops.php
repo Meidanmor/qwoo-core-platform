@@ -82,9 +82,16 @@ trait SB_Loops {
 
     /** A block's published `card`: the sections of the template it chose, or null. */
     private static function published_card( $type, array $data ) {
-        $id = (string) ( $data['card_template'] ?? '' );
+        // The carousel has one card field per kind of item it can show.
+        $field = 'card_template';
+        if ( $type === 'carousel' ) {
+            $source = $data['source'] ?? 'slides';
+            if ( $source === 'categories' ) $field = 'category_card_template';
+            elseif ( $source !== 'products' ) return null;
+        }
+        $id = (string) ( $data[ $field ] ?? '' );
         if ( $id === '' || empty( self::$publish_loops[ $id ] ) ) return null;
-        $spec = self::get_type_schema( $type )['fields']['card_template'] ?? null;
+        $spec = self::get_type_schema( $type )['fields'][ $field ] ?? null;
         if ( ! $spec || self::$publish_loops[ $id ]['type'] !== ( $spec['loop'] ?? '' ) ) return null;
         return self::$publish_loops[ $id ]['sections'];
     }

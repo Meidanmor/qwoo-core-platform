@@ -367,6 +367,11 @@ trait SB_Sanitizers {
             unset( $item );
         }
 
+        if ( $type === 'icon' ) {
+            if ( $data['icon'] === 'custom' && empty( $data['custom_icon'] ) ) $data['icon'] = 'star';
+            if ( $data['icon'] !== 'custom' ) $data['custom_icon'] = 0;
+        }
+
         if ( $type === 'testimonials' ) {
             foreach ( $data['items'] as &$item ) {
                 $item['rating'] = (int) $item['rating'];
@@ -609,10 +614,56 @@ trait SB_Sanitizers {
                 // The card design it chose, ready to draw (trait-sb-loops.php).
                 $card = self::published_card( $type, (array) ( $block['data'] ?? [] ) );
                 if ( $card !== null ) $row['data']['card'] = $card;
+                self::add_inline_svgs( $type, (array) ( $block['data'] ?? [] ), $row['data'] );
             }
             $out[] = $row;
         }
         return $out;
+    }
+
+    /**
+     * SVG icons published as code too (`svg` next to the image's url), so the
+     * storefront draws them in the page and can colour them. Per block type:
+     * [ repeater ('' = the block itself), image field, toggle that must be on
+     * (or null), the field that asks for the block's colour ].
+     */
+    private static $inline_svg_fields = [
+            'icon_list' => [ 'items', 'custom_icon', null, 'svg_recolor' ],
+            'icon'      => [ '', 'custom_icon', null, 'recolor' ],
+            'image_block' => [ 'images', 'image', 'svg_inline', 'svg_color' ],
+    ];
+
+    private static $inline_svg_cache = [];
+
+    private static function add_inline_svgs( $type, array $raw, array &$data ) {
+        $spec = self::$inline_svg_fields[ $type ] ?? null;
+        if ( ! $spec || ( $spec[2] && empty( $raw[ $spec[2] ] ) ) ) return;
+        [ $list, $field, , $recolor_field ] = $spec;
+        $recolor = ! empty( $raw[ $recolor_field ] );
+        if ( $list === '' ) {
+            $svg = self::inline_svg( (int) ( $raw[ $field ] ?? 0 ), $recolor );
+            if ( $svg !== null && is_array( $data[ $field ] ?? null ) ) $data[ $field ]['svg'] = $svg;
+            return;
+        }
+        // Published items are the stored items in the same order (output_fields keeps them all).
+        foreach ( array_values( (array) ( $raw[ $list ] ?? [] ) ) as $i => $item ) {
+            $svg = self::inline_svg( (int) ( $item[ $field ] ?? 0 ), $recolor );
+            if ( $svg !== null && is_array( $data[ $list ][ $i ][ $field ] ?? null ) ) $data[ $list ][ $i ][ $field ]['svg'] = $svg;
+        }
+    }
+
+    /** An SVG attachment's markup for the page (Qwoo_Svg_Sanitizer::inline_markup), or null. */
+    private static function inline_svg( $id, $recolor = false ) {
+        if ( $id <= 0 ) return null;
+        $key = $id . ( $recolor ? 'c' : '' );
+        if ( array_key_exists( $key, self::$inline_svg_cache ) ) return self::$inline_svg_cache[ $key ];
+        $svg  = null;
+        $file = get_post_mime_type( $id ) === 'image/svg+xml' ? get_attached_file( $id ) : '';
+        if ( $file && is_readable( $file ) && filesize( $file ) <= 512 * 1024 && class_exists( 'Qwoo_Svg_Sanitizer' ) ) {
+            $raw = file_get_contents( $file );
+            if ( is_string( $raw ) ) $svg = Qwoo_Svg_Sanitizer::inline_markup( $raw, 'i' . $id, $recolor );
+        }
+        return self::$inline_svg_cache[ $key ] = $svg;
     }
 
     /** Converts a page's stored sections to public shape (disabled sections dropped). */

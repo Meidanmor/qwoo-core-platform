@@ -633,6 +633,10 @@ abstract class Shop_Builder_Constants {
                             'alignment'    => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'group' => 'Size', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS, 'default' => 'center' ],
                             'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Border', 'placeholder' => 'e.g. 8px' ],
+                            'svg_inline' => [ 'type' => 'toggle', 'label' => 'Draw SVG images as code', 'tab' => 'style', 'group' => 'SVG',
+                                    'help' => 'SVG images become part of the page, so they can take a colour. Other images stay as they are.' ],
+                            'svg_color' => [ 'type' => 'color', 'label' => 'Recolour SVG', 'tab' => 'style', 'group' => 'SVG', 'show_if' => [ 'svg_inline' => true ],
+                                    'help' => 'Leave empty to keep the SVG\'s own colours.' ],
                             'ts:caption' => [ 'type' => 'text_style', 'label' => 'Captions' ],
                     ],
             ],
@@ -652,6 +656,8 @@ abstract class Shop_Builder_Constants {
                                     'options' => [ 'primary' => 'Primary (filled)', 'secondary' => 'Secondary (filled)', 'outline' => 'Outline', 'flat' => 'Text only', 'link' => 'Underlined link' ] ],
                             'size'      => [ 'type' => 'select', 'label' => 'Size', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'md',
                                     'options' => [ 'sm' => 'Small', 'md' => 'Medium', 'lg' => 'Large' ] ],
+                            'btn_padding' => [ 'type' => 'sides', 'label' => 'Button Padding', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true,
+                                    'help' => 'Space inside the button around its text. Replaces the size\'s padding where set (0 works too).' ],
                             'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Appearance', 'placeholder' => 'e.g. 999px for a pill' ],
                             'bg_color'   => [ 'type' => 'color', 'label' => 'Background Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'ts:label' => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'keys' => [ 'font' => 'font', 'size' => 'text_size', 'weight' => 'font_weight', 'color' => 'text_color' ] ],
@@ -711,10 +717,10 @@ abstract class Shop_Builder_Constants {
                             'accent_color'      => [ 'type' => 'color', 'label' => 'Accent Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary',
                                     'help' => 'Focused input borders, checked boxes/radios and the default button fill.' ],
                             'button_bg_color'   => [ 'type' => 'color', 'label' => 'Button Background', 'tab' => 'style', 'group' => 'Colors' ],
-                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Labels', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
-                            'ts:input' => [ 'type' => 'text_style', 'label' => 'Input Text', 'parts' => [ 'font', 'size', 'color' ] ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Labels', 'parts' => [ 'font', 'size', 'weight', 'line_height', 'color' ] ],
+                            'ts:input' => [ 'type' => 'text_style', 'label' => 'Input Text', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
                             'ts:button' => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'keys' => [ 'size' => 'button_text_size', 'color' => 'button_text_color' ] ],
-                            'ts:message' => [ 'type' => 'text_style', 'label' => 'Thank-You Message', 'parts' => [ 'font', 'size', 'color' ] ],
+                            'ts:message' => [ 'type' => 'text_style', 'label' => 'Thank-You Message', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
                     ],
             ],
 
@@ -753,7 +759,7 @@ abstract class Shop_Builder_Constants {
                             'show_old' => [ 'type' => 'toggle', 'label' => 'Show the old price when on sale', 'tab' => 'content', 'default' => true ],
                             'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'group' => 'Layout', 'responsive' => true, 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
                             'ts:price' => [ 'type' => 'text_style', 'label' => 'Price' ],
-                            'ts:old' => [ 'type' => 'text_style', 'label' => 'Old Price', 'parts' => [ 'font', 'size', 'color' ] ],
+                            'ts:old' => [ 'type' => 'text_style', 'label' => 'Old Price', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
                     ],
             ],
             'lp_excerpt' => [
@@ -875,7 +881,7 @@ abstract class Shop_Builder_Constants {
                             'show_date'       => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
                             'show_categories' => [ 'type' => 'toggle', 'label' => 'Show the categories', 'tab' => 'content', 'default' => true ],
                             'align'           => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
-                            'ts:meta' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'color', 'spacing', 'case' ] ],
+                            'ts:meta' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
                     ],
             ],
             'post_featured_image' => [
@@ -929,7 +935,7 @@ abstract class Shop_Builder_Constants {
                             'show_description' => [ 'type' => 'toggle', 'label' => 'Show the category\'s description', 'tab' => 'content', 'default' => true ],
                             'align'            => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
                             'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
-                            'ts:desc' => [ 'type' => 'text_style', 'label' => 'Description', 'parts' => [ 'font', 'size', 'color', 'spacing', 'case' ] ],
+                            'ts:desc' => [ 'type' => 'text_style', 'label' => 'Description', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
                     ],
             ],
             'blog_categories' => [
@@ -939,7 +945,7 @@ abstract class Shop_Builder_Constants {
                     'icon'   => 'category',
                     'fields' => [
                             'all_label' => [ 'type' => 'text', 'label' => 'Label for all posts', 'tab' => 'content', 'default' => 'All' ],
-                            'ts:link' => [ 'type' => 'text_style', 'label' => 'Links', 'parts' => [ 'font', 'size', 'weight' ] ],
+                            'ts:link' => [ 'type' => 'text_style', 'label' => 'Links', 'parts' => [ 'font', 'size', 'weight', 'line_height' ] ],
                     ],
             ],
             'blog_posts' => [
@@ -956,7 +962,7 @@ abstract class Shop_Builder_Constants {
                             'show_date'    => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => true ],
                             'show_image'   => [ 'type' => 'toggle', 'label' => 'Show the cover image', 'tab' => 'content', 'default' => true ],
                             'ts:card_title' => [ 'type' => 'text_style', 'label' => 'Post Titles', 'default_font' => 'headings' ],
-                            'ts:excerpt' => [ 'type' => 'text_style', 'label' => 'Summaries', 'parts' => [ 'font', 'size', 'color', 'spacing', 'case' ] ],
+                            'ts:excerpt' => [ 'type' => 'text_style', 'label' => 'Summaries', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
                     ],
             ],
 
@@ -974,7 +980,7 @@ abstract class Shop_Builder_Constants {
                             'button_label' => [ 'type' => 'text', 'label' => 'Link to the blog', 'tab' => 'content', 'default' => 'All posts',
                                     'help' => 'Leave empty for no link.' ],
                             'ts:card_title' => [ 'type' => 'text_style', 'label' => 'Post Titles', 'default_font' => 'headings' ],
-                            'ts:excerpt' => [ 'type' => 'text_style', 'label' => 'Summaries', 'parts' => [ 'font', 'size', 'color', 'spacing', 'case' ] ],
+                            'ts:excerpt' => [ 'type' => 'text_style', 'label' => 'Summaries', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
                     ],
             ],
             'category_grid' => [
@@ -1073,17 +1079,41 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
 
+            'icon' => [
+                    'label'    => 'Icon',
+                    'category' => 'basic',
+                    'icon'     => 'star-filled',
+                    'fields'   => [
+                            'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'general', 'default' => 'star' ],
+                            'custom_icon' => [ 'type' => 'image', 'label' => 'Your Own Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],
+                                    'help' => 'An SVG is drawn as code and can take the Icon Color. Other images show as they are.' ],
+                            'recolor'     => [ 'type' => 'toggle', 'label' => 'Give your SVG the Icon Color', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ] ],
+                            'link_url'    => [ 'type' => 'url', 'label' => 'Link (optional)', 'tab' => 'content', 'placeholder' => '/products or https://…' ],
+                            'new_tab'     => [ 'type' => 'toggle', 'label' => 'Open in a new tab', 'tab' => 'content' ],
+                            'label'       => [ 'type' => 'text', 'label' => 'Name for screen readers', 'tab' => 'content',
+                                    'help' => 'What the icon means or where the link goes, e.g. "Instagram". Leave empty for a decoration.' ],
+                            'alignment'   => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
+                                    'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
+
+                            'size'        => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'default' => '32px' ],
+                            'color'       => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Icon', 'default' => 'global:secondary' ],
+                            'hover_color' => [ 'type' => 'color', 'label' => 'Color on Hover', 'tab' => 'style', 'group' => 'Icon' ],
+                    ],
+            ],
+
             'icon_list' => [
                     'label'    => 'Icon List',
                     'category' => 'basic',
                     'fields'   => [
                             'items' => [ 'type' => 'repeater', 'label' => 'Items', 'tab' => 'content', 'max_items' => 30,
-                                    'require' => 'text', 'title_field' => 'text', 'item_label' => 'Item', 'add_label' => '+ Add Item',
+                                    'title_field' => 'text', 'item_label' => 'Item', 'add_label' => '+ Add Item',
                                     'fields' => [
                                             'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'icon_set' => 'general', 'default' => 'check' ],
                                             'custom_icon' => [ 'type' => 'image', 'label' => 'Custom Icon', 'show_if' => [ 'icon' => 'custom' ] ],
-                                            'text'        => [ 'type' => 'text', 'label' => 'Text' ],
+                                            'text'        => [ 'type' => 'text', 'label' => 'Text (optional)' ],
                                             'link_url'    => [ 'type' => 'url', 'label' => 'Link (optional)', 'placeholder' => '/shipping or https://…' ],
+                                            'label'       => [ 'type' => 'text', 'label' => 'Name for screen readers',
+                                                    'help' => 'For an icon without text, e.g. "Instagram".' ],
                                     ],
                             ],
                             'layout'    => [ 'type' => 'select', 'label' => 'Layout', 'tab' => 'content', 'responsive' => true, 'default' => 'vertical',
@@ -1095,6 +1125,7 @@ abstract class Shop_Builder_Constants {
                             'gap'        => [ 'type' => 'length', 'label' => 'Space Between Items', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'placeholder' => '12px' ],
                             'divider'    => [ 'type' => 'toggle', 'label' => 'Divider between items', 'tab' => 'style', 'group' => 'Size' ],
                             'icon_color' => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary' ],
+                            'svg_recolor' => [ 'type' => 'toggle', 'label' => 'Give your own SVG icons the Icon Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'keys' => [ 'size' => 'font_size' ] ],
                     ],
             ],
@@ -1291,7 +1322,15 @@ abstract class Shop_Builder_Constants {
                             'limit'        => [ 'type' => 'number', 'label' => 'Number of Products', 'tab' => 'content', 'min' => 1, 'max' => 24, 'default' => 8,
                                     'show_if' => [ 'source' => 'products', 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag' ] ] ],
                             'hide_out_of_stock' => [ 'type' => 'toggle', 'label' => 'Hide out-of-stock products', 'tab' => 'content', 'show_if' => [ 'source' => 'products' ] ],
+                            'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Card Design', 'tab' => 'content', 'default' => '',
+                                    'show_if' => [ 'source' => 'products' ] ],
+                            'category_card_template' => [ 'type' => 'loop_template', 'loop' => 'category', 'label' => 'Card Design', 'tab' => 'content', 'default' => '',
+                                    'show_if' => [ 'source' => 'categories' ] ],
 
+                            'row_style' => [ 'type' => 'select', 'label' => 'Carousel Style', 'tab' => 'content', 'responsive' => true, 'default' => 'whole',
+                                    'options' => [ 'whole' => 'Whole items only', 'peek' => 'Show part of the next item', 'center' => 'Centred, with parts of both sides' ],
+                                    'help' => 'A part of the next item tells visitors there is more to swipe.',
+                                    'show_if' => [ 'source' => [ 'images', 'logos', 'products', 'categories' ] ] ],
                             'items_per_view' => [ 'type' => 'number', 'label' => 'Items Per Slide', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 8,
                                     'default' => [ 'desktop' => 4, 'tablet' => 3, 'mobile' => 2 ], 'show_if' => [ 'source' => [ 'images', 'logos', 'products', 'categories' ] ] ],
                             'autoplay'         => [ 'type' => 'toggle', 'label' => 'Autoplay', 'tab' => 'content' ],
@@ -1299,6 +1338,8 @@ abstract class Shop_Builder_Constants {
                                     'show_if' => [ 'autoplay' => true ] ],
                             'loop'   => [ 'type' => 'toggle', 'label' => 'Loop back to the start', 'tab' => 'content', 'default' => true ],
                             'arrows' => [ 'type' => 'toggle', 'label' => 'Show arrows', 'tab' => 'content', 'default' => true ],
+                            'arrows_mobile' => [ 'type' => 'toggle', 'label' => 'Show arrows on phones', 'tab' => 'content', 'default' => true,
+                                    'show_if' => [ 'arrows' => true, 'source' => [ 'images', 'logos', 'products', 'categories' ] ] ],
                             'dots'   => [ 'type' => 'toggle', 'label' => 'Show dots', 'tab' => 'content', 'default' => true ],
                             'counter' => [ 'type' => 'toggle', 'label' => 'Show a counter (01 / 03) and a progress line', 'tab' => 'content',
                                     'show_if' => [ 'source' => 'slides' ] ],
@@ -1314,15 +1355,27 @@ abstract class Shop_Builder_Constants {
                                     'placeholder' => '16px', 'show_if' => [ 'source' => [ 'images', 'logos', 'products', 'categories' ] ] ],
                             'grayscale'     => [ 'type' => 'toggle', 'label' => 'Grayscale logos (color on hover)', 'tab' => 'style', 'group' => 'Size',
                                     'show_if' => [ 'source' => 'logos' ] ],
+                            'bleed_mobile'  => [ 'type' => 'toggle', 'label' => 'Run to the screen edge on phones', 'tab' => 'style', 'group' => 'Size',
+                                    'show_if' => [ 'source' => [ 'images', 'logos', 'products', 'categories' ] ] ],
+                            'arrows_position' => [ 'type' => 'select', 'label' => 'Arrow Position', 'tab' => 'style', 'group' => 'Arrows', 'default' => 'sides',
+                                    'options' => [ 'sides' => 'At both sides', 'top_end' => 'Together, above at the end', 'bottom_end' => 'Together, below at the end', 'bottom_center' => 'Together, below in the middle' ],
+                                    'show_if' => [ 'arrows' => true, 'source' => [ 'images', 'logos', 'products', 'categories' ] ] ],
+                            'arrow_style'   => [ 'type' => 'select', 'label' => 'Arrow Look', 'tab' => 'style', 'group' => 'Arrows', 'default' => 'plain',
+                                    'options' => [ 'plain' => 'Plain', 'outline' => 'Round, outlined', 'filled' => 'Round, filled', 'square' => 'Square, outlined' ],
+                                    'show_if' => [ 'arrows' => true, 'source' => [ 'images', 'logos', 'products', 'categories' ] ] ],
+                            'arrow_size'    => [ 'type' => 'length', 'label' => 'Arrow Size', 'tab' => 'style', 'group' => 'Arrows', 'placeholder' => 'e.g. 40px',
+                                    'show_if' => [ 'arrows' => true, 'source' => [ 'images', 'logos', 'products', 'categories' ] ] ],
+                            'arrow_bg'      => [ 'type' => 'color', 'label' => 'Arrow Background', 'tab' => 'style', 'group' => 'Arrows',
+                                    'show_if' => [ 'arrows' => true, 'arrow_style' => 'filled', 'source' => [ 'images', 'logos', 'products', 'categories' ] ] ],
                             'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Size', 'placeholder' => 'e.g. 12px' ],
                             'button_style'  => [ 'type' => 'select', 'label' => 'Slide Button Style', 'tab' => 'style', 'group' => 'Colors', 'default' => 'light',
                                     'options' => [ 'light' => 'Light (white)', 'secondary' => 'Secondary color', 'outline' => 'Outline' ], 'show_if' => [ 'source' => 'slides' ] ],
                             'control_color' => [ 'type' => 'color', 'label' => 'Arrows / Dots Color', 'tab' => 'style', 'group' => 'Colors', 'default' => 'global:secondary' ],
                             'button_size'   => [ 'type' => 'select', 'label' => 'Slide Button Size', 'tab' => 'style', 'group' => 'Colors', 'default' => 'lg',
                                     'options' => [ 'sm' => 'Small', 'md' => 'Medium', 'lg' => 'Large' ], 'show_if' => [ 'source' => 'slides' ] ],
-                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Slide Titles', 'parts' => [ 'font', 'size', 'weight' ], 'default_font' => 'headings', 'show_if' => [ 'source' => 'slides' ] ],
-                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Slide Text', 'parts' => [ 'font', 'size', 'weight' ], 'show_if' => [ 'source' => 'slides' ] ],
-                            'ts:button' => [ 'type' => 'text_style', 'label' => 'Slide Button Text', 'parts' => [ 'font', 'size', 'weight' ], 'default_font' => 'buttons', 'keys' => [ 'size' => 'button_text_size' ], 'show_if' => [ 'source' => 'slides' ] ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Slide Titles', 'parts' => [ 'font', 'size', 'weight', 'line_height' ], 'default_font' => 'headings', 'show_if' => [ 'source' => 'slides' ] ],
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Slide Text', 'parts' => [ 'font', 'size', 'weight', 'line_height' ], 'show_if' => [ 'source' => 'slides' ] ],
+                            'ts:button' => [ 'type' => 'text_style', 'label' => 'Slide Button Text', 'parts' => [ 'font', 'size', 'weight', 'line_height' ], 'default_font' => 'buttons', 'keys' => [ 'size' => 'button_text_size' ], 'show_if' => [ 'source' => 'slides' ] ],
                     ],
             ],
 
@@ -1445,7 +1498,7 @@ abstract class Shop_Builder_Constants {
                             'ts:link' => [
                                     'type'         => 'text_style',
                                     'label'        => 'Menu Links',
-                                    'parts'        => [ 'font', 'size', 'weight', 'color' ],
+                                    'parts'        => [ 'font', 'size', 'weight', 'line_height', 'color' ],
                                     'default_font' => 'text',
                             ],
                             'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Phone Button', 'responsive' => true, 'placeholder' => '14px', 'show_if' => [ 'enable_mobile_menu' => true ] ],
@@ -1676,7 +1729,7 @@ abstract class Shop_Builder_Constants {
                     'options' => [ '' => 'As typed', 'uppercase' => 'UPPERCASE', 'lowercase' => 'lowercase', 'capitalize' => 'Capitalize Words' ] ],
     ];
     /** The parts a text style gets when it doesn't list its own. */
-    const TEXT_STYLE_DEFAULT_PARTS = [ 'font', 'size', 'weight', 'color', 'spacing', 'case' ];
+    const TEXT_STYLE_DEFAULT_PARTS = [ 'font', 'size', 'weight', 'line_height', 'color', 'spacing', 'case' ];
 
     private static $block_schema = null;
 
