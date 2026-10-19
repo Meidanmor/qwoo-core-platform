@@ -87,6 +87,7 @@ class Shop_Settings_Builder extends Shop_Builder_Constants {
         // save this request already sees current-schema data.
         add_action( 'admin_init',            [ $this, 'maybe_migrate_sections' ], 5 );
         add_action( 'admin_init',            [ __CLASS__, 'upgrade_default_alignment' ], 6 );
+        add_action( 'admin_init',            [ __CLASS__, 'upgrade_margin_sides' ], 6 );
         add_action( 'admin_init',            [ __CLASS__, 'ensure_store_pages' ], 6 );
         add_action( 'admin_init',            [ $this, 'register_shop_settings' ] );
         add_action( 'init',                  [ $this, 'register_form_entry_post_type' ] );

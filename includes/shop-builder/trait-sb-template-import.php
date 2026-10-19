@@ -173,6 +173,7 @@ trait SB_Template_Import {
         self::ensure_store_pages( true, trim( (string) ( $input['name'] ?? '' ) ) );
         // Templates published before "Default" alignment existed say "left".
         self::upgrade_default_alignment( true );
+        self::upgrade_margin_sides( true );
 
         $options  = (array) get_option( 'shop_builder_options', [] );
         $branding = (array) ( $options['branding'] ?? [] );
@@ -454,7 +455,7 @@ trait SB_Template_Import {
 
     private static function reverse_fields( array $specs, $data, array $map ) {
         $out = [];
-        $data = is_array( $data ) ? $data : [];
+        $data = self::fold_old_margins( $specs, is_array( $data ) ? $data : [] );
         // Looks per screen size come back as { desktop, tablet, mobile } ('' = same as the bigger screen).
         $screens = is_array( $data['_screens'] ?? null ) ? $data['_screens'] : [];
         unset( $data['_screens'] );

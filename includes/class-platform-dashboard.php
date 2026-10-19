@@ -1528,6 +1528,7 @@ class Qwoo_Platform_Dashboard {
         // Stores from before the homepage was a page: their Homepage tab becomes the Home page.
         Shop_Settings_Builder::ensure_store_pages();
         Shop_Settings_Builder::upgrade_default_alignment();
+        Shop_Settings_Builder::upgrade_margin_sides();
         return Shop_Settings_Builder::platform_design_data( self::design_lang( $params ) );
     }
 

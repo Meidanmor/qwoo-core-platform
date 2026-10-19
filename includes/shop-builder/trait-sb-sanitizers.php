@@ -19,7 +19,7 @@ trait SB_Sanitizers {
 
     /** Sanitizes a data object against a [field => spec] map. */
     private static function sanitize_fields( array $specs, $raw ) {
-        $raw   = is_array( $raw ) ? $raw : [];
+        $raw   = self::fold_old_margins( $specs, is_array( $raw ) ? $raw : [] );
         $clean = [];
         foreach ( $specs as $key => $spec ) {
             $clean[ $key ] = self::sanitize_field_value( $spec, $raw[ $key ] ?? null );
@@ -272,7 +272,7 @@ trait SB_Sanitizers {
                 $value = is_array( $value ) ? $value : [];
                 $out   = [];
                 foreach ( [ 'top', 'right', 'bottom', 'left' ] as $side ) {
-                    $out[ $side ] = self::sanitize_css_length( $value[ $side ] ?? '' );
+                    $out[ $side ] = self::sanitize_css_length( $value[ $side ] ?? '', ! empty( $spec['allow_negative'] ) );
                 }
                 return $out;
 
@@ -520,7 +520,7 @@ trait SB_Sanitizers {
      * attachment ID to the public image payload (or null).
      */
     private static function output_fields( array $specs, $data, callable $image_cb ) {
-        $data = is_array( $data ) ? $data : [];
+        $data = self::fold_old_margins( $specs, is_array( $data ) ? $data : [] );
         $out  = [];
 
         foreach ( $specs as $key => $spec ) {
@@ -577,7 +577,38 @@ trait SB_Sanitizers {
             $out[ $key ] = $value;
         }
 
+        if ( isset( $specs['margin'] ) && is_array( $out['margin'] ?? null ) ) {
+            // Storefronts from before the Margin field read margin_top / margin_bottom.
+            foreach ( [ 'top', 'bottom' ] as $side ) {
+                $out[ 'margin_' . $side ] = array_map( static function ( $sides ) use ( $side ) {
+                    return is_array( $sides ) ? ( $sides[ $side ] ?? '' ) : '';
+                }, $out['margin'] );
+            }
+        }
+
         return $out;
+    }
+
+    /**
+     * "Space Above" / "Space Below" (margin_top / margin_bottom) became one
+     * Margin field with four sides (2026-10). Data saved before then, and
+     * templates published before then, are read as that field.
+     */
+    private static function fold_old_margins( array $specs, array $raw ) {
+        if ( ! isset( $specs['margin'] ) || array_key_exists( 'margin', $raw ) ) return $raw;
+        if ( ! array_key_exists( 'margin_top', $raw ) && ! array_key_exists( 'margin_bottom', $raw ) ) return $raw;
+        $at = static function ( $v, $device ) {
+            if ( self::is_device_map( $v ) ) $v = $v[ $device ] ?? '';
+            elseif ( $device !== 'desktop' ) $v = '';
+            return is_scalar( $v ) ? (string) $v : '';
+        };
+        $margin = [];
+        foreach ( self::DEVICES as $device ) {
+            $margin[ $device ] = [ 'top' => $at( $raw['margin_top'] ?? '', $device ), 'right' => '', 'bottom' => $at( $raw['margin_bottom'] ?? '', $device ), 'left' => '' ];
+        }
+        unset( $raw['margin_top'], $raw['margin_bottom'] );
+        $raw['margin'] = $margin;
+        return $raw;
     }
 
     /**

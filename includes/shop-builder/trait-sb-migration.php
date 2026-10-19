@@ -82,6 +82,43 @@ trait SB_Migration {
         }
     }
 
+    /* -----------------------------------------------------------------
+       Margin (2026-10): "Space Above" / "Space Below" became one Margin
+       field with four sides. Stored styles are rewritten once (flag in the
+       options), with versions and section templates; anything missed is
+       still read right (fold_old_margins()).
+       ----------------------------------------------------------------- */
+
+    public static function upgrade_margin_sides( $force = false ) {
+        $options = get_option( 'shop_builder_options', [] );
+        if ( ! is_array( $options ) || ( ! $force && ! empty( $options['_margin_sides'] ) ) ) {
+            return;
+        }
+        $options = self::margin_walk( $options );
+        $options['_margin_sides'] = 1;
+        update_option( 'shop_builder_options', $options );
+
+        if ( $force ) return;
+        foreach ( [ self::REVISIONS_OPTION, self::TEMPLATES_OPTION ] as $name ) {
+            $stored = get_option( $name, null );
+            if ( is_array( $stored ) && $stored ) {
+                update_option( $name, self::margin_walk( $stored ), false );
+            }
+        }
+    }
+
+    private static function margin_walk( array $node ) {
+        if ( is_array( $node['style'] ?? null ) ) {
+            $node['style'] = self::fold_old_margins( [ 'margin' => true ], $node['style'] );
+        }
+        foreach ( $node as $k => $child ) {
+            if ( is_array( $child ) ) {
+                $node[ $k ] = self::margin_walk( $child );
+            }
+        }
+        return $node;
+    }
+
     /** { block type: [ field, … ] } whose alignment now starts at "Default". */
     private static function default_align_fields() {
         $out = [];
