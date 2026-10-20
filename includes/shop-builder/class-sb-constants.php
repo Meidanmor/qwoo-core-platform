@@ -634,6 +634,9 @@ abstract class Shop_Builder_Constants {
                             'image_max_width' => [ 'type' => 'length', 'label' => 'Image Max Width', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'placeholder' => '100%' ],
                             'image_height' => [ 'type' => 'length', 'label' => 'Image Height', 'tab' => 'style', 'group' => 'Size', 'responsive' => true,
                                     'placeholder' => 'auto, 240px or 40vh' ],
+                            'fill_height' => [ 'type' => 'select', 'label' => 'Match the Row Height', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'default' => 'no',
+                                    'options' => [ 'no' => 'No', 'yes' => 'Yes' ],
+                                    'help' => 'The image takes the height of the row it sits in (set by the blocks beside it) and is cropped to fit. Where blocks stack, as on phones, it uses Image Height, else 240px.' ],
                             'aspect_ratio' => [ 'type' => 'select', 'label' => 'Aspect Ratio', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'default' => 'auto',
                                     'options' => [ 'auto' => 'Original', '1/1' => 'Square (1:1)', '4/3' => '4:3', '3/2' => '3:2', '16/9' => '16:9', '3/4' => 'Portrait (3:4)', '2/3' => 'Portrait (2:3)' ],
                                     'help' => 'Ignored when a fixed Image Height is set.' ],
@@ -1560,6 +1563,9 @@ abstract class Shop_Builder_Constants {
                                     'group'   => 'Colors',
                                     'default' => 'global:primary',
                             ],
+                            // The link of the page the visitor is on (empty: the link colour, underlined).
+                            'active_link_color' => [ 'type' => 'color', 'label' => 'Current Page Link Color', 'tab' => 'style', 'group' => 'Colors' ],
+                            'active_link_bg'    => [ 'type' => 'color', 'label' => 'Current Page Link Background', 'tab' => 'style', 'group' => 'Colors' ],
                             'dropdown_bg_color' => [
                                     'type'    => 'color',
                                     'label'   => 'Dropdown Background',

@@ -750,7 +750,19 @@ trait SB_Sanitizers {
                 // The header's top sections that leave with the page (an announcement bar), and the gap above it when it stays.
                 'away_rows'   => max( 0, min( 3, (int) ( $in['away_rows'] ?? ( $old['away_rows'] ?? 0 ) ) ) ),
                 'sticky_top'  => self::sanitize_css_length( $in['sticky_top'] ?? ( $old['sticky_top'] ?? '' ) ),
+                // The whole header's background and padding (around its sections); empty = the site's background, no padding.
+                'bg'          => self::sanitize_color_value( $in['bg'] ?? ( $old['bg'] ?? '' ) ),
+                'padding'     => self::sanitize_header_padding( $in['padding'] ?? ( $old['padding'] ?? [] ) ),
         ];
+    }
+
+    private static function sanitize_header_padding( $value ) {
+        $value = is_array( $value ) ? $value : [];
+        $out   = [];
+        foreach ( [ 'top', 'right', 'bottom', 'left' ] as $side ) {
+            $out[ $side ] = self::sanitize_css_length( $value[ $side ] ?? '' );
+        }
+        return $out;
     }
 
     public function sanitize_options( $input ) {

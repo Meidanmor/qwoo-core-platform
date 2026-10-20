@@ -121,6 +121,8 @@ trait SB_Platform {
                     'solid_text'  => (string) ( $o['header']['settings']['solid_text'] ?? '' ),
                     'away_rows'   => (int) ( $o['header']['settings']['away_rows'] ?? 0 ),
                     'sticky_top'  => (string) ( $o['header']['settings']['sticky_top'] ?? '' ),
+                    'bg'          => (string) ( $o['header']['settings']['bg'] ?? '' ),
+                    'padding'     => self::sanitize_header_padding( $o['header']['settings']['padding'] ?? [] ),
                 ],
             ],
             'footer'   => [ 'footer_text' => (string) ( $o['footer']['footer_text'] ?? '' ) ],
