@@ -733,6 +733,26 @@ trait SB_Sanitizers {
 
     // Pages that carry a `sections` list: sectionable_pages() in trait-sb-layouts.php.
 
+    /**
+     * A header's scrolling settings (the main header's, and each header
+     * template's own). Sticky: in the page, stays at the top. Fixed: floats
+     * over the first section (a hero), with its own colours once scrolled or
+     * on pages that don't start with one. wp-admin's form doesn't send the
+     * mode or colours, so missing ones keep what was saved.
+     */
+    private static function sanitize_header_settings( array $in, array $old ) {
+        $mode = $in['sticky_mode'] ?? ( $old['sticky_mode'] ?? 'sticky' );
+        return [
+                'sticky'      => ! empty( $in['sticky'] ),
+                'sticky_mode' => in_array( $mode, [ 'sticky', 'fixed' ], true ) ? $mode : 'sticky',
+                'solid_bg'    => self::sanitize_color_value( $in['solid_bg'] ?? ( $old['solid_bg'] ?? '' ) ),
+                'solid_text'  => self::sanitize_color_value( $in['solid_text'] ?? ( $old['solid_text'] ?? '' ) ),
+                // The header's top sections that leave with the page (an announcement bar), and the gap above it when it stays.
+                'away_rows'   => max( 0, min( 3, (int) ( $in['away_rows'] ?? ( $old['away_rows'] ?? 0 ) ) ) ),
+                'sticky_top'  => self::sanitize_css_length( $in['sticky_top'] ?? ( $old['sticky_top'] ?? '' ) ),
+        ];
+    }
+
     public function sanitize_options( $input ) {
         $input    = is_array( $input ) ? $input : [];
         $existing = get_option( 'shop_builder_options', [] );
@@ -752,19 +772,7 @@ trait SB_Sanitizers {
             // first section (a hero), with its own colours once scrolled or on
             // pages that don't start with one. wp-admin's form doesn't send
             // the mode or colours, so missing ones keep what was saved.
-            $in_settings  = (array) ( $input['header']['settings'] ?? [] );
-            $old_settings = (array) ( $existing['header']['settings'] ?? [] );
-            $mode         = $in_settings['sticky_mode'] ?? ( $old_settings['sticky_mode'] ?? 'sticky' );
-            $header['settings'] = [
-                    'sticky'      => ! empty( $in_settings['sticky'] ),
-                    'show_search' => ! empty( $in_settings['show_search'] ),
-                    'sticky_mode' => in_array( $mode, [ 'sticky', 'fixed' ], true ) ? $mode : 'sticky',
-                    'solid_bg'    => self::sanitize_color_value( $in_settings['solid_bg'] ?? ( $old_settings['solid_bg'] ?? '' ) ),
-                    'solid_text'  => self::sanitize_color_value( $in_settings['solid_text'] ?? ( $old_settings['solid_text'] ?? '' ) ),
-                    // The header's top sections that leave with the page (an announcement bar), and the gap above it when it stays.
-                    'away_rows'   => max( 0, min( 3, (int) ( $in_settings['away_rows'] ?? ( $old_settings['away_rows'] ?? 0 ) ) ) ),
-                    'sticky_top'  => self::sanitize_css_length( $in_settings['sticky_top'] ?? ( $old_settings['sticky_top'] ?? '' ) ),
-            ];
+            $header['settings'] = self::sanitize_header_settings( (array) ( $input['header']['settings'] ?? [] ), (array) ( $existing['header']['settings'] ?? [] ) );
             if ( isset( $input['header']['navigation'] ) && is_array( $input['header']['navigation'] ) ) {
                 $nav = [];
                 foreach ( $input['header']['navigation'] as $key => $item ) {

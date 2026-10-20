@@ -484,6 +484,12 @@ abstract class Shop_Builder_Constants {
             'grid'      => [ 'label' => 'Grid',         'icon' => 'apps' ],
     ];
 
+    const SEARCH_ICONS = [
+            'search'        => [ 'label' => 'Magnifier',        'icon' => 'search' ],
+            'manage_search' => [ 'label' => 'Magnifier & lines', 'icon' => 'manage_search' ],
+            'travel'        => [ 'label' => 'Globe',            'icon' => 'travel_explore' ],
+    ];
+
     /** Icon sets selectable by an `icon` field's `icon_set` key. */
     const ICON_SETS = [
             'advantage' => self::ADVANTAGE_ICONS,
@@ -491,6 +497,7 @@ abstract class Shop_Builder_Constants {
             'cart'      => self::CART_ICONS,
             'wishlist'  => self::WISHLIST_ICONS,
             'menu'      => self::MENU_ICONS,
+            'search'    => self::SEARCH_ICONS,
     ];
 
     /** Whether a header widget's drawer opens by swiping in from an edge of the screen (phones). */
@@ -1603,6 +1610,37 @@ abstract class Shop_Builder_Constants {
                             'ts:label' => [ 'type' => 'text_style', 'label' => 'Text & Total' ],
             ],
         ],
+        'search' => [
+            'label'    => 'Search',
+            'category' => 'basic',
+            'fields'   => [
+                            'display'     => [ 'type' => 'select', 'label' => 'Show as', 'tab' => 'content', 'default' => 'icon',
+                                    'options' => [ 'icon' => 'An icon that opens a search box', 'field' => 'A search field' ] ],
+                            'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'search', 'default' => 'search' ],
+                            'custom_icon' => [ 'type' => 'image', 'label' => 'Your Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],
+                                    'help' => 'A small square image or SVG. It keeps its own colors.' ],
+                            'label'       => [ 'type' => 'text', 'label' => 'Text Next to the Icon', 'tab' => 'content', 'placeholder' => 'e.g. Search',
+                                    'show_if' => [ 'display' => 'icon' ], 'help' => 'Optional. Leave empty to show only the icon.' ],
+                            'placeholder' => [ 'type' => 'text', 'label' => 'Text in the Empty Field', 'tab' => 'content', 'default' => 'Search…' ],
+                            'show_products'   => [ 'type' => 'toggle', 'label' => 'Products', 'tab' => 'content', 'group' => 'Results while typing', 'default' => true ],
+                            'show_categories' => [ 'type' => 'toggle', 'label' => 'Product categories', 'tab' => 'content', 'group' => 'Results while typing' ],
+                            'show_posts'      => [ 'type' => 'toggle', 'label' => 'Blog posts', 'tab' => 'content', 'group' => 'Results while typing' ],
+                            'max_results'     => [ 'type' => 'number', 'label' => 'How many of each', 'tab' => 'content', 'group' => 'Results while typing', 'default' => 5, 'min' => 1, 'max' => 10,
+                                    'help' => 'Enter, or "See all results", opens the search page with the same kinds of results.' ],
+                            'field_width' => [ 'type' => 'length', 'label' => 'Field Width', 'tab' => 'style', 'group' => 'Field', 'responsive' => true, 'placeholder' => '220px',
+                                    'show_if' => [ 'display' => 'field' ] ],
+                            'field_bg'    => [ 'type' => 'color', 'label' => 'Field Background', 'tab' => 'style', 'group' => 'Field' ],
+                            'field_text'  => [ 'type' => 'color', 'label' => 'Field Text Color', 'tab' => 'style', 'group' => 'Field' ],
+                            'field_border' => [ 'type' => 'color', 'label' => 'Field Border Color', 'tab' => 'style', 'group' => 'Field' ],
+                            'field_radius' => [ 'type' => 'length', 'label' => 'Field Corner Radius', 'tab' => 'style', 'group' => 'Field', 'placeholder' => '99px' ],
+                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'placeholder' => '18px' ],
+                            'icon_color'  => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Icon' ],
+                            'panel_bg'    => [ 'type' => 'color', 'label' => 'Results Background', 'tab' => 'style', 'group' => 'Results' ],
+                            'panel_text'  => [ 'type' => 'color', 'label' => 'Results Text Color', 'tab' => 'style', 'group' => 'Results' ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Text', 'show_if' => [ 'display' => 'icon' ] ],
+            ],
+        ],
+
         'mini_wishlist' => [
             'label'    => 'Mini Wishlist',
             'category' => 'basic',
@@ -1705,8 +1743,18 @@ abstract class Shop_Builder_Constants {
             'category'  => [ 'categories' ],
             'blog'      => [ 'blog_categories' ],
             'blog_post' => [ 'blog_categories' ],
+            // Header and footer templates: the main one, plus others shown on chosen pages.
+            'header'    => [ 'targets' ],
+            'footer'    => [ 'targets' ],
     ];
     const MAX_LAYOUTS = 20;
+
+    /**
+     * Where a header or footer template can show (conditions.targets): these
+     * kinds of pages, or one of the owner's pages by id (pg_…). 'pages' = all
+     * the owner's pages except the homepage.
+     */
+    const CHROME_TARGETS = [ 'home', 'pages', 'shop', 'category', 'product', 'cart', 'checkout', 'blog', 'blog_post', 'search', 'account' ];
 
     /** Max container depth (top-level section = 1). */
     const MAX_NESTING_DEPTH = 4;

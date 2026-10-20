@@ -116,7 +116,6 @@ trait SB_Platform {
                 ],
                 'settings'     => [
                     'sticky'      => (bool) ( $o['header']['settings']['sticky'] ?? true ),
-                    'show_search' => ! empty( $o['header']['settings']['show_search'] ),
                     'sticky_mode' => ( $o['header']['settings']['sticky_mode'] ?? '' ) === 'fixed' ? 'fixed' : 'sticky',
                     'solid_bg'    => (string) ( $o['header']['settings']['solid_bg'] ?? '' ),
                     'solid_text'  => (string) ( $o['header']['settings']['solid_text'] ?? '' ),

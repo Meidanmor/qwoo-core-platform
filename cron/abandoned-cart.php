@@ -1,13 +1,19 @@
 <?php
 use Minishlink\WebPush\WebPush;
 use Minishlink\WebPush\Subscription;
+// Run by the hosting account's cron job (php on the command line; the
+// platform sets it up for new stores: every 15 minutes), or over the web with
+// the store's own secret (qwoo_get_cron_url() in qwoo-core.php).
+$qwoo_cli = PHP_SAPI === 'cli';
+if ( $qwoo_cli ) {
+    // WordPress expects a web request's server values.
+    $_SERVER['HTTP_HOST']   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $_SERVER['REQUEST_URI'] = $_SERVER['REQUEST_URI'] ?? '/';
+}
 // Load WordPress
 require dirname(__FILE__, 5) . '/wp-load.php'; // navigate up to WP root
 require_once dirname(__FILE__, 2) . '/includes/vendor/autoload.php';
-// Only WordPress's own auto-generated secret may trigger this file.
-// See qwoo_get_cron_url() in qwoo-core.php for the ready-to-use URL —
-// it's shown in the admin settings screen, no manual setup required.
-if ( ! hash_equals( qwoo_get_cron_secret(), $_GET['secret'] ?? '' ) ) {
+if ( ! $qwoo_cli && ! hash_equals( qwoo_get_cron_secret(), $_GET['secret'] ?? '' ) ) {
     http_response_code(403);
     exit('Forbidden');
 }
@@ -50,9 +56,11 @@ function crone_check_and_send_abandoned_cart_push() {
             FROM $table
             WHERE cart_token IS NOT NULL
             AND last_seen_at IS NOT NULL
-            AND last_seen_at <= DATE_SUB(NOW(), INTERVAL %d MINUTE)
+            AND last_seen_at <= %s
             ",
-            $threshold_minutes
+            // last_seen_at is saved in the site's time (current_time), not the database server's
+            // (NOW() is the server's clock: hours apart on a store set to another time zone).
+            gmdate( 'Y-m-d H:i:s', current_time( 'timestamp' ) - $threshold_minutes * MINUTE_IN_SECONDS )
         ),
         ARRAY_A
     );

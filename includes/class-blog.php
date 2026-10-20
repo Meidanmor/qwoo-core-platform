@@ -79,6 +79,9 @@ class Qwoo_Blog {
             'orderby'        => 'date',
             'order'          => 'DESC',
         ];
+        // The storefront's search (Search block, search page).
+        $search = trim( sanitize_text_field( (string) $r->get_param( 'search' ) ) );
+        if ( $search !== '' ) $args['s'] = mb_substr( $search, 0, 100 );
         $category = null;
         $slug     = (string) $r->get_param( 'category' );
         if ( $slug !== '' ) {

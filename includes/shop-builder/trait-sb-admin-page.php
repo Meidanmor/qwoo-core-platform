@@ -370,14 +370,6 @@ trait SB_Admin_Page {
                                     <span class="qwoo-switch-label">Sticky Header</span>
                                 </label>
 
-                                <label class="qwoo-switch-row" style="margin-top:10px;">
-                                    <input type="checkbox"
-                                           class="qwoo-switch"
-                                           name="shop_builder_options[header][settings][show_search]"
-                                           value="1"
-                                            <?php checked( $header['settings']['show_search'] ?? false, true ); ?> />
-                                    <span class="qwoo-switch-label">Show Search Icon</span>
-                                </label>
                             </div>
                         </div>
 

@@ -13,6 +13,11 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   options[page]['layouts'] = [ { id: lay_…, name, conditions: { products: [ids],
  *                                  categories: [ids], blog_categories: [ids] }, sections } ]
  *
+ * The header and footer have templates the same way: conditions.targets
+ * lists where each one shows (CHROME_TARGETS, or an own page's id), and a
+ * header template has its own scrolling `settings` (sanitize_header_settings).
+ * Published with `page_paths` (the addresses of the chosen pages).
+ *
  * Published in config/{page}.json as `layouts`, each condition list with the
  * slugs too (the storefront matches category pages by their address).
  *
@@ -92,17 +97,37 @@ trait SB_Layouts {
             if ( ! is_array( $layout ) ) continue;
             $conditions = [];
             foreach ( $kinds as $kind ) {
+                if ( $kind === 'targets' ) {
+                    $conditions[ $kind ] = self::sanitize_chrome_targets( $layout['conditions'][ $kind ] ?? [] );
+                    continue;
+                }
                 $ids = array_values( array_unique( array_filter( array_map( 'intval', (array) ( $layout['conditions'][ $kind ] ?? [] ) ), static fn( $id ) => $id > 0 ) ) );
                 $conditions[ $kind ] = array_slice( $ids, 0, 200 );
             }
-            $out[] = [
+            $row = [
                 'id'         => preg_match( '/^lay_[A-Za-z0-9]{6,20}$/', (string) ( $layout['id'] ?? '' ) ) ? $layout['id'] : self::new_id( 'lay' ),
                 'name'       => mb_substr( sanitize_text_field( (string) ( $layout['name'] ?? '' ) ), 0, 60 ) ?: 'Layout',
                 'conditions' => $conditions,
                 'sections'   => $this->sanitize_sections( $layout['sections'] ?? [], $page ),
             ];
+            if ( $page === 'header' ) {
+                $row['settings'] = self::sanitize_header_settings( (array) ( $layout['settings'] ?? [] ), [] );
+            }
+            $out[] = $row;
         }
         return $out;
+    }
+
+    /** Where a header / footer template shows: known kinds of pages and own page ids, no repeats. */
+    private static function sanitize_chrome_targets( $raw ) {
+        $out = [];
+        foreach ( (array) $raw as $target ) {
+            $target = is_scalar( $target ) ? (string) $target : '';
+            if ( in_array( $target, self::CHROME_TARGETS, true ) || preg_match( '/^pg_[A-Za-z0-9]{6,20}$/', $target ) ) {
+                $out[ $target ] = true;
+            }
+        }
+        return array_slice( array_keys( $out ), 0, 100 );
     }
 
     /** The layouts for the dashboard, without sections (they go into `pages` as "page@id"). */
@@ -115,7 +140,9 @@ trait SB_Layouts {
                 self::collect_sections_refs( $pages[ $page . '@' . $layout['id'] ], $refs );
                 foreach ( (array) ( $layout['conditions']['products'] ?? [] ) as $id ) $refs['products'][ (int) $id ] = true;
                 foreach ( (array) ( $layout['conditions']['categories'] ?? [] ) as $id ) $refs['categories'][ (int) $id ] = true;
-                $out[ $page ][] = [ 'id' => $layout['id'], 'name' => $layout['name'], 'conditions' => (array) $layout['conditions'] ];
+                $row = [ 'id' => $layout['id'], 'name' => $layout['name'], 'conditions' => (array) $layout['conditions'] ];
+                if ( $page === 'header' ) $row['settings'] = self::sanitize_header_settings( (array) ( $layout['settings'] ?? [] ), [] );
+                $out[ $page ][] = $row;
             }
         }
         return $out;
@@ -126,10 +153,22 @@ trait SB_Layouts {
      * condition list, the ids and (categories) the slugs.
      */
     private static function published_layouts( array $layouts, callable $image_cb ) {
-        $out = [];
+        $out   = [];
+        $paths = null;
         foreach ( $layouts as $layout ) {
             $conditions = [];
             foreach ( (array) ( $layout['conditions'] ?? [] ) as $kind => $ids ) {
+                if ( $kind === 'targets' ) {
+                    // Header / footer templates: the chosen own pages' addresses too (the storefront matches by address).
+                    $targets = self::sanitize_chrome_targets( $ids );
+                    $conditions['targets'] = $targets;
+                    $paths = $paths ?? self::published_page_map( get_option( 'shop_builder_options', [] ) );
+                    $conditions['page_paths'] = [];
+                    foreach ( $targets as $target ) {
+                        if ( isset( $paths[ $target ] ) ) $conditions['page_paths'][] = (string) $paths[ $target ]['path'];
+                    }
+                    continue;
+                }
                 $ids = array_values( array_map( 'intval', (array) $ids ) );
                 $conditions[ $kind ] = $ids;
                 $taxonomy = [ 'categories' => 'product_cat', 'blog_categories' => 'category' ][ $kind ] ?? '';
@@ -142,12 +181,14 @@ trait SB_Layouts {
                     $conditions[ $kind . '_slugs' ] = $slugs;
                 }
             }
-            $out[] = [
+            $row = [
                 'id'         => $layout['id'],
                 'name'       => $layout['name'],
                 'conditions' => $conditions,
                 'sections'   => self::output_sections( (array) ( $layout['sections'] ?? [] ), $image_cb ),
             ];
+            if ( isset( $layout['settings'] ) ) $row['settings'] = self::sanitize_header_settings( (array) $layout['settings'], [] );
+            $out[] = $row;
         }
         return $out;
     }
