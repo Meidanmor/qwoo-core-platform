@@ -74,8 +74,53 @@ trait SB_Github_Push {
 
             // "public/sections/x.png" is served by the frontend at "/sections/x.png".
             $public_url = '/' . substr( $repo_path, strlen( 'public/' ) );
-            return $cache[ $attachment_id ] = self::attachment_payload( $attachment_id, $public_url );
+            $payload    = self::attachment_payload( $attachment_id, $public_url );
+            $srcset     = self::stage_section_image_sizes( $batch, $attachment_id, $file, $label, $path_to_label, $kept_paths );
+            if ( $payload && $srcset ) $payload['srcset'] = $srcset;
+            return $cache[ $attachment_id ] = $payload;
         };
+    }
+
+    /**
+     * Stages WordPress's own smaller copies of a section image (made at
+     * upload: 300, 600, 768, 1024, 1536…) next to it, so the storefront can
+     * send phones a smaller file. Only copies with the original's shape
+     * (cropped sizes like the 100×100 thumbnail would show a different
+     * picture) and at least 300px wide; SVGs have none.
+     *
+     * @return array [ [ 'url' => '/sections/…', 'w' => width ], … ] smallest first, or [].
+     */
+    private static function stage_section_image_sizes( &$batch, $attachment_id, $file, $label, array &$path_to_label, array &$kept_paths ) {
+        $meta = wp_get_attachment_metadata( $attachment_id );
+        $full_w = (int) ( $meta['width'] ?? 0 );
+        $full_h = (int) ( $meta['height'] ?? 0 );
+        if ( $full_w < 1 || $full_h < 1 || empty( $meta['sizes'] ) || ! is_array( $meta['sizes'] ) ) return [];
+
+        $mime = (string) get_post_mime_type( $attachment_id );
+        $dir  = trailingslashit( dirname( $file ) );
+        $out  = [];
+        foreach ( $meta['sizes'] as $size ) {
+            $w = (int) ( $size['width'] ?? 0 );
+            $h = (int) ( $size['height'] ?? 0 );
+            if ( $w < 300 || $w >= $full_w || $h < 1 || isset( $out[ $w ] ) || empty( $size['file'] ) ) continue;
+            if ( ! empty( $size['mime-type'] ) && $size['mime-type'] !== $mime ) continue;
+            // Same shape: the height WordPress would give this width when only scaling, give or take a pixel.
+            if ( abs( $h - $full_h * $w / $full_w ) > 1.5 ) continue;
+
+            $path = $dir . basename( $size['file'] );
+            if ( ! file_exists( $path ) ) continue;
+            $repo_path = self::$sections_image_dir . "{$attachment_id}-" . sanitize_file_name( basename( $size['file'] ) );
+            if ( ! isset( $kept_paths[ $repo_path ] ) ) {
+                $bytes = file_get_contents( $path );
+                if ( $bytes === false ) continue;
+                aps_github_batch_put_file( $batch, $repo_path, $bytes );
+                $kept_paths[ $repo_path ]    = true;
+                $path_to_label[ $repo_path ] = "{$label} (section image)";
+            }
+            $out[ $w ] = [ 'url' => '/' . substr( $repo_path, strlen( 'public/' ) ), 'w' => $w ];
+        }
+        ksort( $out );
+        return array_values( $out );
     }
 
     /**
