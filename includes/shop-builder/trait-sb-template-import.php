@@ -174,6 +174,8 @@ trait SB_Template_Import {
         // Templates published before "Default" alignment existed say "left".
         self::upgrade_default_alignment( true );
         self::upgrade_margin_sides( true );
+        // A template published before the shop pages were templates: its slots are placed.
+        self::upgrade_shop_templates();
 
         $options  = (array) get_option( 'shop_builder_options', [] );
         $branding = (array) ( $options['branding'] ?? [] );

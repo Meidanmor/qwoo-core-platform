@@ -163,6 +163,7 @@ trait SB_Github_Push {
         // Saved "Left" alignments become "Default" before the first publish after the update.
         self::upgrade_default_alignment();
         self::upgrade_margin_sides();
+        self::upgrade_shop_templates();
         $options       = get_option( 'shop_builder_options', [] );
         $allowed_pages = self::publishable_pages();
 
@@ -301,10 +302,12 @@ trait SB_Github_Push {
         // checkout.json always goes out: it carries the legal pages the terms checkbox links to.
         $options['checkout'] = is_array( $options['checkout'] ?? null ) ? $options['checkout'] : [];
 
-        // shop.json / category.json always go out: they carry the product card (or its removal)
-        // even when those pages have no sections.
-        foreach ( [ 'shop', 'category' ] as $page_slug ) {
-            $options[ $page_slug ] = is_array( $options[ $page_slug ] ?? null ) ? $options[ $page_slug ] : [ 'sections' => [] ];
+        // The shop pages always go out, saying they're templates (an older storefront file
+        // without `template` is the old slot shape). shop.json / category.json also carry the
+        // product card (or its removal).
+        foreach ( self::SHOP_TEMPLATE_PAGES as $page_slug ) {
+            $options[ $page_slug ] = is_array( $options[ $page_slug ] ?? null ) ? $options[ $page_slug ] : [ 'sections' => self::default_template_sections( $page_slug ) ];
+            $options[ $page_slug ]['template'] = 1;
         }
 
         foreach ( $allowed_pages as $page_slug ) {

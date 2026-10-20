@@ -1531,6 +1531,8 @@ class Qwoo_Platform_Dashboard {
         Shop_Settings_Builder::ensure_store_pages();
         Shop_Settings_Builder::upgrade_default_alignment();
         Shop_Settings_Builder::upgrade_margin_sides();
+        // The shop pages' old slots become block-built templates.
+        Shop_Settings_Builder::upgrade_shop_templates();
         return Shop_Settings_Builder::platform_design_data( self::design_lang( $params ) );
     }
 

@@ -77,7 +77,8 @@ trait SB_Platform {
                     'max_custom' => Qwoo_Brand_Fonts::MAX_CUSTOM,
                 ],
                 'icon_sets'        => self::ICON_SETS,
-                'page_locations'   => self::PAGE_SECTION_LOCATIONS,
+                // No slots any more: the shop pages are templates (an older dashboard reads this).
+                'page_locations'   => (object) [],
                 'loop_types'       => self::LOOP_TYPES,
                 'max_loops'        => self::MAX_LOOPS,
                 'padding_presets'  => self::SECTION_PADDING_PRESETS,

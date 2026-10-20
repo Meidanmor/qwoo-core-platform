@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * Published in config/{page}.json as `layouts`, each condition list with the
  * slugs too (the storefront matches category pages by their address).
  *
- * The template pages (TEMPLATE_PAGES: blog, blog_post) are built from
+ * The template pages (TEMPLATE_PAGES: blog, blog_post and the shop pages) are built from
  * sections with dynamic blocks; until the owner saves one, it starts from
  * default_template_sections() (the storefront has the same default).
  */
@@ -29,7 +29,7 @@ trait SB_Layouts {
 
     /** Every page that keeps a `sections` list. */
     private static function sectionable_pages() {
-        return array_merge( [ 'home', 'header', 'footer' ], array_keys( self::PAGE_SECTION_LOCATIONS ), self::TEMPLATE_PAGES );
+        return array_merge( [ 'home', 'header', 'footer' ], self::TEMPLATE_PAGES );
     }
 
     /** A template page's starting sections (like the storefront's built-in layout). */
@@ -51,6 +51,8 @@ trait SB_Layouts {
                 $block( 'blog_categories' ),
                 $block( 'blog_posts' ),
             ], [ 'padding_preset' => 'small', 'gap' => [ 'desktop' => '20px' ] ] ) ];
+        } elseif ( in_array( $page, self::SHOP_TEMPLATE_PAGES, true ) ) {
+            $raw = self::shop_template_sections( $page );
         } else {
             return [];
         }

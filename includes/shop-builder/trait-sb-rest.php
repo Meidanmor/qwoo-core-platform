@@ -103,7 +103,6 @@ trait SB_Rest {
     private static function publishable_pages() {
         return array_merge(
                 [ 'header', 'footer', 'home', 'checkout', 'branding', 'pwa' ],
-                array_keys( self::PAGE_SECTION_LOCATIONS ),
                 self::TEMPLATE_PAGES
         );
     }

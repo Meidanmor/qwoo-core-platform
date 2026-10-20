@@ -21,6 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   trait-sb-template-import.php  Starter-template import from published files (platform stores)
  *   trait-sb-platform.php         The builder for the platform's owner dashboard (Design section)
  *   trait-sb-package.php          The Store builder's part of a store export / import file
+ *   trait-sb-shop-templates.php   The shop pages as block-built templates (old slot pages converted)
  *   trait-sb-loops.php            Card designs (loop templates) for products, categories, posts, reviews
  *   trait-sb-admin-fields.php     Builder mount points + data the JS builder needs
  *   trait-sb-admin-page.php       Menu, enqueue, and settings_page_html()
@@ -45,6 +46,7 @@ require_once __DIR__ . '/trait-sb-store-pages.php';
 require_once __DIR__ . '/trait-sb-languages.php';
 require_once __DIR__ . '/trait-sb-package.php';
 require_once __DIR__ . '/trait-sb-loops.php';
+require_once __DIR__ . '/trait-sb-shop-templates.php';
 require_once __DIR__ . '/trait-sb-admin-fields.php';
 require_once __DIR__ . '/trait-sb-admin-page.php';
 
@@ -68,6 +70,7 @@ class Shop_Settings_Builder extends Shop_Builder_Constants {
     use SB_Languages;
     use SB_Package;
     use SB_Loops;
+    use SB_Shop_Templates;
     use SB_Admin_Fields;
     use SB_Admin_Page;
 
@@ -89,6 +92,7 @@ class Shop_Settings_Builder extends Shop_Builder_Constants {
         add_action( 'admin_init',            [ __CLASS__, 'upgrade_default_alignment' ], 6 );
         add_action( 'admin_init',            [ __CLASS__, 'upgrade_margin_sides' ], 6 );
         add_action( 'admin_init',            [ __CLASS__, 'ensure_store_pages' ], 6 );
+        add_action( 'admin_init',            [ __CLASS__, 'upgrade_shop_templates' ], 7 );
         add_action( 'admin_init',            [ $this, 'register_shop_settings' ] );
         add_action( 'init',                  [ $this, 'register_form_entry_post_type' ] );
         add_action( 'rest_api_init',         [ $this, 'register_form_submit_endpoint' ] );

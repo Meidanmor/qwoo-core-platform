@@ -979,6 +979,245 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
 
+            /* ---- Shop pages (SHOP_TEMPLATE_PAGES): what the page shows. Empty texts = the built-in one in the page's language. ---- */
+
+            'product_breadcrumbs' => [
+                    'label' => 'Breadcrumbs', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'arrow-forward',
+                    'fields' => [
+                            'ts:link' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'color', 'spacing', 'case' ] ],
+                    ],
+            ],
+            'product_gallery' => [
+                    'label' => 'Product Photos', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'format-image',
+                    'fields' => [
+                            'max_height' => [ 'type' => 'length', 'label' => 'Photo Height', 'tab' => 'content', 'responsive' => true, 'units' => [ 'px', 'vh' ],
+                                    'default' => [ 'desktop' => '400px' ], 'placeholder' => '400px' ],
+                            'zoom'       => [ 'type' => 'toggle', 'label' => 'Open photos full screen on click', 'tab' => 'content', 'default' => true ],
+                            'rounded'    => [ 'type' => 'toggle', 'label' => 'Rounded corners', 'tab' => 'style', 'default' => false ],
+                    ],
+            ],
+            'product_title' => [
+                    'label' => 'Product Name', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'title',
+                    'fields' => [
+                            'tag'   => [ 'type' => 'select', 'label' => 'Heading Level', 'tab' => 'content', 'default' => 'h1', 'options' => [ 'h1' => 'H1 (recommended)', 'h2' => 'H2' ] ],
+                            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Name', 'default_font' => 'headings' ],
+                    ],
+            ],
+            'product_rating' => [
+                    'label' => 'Product Rating', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'star',
+                    'fields' => [
+                            'show_count' => [ 'type' => 'toggle', 'label' => 'Show the number of reviews', 'tab' => 'content', 'default' => true ],
+                            'star_color' => [ 'type' => 'color', 'label' => 'Star Color', 'tab' => 'style', 'default' => '' ],
+                            'ts:text'    => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'color' ] ],
+                    ],
+            ],
+            'product_categories' => [
+                    'label' => 'Product Categories', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'category',
+                    'fields' => [
+                            'display'  => [ 'type' => 'select', 'label' => 'Show As', 'tab' => 'content', 'default' => 'chips', 'options' => [ 'chips' => 'Labels', 'links' => 'Links' ] ],
+                            'chip_bg'  => [ 'type' => 'color', 'label' => 'Label Color', 'tab' => 'style', 'default' => '', 'show_if' => [ 'display' => 'chips' ] ],
+                            'ts:text'  => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'color', 'spacing', 'case' ] ],
+                    ],
+            ],
+            'product_price' => [
+                    'label' => 'Product Price', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'products',
+                    'fields' => [
+                            'align'    => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:price' => [ 'type' => 'text_style', 'label' => 'Price' ],
+                    ],
+            ],
+            'product_description' => [
+                    'label' => 'Product Description', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'article',
+                    'fields' => [
+                            'source'  => [ 'type' => 'select', 'label' => 'Show', 'tab' => 'content', 'default' => 'full', 'options' => [ 'full' => 'The description', 'short' => 'The short description' ] ],
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing' ] ],
+                    ],
+            ],
+            'product_stock' => [
+                    'label' => 'Stock Note', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'info',
+                    'fields' => [
+                            'low_at'    => [ 'type' => 'number', 'label' => 'Say "only a few left" below', 'tab' => 'content', 'min' => 0, 'max' => 1000, 'default' => 10,
+                                    'help' => '0 = never. Shown when the product keeps count of its stock.' ],
+                            'low_color' => [ 'type' => 'color', 'label' => 'Low Stock Color', 'tab' => 'style', 'default' => '' ],
+                            'ts:text'   => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
+                    ],
+            ],
+            'product_add_to_cart' => [
+                    'label' => 'Add To Cart', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'cart',
+                    'fields' => [
+                            'show_quantity'       => [ 'type' => 'toggle', 'label' => 'Show the quantity', 'tab' => 'content', 'default' => true ],
+                            'button_label'        => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Add to Cart' ],
+                            'show_quick_checkout' => [ 'type' => 'toggle', 'label' => 'Show a "Quick Checkout" button', 'tab' => 'content', 'default' => true ],
+                            'quick_label'         => [ 'type' => 'text', 'label' => 'Quick Checkout Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Quick Checkout',
+                                    'show_if' => [ 'show_quick_checkout' => true ] ],
+                            'full_width'          => [ 'type' => 'toggle', 'label' => 'Full-width buttons', 'tab' => 'style', 'default' => false ],
+                            'button_bg'           => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
+                            'button_text'         => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
+                            'quick_bg'            => [ 'type' => 'color', 'label' => 'Quick Checkout Color', 'tab' => 'style', 'default' => '', 'show_if' => [ 'show_quick_checkout' => true ] ],
+                            'quick_text'          => [ 'type' => 'color', 'label' => 'Quick Checkout Text Color', 'tab' => 'style', 'default' => '', 'show_if' => [ 'show_quick_checkout' => true ] ],
+                            'ts:button'           => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'parts' => [ 'font', 'size', 'weight', 'spacing', 'case' ] ],
+                    ],
+            ],
+            'product_wishlist' => [
+                    'label' => 'Wishlist Button', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'heart',
+                    'fields' => [
+                            'add_label'    => [ 'type' => 'text', 'label' => 'Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Add to wishlist' ],
+                            'remove_label' => [ 'type' => 'text', 'label' => 'Text when saved', 'tab' => 'content', 'default' => '', 'placeholder' => 'Remove from wishlist' ],
+                            'ts:text'      => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'color', 'spacing', 'case' ] ],
+                    ],
+            ],
+            'product_sku' => [
+                    'label' => 'Product SKU', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'tag',
+                    'fields' => [
+                            'label'   => [ 'type' => 'text', 'label' => 'Text before it', 'tab' => 'content', 'default' => '', 'placeholder' => 'SKU:' ],
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'color', 'spacing', 'case' ] ],
+                    ],
+            ],
+            'product_share' => [
+                    'label' => 'Share Buttons', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'share',
+                    'fields' => [
+                            'label'    => [ 'type' => 'text', 'label' => 'Text before them', 'tab' => 'content', 'default' => '', 'placeholder' => 'Share:' ],
+                            'whatsapp' => [ 'type' => 'toggle', 'label' => 'WhatsApp', 'tab' => 'content', 'default' => true ],
+                            'facebook' => [ 'type' => 'toggle', 'label' => 'Facebook', 'tab' => 'content', 'default' => true ],
+                            'x'        => [ 'type' => 'toggle', 'label' => 'X (Twitter)', 'tab' => 'content', 'default' => false ],
+                            'pinterest' => [ 'type' => 'toggle', 'label' => 'Pinterest', 'tab' => 'content', 'default' => false ],
+                            'copy'     => [ 'type' => 'toggle', 'label' => 'Copy the link', 'tab' => 'content', 'default' => true ],
+                            'icon_color' => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'default' => '' ],
+                            'ts:text'  => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'color' ] ],
+                    ],
+            ],
+            'product_reviews' => [
+                    'label' => 'Product Reviews', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'format-quote',
+                    'fields' => [],
+            ],
+            'product_related' => [
+                    'label' => 'Related Products', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'products',
+                    'fields' => [
+                            'title'     => [ 'type' => 'text', 'label' => 'Heading', 'tab' => 'content', 'default' => '', 'placeholder' => 'Related Products' ],
+                            'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Loop Template', 'tab' => 'content', 'default' => '' ],
+                    ],
+            ],
+
+            'archive_breadcrumbs' => [
+                    'label' => 'Breadcrumbs', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'arrow-forward',
+                    'fields' => [
+                            'ts:link' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'color', 'spacing', 'case' ] ],
+                    ],
+            ],
+            'archive_title' => [
+                    'label' => 'Page Title', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'title',
+                    'fields' => [
+                            'title'            => [ 'type' => 'text', 'label' => 'Title on All products', 'tab' => 'content', 'default' => '', 'placeholder' => 'Products',
+                                    'help' => 'A category page shows the category\'s name.' ],
+                            'show_description' => [ 'type' => 'toggle', 'label' => 'Show the category\'s description', 'tab' => 'content', 'default' => false ],
+                            'tag'              => [ 'type' => 'select', 'label' => 'Heading Level', 'tab' => 'content', 'default' => 'h1', 'options' => [ 'h1' => 'H1 (recommended)', 'h2' => 'H2' ] ],
+                            'align'            => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+                            'ts:desc'  => [ 'type' => 'text_style', 'label' => 'Description', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
+                    ],
+            ],
+            'archive_filters' => [
+                    'label' => 'Filters', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'filter',
+                    'fields' => [
+                            'title'           => [ 'type' => 'text', 'label' => 'Heading', 'tab' => 'content', 'default' => '', 'placeholder' => 'Filters',
+                                    'help' => 'On phones the filters open from the "Filters" button of the Sort block.' ],
+                            'show_search'     => [ 'type' => 'toggle', 'label' => 'Search box', 'tab' => 'content', 'default' => true ],
+                            'show_categories' => [ 'type' => 'toggle', 'label' => 'Categories (All products only)', 'tab' => 'content', 'default' => true ],
+                            'show_price'      => [ 'type' => 'toggle', 'label' => 'Price', 'tab' => 'content', 'default' => true ],
+                            'sticky'          => [ 'type' => 'toggle', 'label' => 'Stay in view while scrolling', 'tab' => 'content', 'default' => true ],
+                            'ts:heading' => [ 'type' => 'text_style', 'label' => 'Heading', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
+                    ],
+            ],
+            'archive_count' => [
+                    'label' => 'Number of Products', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'products',
+                    'fields' => [
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
+                    ],
+            ],
+            'archive_sort' => [
+                    'label' => 'Sort', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'sort',
+                    'fields' => [
+                            'show_filters_button' => [ 'type' => 'toggle', 'label' => 'Show the "Filters" button on phones', 'tab' => 'content', 'default' => true ],
+                    ],
+            ],
+            'archive_products' => [
+                    'label' => 'Products Grid', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'grid',
+                    'fields' => [
+                            'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Loop Template', 'tab' => 'content', 'default' => '',
+                                    'help' => 'Empty: the one chosen for product cards in Loop templates.' ],
+                            'empty_text'    => [ 'type' => 'text', 'label' => 'Text when nothing is found', 'tab' => 'content', 'default' => '', 'placeholder' => 'No products found' ],
+                    ],
+            ],
+            'archive_pagination' => [
+                    'label' => 'Page Numbers', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'pagination',
+                    'fields' => [],
+            ],
+
+            'cart_title' => [
+                    'label' => 'Cart Title', 'category' => 'dynamic', 'pages' => [ 'cart' ], 'icon' => 'title',
+                    'fields' => [
+                            'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Your Cart' ],
+                            'tag'   => [ 'type' => 'select', 'label' => 'Heading Level', 'tab' => 'content', 'default' => 'h2', 'options' => [ 'h1' => 'H1', 'h2' => 'H2' ] ],
+                            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+                    ],
+            ],
+            'cart_items' => [
+                    'label' => 'Cart Items', 'category' => 'dynamic', 'pages' => [ 'cart' ], 'icon' => 'cart',
+                    'fields' => [
+                            'empty_text' => [ 'type' => 'text', 'label' => 'Text when the cart is empty', 'tab' => 'content', 'default' => '', 'placeholder' => 'Your cart is empty.' ],
+                            'link_text'  => [ 'type' => 'text', 'label' => 'Link to the shop', 'tab' => 'content', 'default' => '', 'placeholder' => 'Go to shop' ],
+                            'border_color' => [ 'type' => 'color', 'label' => 'Frame Color', 'tab' => 'style', 'default' => '' ],
+                    ],
+            ],
+            'cart_totals' => [
+                    'label' => 'Cart Totals', 'category' => 'dynamic', 'pages' => [ 'cart' ], 'icon' => 'products',
+                    'fields' => [
+                            'show_coupon'   => [ 'type' => 'toggle', 'label' => 'Coupon box', 'tab' => 'content', 'default' => true ],
+                            'show_shipping' => [ 'type' => 'toggle', 'label' => 'Shipping choice', 'tab' => 'content', 'default' => true ],
+                            'button_label'  => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Checkout' ],
+                            'button_bg'     => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
+                            'button_text'   => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
+                    ],
+            ],
+
+            'checkout_title' => [
+                    'label' => 'Checkout Title', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'title',
+                    'fields' => [
+                            'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Checkout' ],
+                            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+                    ],
+            ],
+            'checkout_login' => [
+                    'label' => 'Sign-in Box', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'person',
+                    'fields' => [
+                            'label' => [ 'type' => 'text', 'label' => 'Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Have an account?' ],
+                    ],
+            ],
+            'checkout_details' => [
+                    'label' => 'Customer Details', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'person',
+                    'fields' => [
+                            'show_coupon' => [ 'type' => 'toggle', 'label' => 'Coupon box', 'tab' => 'content', 'default' => true ],
+                    ],
+            ],
+            'checkout_summary' => [
+                    'label' => 'Order Summary', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'cart',
+                    'fields' => [
+                            'show_items' => [ 'type' => 'toggle', 'label' => 'The cart\'s items', 'tab' => 'content', 'default' => true ],
+                    ],
+            ],
+            'checkout_place_order' => [
+                    'label' => 'Place Order', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'check',
+                    'fields' => [
+                            'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Place Order' ],
+                            'full_width'   => [ 'type' => 'toggle', 'label' => 'Full-width button', 'tab' => 'style', 'default' => false ],
+                            'button_bg'    => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
+                            'button_text'  => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
+                    ],
+            ],
+
             'latest_posts' => [
                     'label'  => 'Latest Blog Posts',
                     'category' => 'shop',
@@ -1722,7 +1961,8 @@ abstract class Shop_Builder_Constants {
     ];
 
     /**
-     * Pages other than 'home' that support location-pinned sections. 'home'
+     * The shop pages' old slots: only read when converting an older page into a
+     * template (trait-sb-shop-templates.php). 'home'
      * is deliberately absent — its sections are a single flat, order-only list.
      */
     const PAGE_SECTION_LOCATIONS = [
@@ -1737,7 +1977,13 @@ abstract class Shop_Builder_Constants {
      * Template pages: built entirely from sections (like the homepage), with
      * dynamic blocks for what the page shows ("Post title", "Posts grid"…).
      */
-    const TEMPLATE_PAGES = [ 'blog', 'blog_post' ];
+    const TEMPLATE_PAGES = [ 'blog', 'blog_post', 'shop', 'category', 'product', 'cart', 'checkout' ];
+
+    /**
+     * The shop pages, block-built since the slots (PAGE_SECTION_LOCATIONS) were
+     * replaced: their published config says `template: 1` (trait-sb-shop-templates.php).
+     */
+    const SHOP_TEMPLATE_PAGES = [ 'shop', 'category', 'product', 'cart', 'checkout' ];
 
     /**
      * Pages that can have extra layouts, each used where its conditions
@@ -1763,7 +2009,7 @@ abstract class Shop_Builder_Constants {
     const CHROME_TARGETS = [ 'home', 'pages', 'shop', 'category', 'product', 'cart', 'checkout', 'blog', 'blog_post', 'search', 'account' ];
 
     /** Max container depth (top-level section = 1). */
-    const MAX_NESTING_DEPTH = 4;
+    const MAX_NESTING_DEPTH = 6;
 
     /** Max top-level sections per page / blocks per container (sanity caps). */
     const MAX_SECTIONS = 60;

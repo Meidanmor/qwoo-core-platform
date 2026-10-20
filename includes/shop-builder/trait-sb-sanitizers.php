@@ -449,14 +449,11 @@ trait SB_Sanitizers {
     }
 
     /**
-     * Sanitizes a page's `sections` list. Pages listed in
-     * PAGE_SECTION_LOCATIONS also get a validated `location` slug (unknown
-     * falls back to the first slot, so a section can never end up unplaced).
+     * Sanitizes a page's `sections` list. (The shop pages' old `location`
+     * slots are placed before this, by shop_page_as_template().)
      */
     private function sanitize_sections( $raw_sections, $page_slug = 'home' ) {
         if ( ! is_array( $raw_sections ) ) return [];
-
-        $locations = self::PAGE_SECTION_LOCATIONS[ $page_slug ] ?? null;
 
         $clean = [];
         foreach ( array_slice( array_values( $raw_sections ), 0, self::MAX_SECTIONS ) as $section ) {
@@ -471,11 +468,6 @@ trait SB_Sanitizers {
                     'style'   => self::sanitize_fields( self::SECTION_STYLE_FIELDS, $section['style'] ?? [] ),
                     'blocks'  => $this->sanitize_blocks( $section['blocks'] ?? [] ),
             ];
-
-            if ( $locations !== null ) {
-                $loc = sanitize_key( $section['location'] ?? '' );
-                $row['location'] = array_key_exists( $loc, $locations ) ? $loc : ( array_key_first( $locations ) ?: '' );
-            }
 
             $clean[] = $row;
         }
@@ -824,6 +816,12 @@ trait SB_Sanitizers {
         // part of this submission at all (e.g. a plain options.php post,
         // where the builder's JSON isn't included), keep what's stored
         // instead of wiping them.
+        // An older shop page (sections in slots, from an import or an older dashboard) becomes its template first.
+        foreach ( self::SHOP_TEMPLATE_PAGES as $page_slug ) {
+            if ( is_array( $input[ $page_slug ] ?? null ) && ( isset( $input[ $page_slug ]['sections'] ) || isset( $input[ $page_slug ]['layouts'] ) ) ) {
+                $input[ $page_slug ] = self::shop_page_as_template( $input[ $page_slug ], $page_slug );
+            }
+        }
         foreach ( self::sectionable_pages() as $page_slug ) {
             if ( isset( $input[ $page_slug ]['sections'] ) ) {
                 $sections = $this->sanitize_sections( $input[ $page_slug ]['sections'], $page_slug );
@@ -833,6 +831,9 @@ trait SB_Sanitizers {
                 continue;
             }
             $clean[ $page_slug ] = ( $clean[ $page_slug ] ?? [] ) + [ 'sections' => $sections ];
+            if ( in_array( $page_slug, self::SHOP_TEMPLATE_PAGES, true ) ) {
+                $clean[ $page_slug ]['template'] = 1;
+            }
         }
 
         // Layouts with conditions (trait-sb-layouts.php); kept as stored when not sent.
