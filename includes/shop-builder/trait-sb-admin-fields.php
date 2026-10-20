@@ -117,12 +117,22 @@ trait SB_Admin_Fields {
         $is_image = strpos( (string) get_post_mime_type( $attachment_id ), 'image/' ) === 0;
         // Videos get no thumbnail (the admin shows their file name instead).
         $thumb    = $is_image ? ( wp_get_attachment_image_url( $attachment_id, 'medium' ) ?: $url ) : '';
-        return [
+        $out = [
                 'url'    => $url,
                 'thumb'  => $thumb,
                 'width'  => isset( $meta['width'] ) ? (int) $meta['width'] : null,
                 'height' => isset( $meta['height'] ) ? (int) $meta['height'] : null,
         ];
+        // SVGs: the code the storefront draws (as published), plain and in the block's colour, so
+        // the dashboard's live preview shows them the same way.
+        if ( get_post_mime_type( $attachment_id ) === 'image/svg+xml' ) {
+            $svg = self::inline_svg( (int) $attachment_id );
+            if ( $svg !== null ) {
+                $out['svg']       = $svg;
+                $out['svg_color'] = self::inline_svg( (int) $attachment_id, true );
+            }
+        }
+        return $out;
     }
 
     /**

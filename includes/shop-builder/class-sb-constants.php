@@ -45,6 +45,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   min/max     number bounds
  *   show_if     [sibling_field => value | [values]] — only shown (and only
  *               meaningful) when the sibling matches.
+ *   hide_if     [sibling_field => value | [values]] — hidden when the sibling matches.
+ *   accept      image: 'svg' = SVG files only (other images are refused).
  *   private     Never leaves WordPress (stripped from preview + GitHub JSON).
  *   fields      repeater: item field specs
  *   max_items   repeater: cap
@@ -1086,8 +1088,8 @@ abstract class Shop_Builder_Constants {
                     'icon'     => 'star-filled',
                     'fields'   => [
                             'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'general', 'default' => 'star' ],
-                            'custom_icon' => [ 'type' => 'image', 'label' => 'Your Own Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],
-                                    'help' => 'An SVG is drawn as code and can take the Icon Color. Other images show as they are.' ],
+                            'custom_icon' => [ 'type' => 'image', 'accept' => 'svg', 'label' => 'Your Own Icon (SVG)', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],
+                                    'help' => 'SVG files only. It\'s drawn as code, so it stays sharp and can take the Icon Color.' ],
                             'recolor'     => [ 'type' => 'toggle', 'label' => 'Give your SVG the Icon Color', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ] ],
                             'link_url'    => [ 'type' => 'url', 'label' => 'Link (optional)', 'tab' => 'content', 'placeholder' => '/products or https://…' ],
                             'new_tab'     => [ 'type' => 'toggle', 'label' => 'Open in a new tab', 'tab' => 'content' ],
@@ -1096,7 +1098,14 @@ abstract class Shop_Builder_Constants {
                             'alignment'   => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
 
-                            'size'        => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'default' => '32px' ],
+                            'size'        => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'default' => '32px',
+                                    'hide_if' => [ 'icon' => 'custom' ] ],
+                            // Your own SVG: width and height apart. One left empty follows the SVG's proportions; both empty = 32px wide.
+                            'icon_width'  => [ 'type' => 'length', 'label' => 'Icon Width', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'default' => '',
+                                    'placeholder' => '32px', 'show_if' => [ 'icon' => 'custom' ] ],
+                            'icon_height' => [ 'type' => 'length', 'label' => 'Icon Height', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'default' => '',
+                                    'placeholder' => 'auto', 'show_if' => [ 'icon' => 'custom' ],
+                                    'help' => 'Leave Width or Height empty to keep the SVG\'s proportions.' ],
                             'color'       => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Icon', 'default' => 'global:secondary' ],
                             'hover_color' => [ 'type' => 'color', 'label' => 'Color on Hover', 'tab' => 'style', 'group' => 'Icon' ],
                     ],
@@ -1791,6 +1800,7 @@ abstract class Shop_Builder_Constants {
                     if ( isset( $spec['defaults'][ $part ] ) ) $field['default'] = $spec['defaults'][ $part ];
                     if ( isset( $spec['placeholders'][ $part ] ) ) $field['placeholder'] = $spec['placeholders'][ $part ];
                     if ( isset( $spec['show_if'] ) ) $field['show_if'] = $spec['show_if'];
+                    if ( isset( $spec['hide_if'] ) ) $field['hide_if'] = $spec['hide_if'];
                     $name = $spec['keys'][ $part ] ?? "{$prefix}_{$part}";
                     // A part never replaces a field of its own name (give it another in `keys`).
                     if ( isset( $block['fields'][ $name ] ) || isset( $fields[ $name ] ) ) {

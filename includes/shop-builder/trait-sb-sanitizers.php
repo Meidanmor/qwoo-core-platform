@@ -243,7 +243,9 @@ trait SB_Sanitizers {
                 return ! empty( $value ) && $value !== 'false' && $value !== '0';
 
             case 'image':
-                return self::sanitize_attachment_id( $value );
+                $id = self::sanitize_attachment_id( $value );
+                if ( $id && ( $spec['accept'] ?? '' ) === 'svg' && get_post_mime_type( $id ) !== 'image/svg+xml' ) return 0;
+                return $id;
 
             case 'products':
             case 'categories':

@@ -288,6 +288,7 @@
                 .addClass('sbf-type-' + spec.type);
 
             if (spec.show_if) $field.attr('data-show-if', JSON.stringify(spec.show_if));
+            if (spec.hide_if) $field.attr('data-hide-if', JSON.stringify(spec.hide_if));
 
             if (spec.type !== 'toggle' && spec.type !== 'repeater') {
                 let badges = '';
@@ -594,7 +595,8 @@
             });
             $own.each(function () {
                 const showIf = $(this).data('show-if');
-                $(this).toggleClass('sbf-hidden', !!showIf && !F.matchesShowIf(showIf, obj));
+                const hideIf = $(this).data('hide-if');
+                $(this).toggleClass('sbf-hidden', (!!showIf && !F.matchesShowIf(showIf, obj)) || (!!hideIf && F.matchesShowIf(hideIf, obj)));
             });
             $scope.find('.sbf-group').filter(function () {
                 return $(this).closest('.sbf-scope')[0] === $scope[0];
