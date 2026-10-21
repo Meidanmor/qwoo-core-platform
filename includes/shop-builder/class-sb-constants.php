@@ -1154,7 +1154,6 @@ abstract class Shop_Builder_Constants {
                             'show_search'     => [ 'type' => 'toggle', 'label' => 'Search box', 'tab' => 'content', 'default' => true ],
                             'show_categories' => [ 'type' => 'toggle', 'label' => 'Categories (All products only)', 'tab' => 'content', 'default' => true ],
                             'show_price'      => [ 'type' => 'toggle', 'label' => 'Price', 'tab' => 'content', 'default' => true ],
-                            'sticky'          => [ 'type' => 'toggle', 'label' => 'Stay in view while scrolling', 'tab' => 'content', 'default' => true ],
                             'ts:heading' => [ 'type' => 'text_style', 'label' => 'Heading', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
                     ],
             ],
@@ -1166,10 +1165,8 @@ abstract class Shop_Builder_Constants {
             ],
             'archive_sort' => [
                     'label' => 'Sort', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'sort',
-                    'fields' => [
-                            'show_filters_button' => [ 'type' => 'toggle', 'label' => 'Show the "Filters" button on phones', 'tab' => 'content', 'default' => true,
-                                    'help' => 'Turn it off when you use a Filters Button block instead.' ],
-                    ],
+                    // Its "Filters" button (phones) hides by itself when the page has a Filters Button block.
+                    'fields' => [],
             ],
             'archive_filters_button' => [
                     'label' => 'Filters Button', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'filter', 'summary' => 'text',

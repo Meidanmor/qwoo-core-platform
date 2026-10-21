@@ -45,8 +45,11 @@ function qwoo_rate_limit_check( string $action, int $max_attempts, int $window_s
         return true;
     }
 
+    $now  = time();
+    $hits = [];
     foreach ( $buckets as $key ) {
-        if ( (int) get_transient( $key ) >= $max_attempts ) {
+        $hits[ $key ] = qwoo_rate_limit_window( $key, $window_secs, $now );
+        if ( $hits[ $key ]['n'] >= $max_attempts ) {
             return new WP_Error(
                 'qwoo_rate_limited',
                 __( 'Too many requests. Please wait a moment and try again.' ),
@@ -55,15 +58,23 @@ function qwoo_rate_limit_check( string $action, int $max_attempts, int $window_s
         }
     }
 
-    // First hit in this window sets the transient with the full expiry;
-    // subsequent hits just increment the existing counter, which does not
-    // reset its TTL — a fixed window, not a rolling one.
-    foreach ( $buckets as $key ) {
-        $count = (int) get_transient( $key );
-        set_transient( $key, $count + 1, $window_secs );
+    // A fixed window from the first hit: the count is saved with the time
+    // left, so saving it again never moves the window's end (set_transient
+    // alone restarts the expiry, which kept an active visitor blocked).
+    foreach ( $hits as $key => $hit ) {
+        set_transient( $key, [ 'n' => $hit['n'] + 1, 'until' => $hit['until'] ], max( 1, $hit['until'] - $now ) );
     }
 
     return true;
+}
+
+/** A bucket's current window: [ 'n' => hits so far, 'until' => its end ]. */
+function qwoo_rate_limit_window( string $key, int $window_secs, int $now ): array {
+    $hit = get_transient( $key );
+    if ( ! is_array( $hit ) || (int) ( $hit['until'] ?? 0 ) <= $now ) {
+        return [ 'n' => 0, 'until' => $now + $window_secs ];
+    }
+    return [ 'n' => (int) ( $hit['n'] ?? 0 ), 'until' => (int) $hit['until'] ];
 }
 
 /**
