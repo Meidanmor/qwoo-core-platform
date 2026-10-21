@@ -584,11 +584,32 @@ trait SB_Sanitizers {
     }
 
     /**
+     * Position was one value plus "Not Sticky On" (`sticky_off`, devices) in its
+     * first build (2026-10-21); it's per screen size now: each screen size left
+     * out becomes 'static'.
+     */
+    private static function fold_old_sticky( array $specs, array $raw ) {
+        if ( ! isset( $specs['position'] ) || ! array_key_exists( 'sticky_off', $raw ) ) return $raw;
+        $off = is_array( $raw['sticky_off'] ) ? $raw['sticky_off'] : [];
+        unset( $raw['sticky_off'] );
+        $pos = $raw['position'] ?? 'static';
+        if ( self::is_device_map( $pos ) || $pos !== 'sticky' ) return $raw;
+        $map = [];
+        foreach ( self::DEVICES as $device ) {
+            $map[ $device ] = ! empty( $off[ $device ] ) && $off[ $device ] !== 'false' ? 'static' : 'sticky';
+        }
+        $raw['position'] = $map;
+        return $raw;
+    }
+
+    /**
      * "Space Above" / "Space Below" (margin_top / margin_bottom) became one
      * Margin field with four sides (2026-10). Data saved before then, and
      * templates published before then, are read as that field.
+     * Also folds the first sticky build's fields (fold_old_sticky()).
      */
     private static function fold_old_margins( array $specs, array $raw ) {
+        $raw = self::fold_old_sticky( $specs, $raw );
         if ( ! isset( $specs['margin'] ) || array_key_exists( 'margin', $raw ) ) return $raw;
         if ( ! array_key_exists( 'margin_top', $raw ) && ! array_key_exists( 'margin_bottom', $raw ) ) return $raw;
         $at = static function ( $v, $device ) {

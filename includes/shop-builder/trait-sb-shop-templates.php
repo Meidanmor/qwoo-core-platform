@@ -77,8 +77,16 @@ trait SB_Shop_Templates {
             'style' => $style + [ 'width_mode' => 'custom', 'width' => $width, 'padding_preset' => 'none' ], 'blocks' => $blocks,
         ];
         $types  = static fn( array $list ) => array_map( $block, $list );
-        // Sticky on phones only, below the header (the old Sort bar did that by itself).
-        $sticky_phones = static fn( array $b ) => array_merge( $b, [ 'style' => [ 'position' => 'sticky', 'sticky_off' => [ 'desktop' => true, 'tablet' => true ] ] ] );
+        // The blocks have no spacing of their own: the old pages' spacing, as block settings.
+        $sides  = static fn( $t, $r, $b, $l ) => [ 'top' => $t, 'right' => $r, 'bottom' => $b, 'left' => $l ];
+        $spaced = static fn( array $b ) => array_merge( $b, [ 'style' => [ 'margin' => $rwd( $sides( '20px', '', '20px', '' ) ) ] ] );
+        // Sort: sticky on phones only, below the header, on the page's colour (the old Sort bar did that by itself).
+        $sticky_phones = static fn( array $b ) => array_merge( $b, [ 'style' => [
+            'position'    => [ 'desktop' => 'static', 'tablet' => 'static', 'mobile' => 'sticky' ],
+            'box_padding' => [ 'desktop' => $sides( '', '', '', '' ), 'tablet' => $sides( '', '', '', '' ), 'mobile' => $sides( '10px', '10px', '10px', '10px' ) ],
+            'bg_type'     => 'color',
+            'bg_color'    => $rwd( 'global:primary' ),
+        ] ] );
 
         switch ( $page ) {
             case 'product':
@@ -109,9 +117,9 @@ trait SB_Shop_Templates {
             case 'category':
                 $out = array_merge(
                     $top( 'before_breadcrumbs' ),
-                    [ $sec( [ $block( 'archive_breadcrumbs' ) ], $pad( '0', '16', '0', '16' ) ) ],
+                    [ $sec( [ $spaced( $block( 'archive_breadcrumbs' ) ) ], $pad( '0', '16', '0', '16' ) ) ],
                     $top( 'after_breadcrumbs' ),
-                    [ $sec( [ $block( 'archive_title' ) ], $pad( '0', '16', '0', '16' ) ) ],
+                    [ $sec( [ $spaced( $block( 'archive_title' ) ) ], $pad( '0', '16', '0', '16' ) ) ],
                     [ $sec( [
                         $col( array_merge( $inside( 'before_filters' ), [ $block( 'archive_filters' ) ] ), $rwd( '25%', '25%', '100%' ), [ 'gap' => $rwd( '25px' ) ] ),
                         $col( array_merge(

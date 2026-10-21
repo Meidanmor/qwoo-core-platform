@@ -325,12 +325,13 @@ abstract class Shop_Builder_Constants {
      * (CSS sticky), shared by containers and every block (Advanced tab). It
      * only stays inside its parent: a top-level section for the whole page.
      * Rendered by setStickyVars() in the frontend's useSectionStyle.js.
+     * `position` is per screen size (an earlier build had one value plus a
+     * "Not Sticky On" devices field, `sticky_off`: fold_old_sticky()).
      */
     const POSITION_FIELDS = [
-            'position' => [ 'type' => 'select', 'label' => 'Position', 'tab' => 'advanced', 'group' => 'Position', 'default' => 'static',
+            'position' => [ 'type' => 'select', 'label' => 'Position', 'tab' => 'advanced', 'group' => 'Position', 'responsive' => true, 'default' => 'static',
                     'options' => [ 'static' => 'Normal', 'sticky' => 'Sticky (stays in view while scrolling)' ],
-                    'help' => 'A sticky item stays in view only while its parent section is on screen. To keep it for a whole list, put it in the same section (or column) as the list.' ],
-            'sticky_off' => [ 'type' => 'devices', 'label' => 'Not Sticky On', 'tab' => 'advanced', 'group' => 'Position', 'show_if' => [ 'position' => 'sticky' ] ],
+                    'help' => 'Per screen size: e.g. sticky on phones only. A sticky item stays in view only while its parent section is on screen. To keep it for a whole list, put it in the same section (or column) as the list.' ],
             'sticky_top' => [ 'type' => 'length', 'label' => 'Distance From the Top', 'tab' => 'advanced', 'group' => 'Position', 'responsive' => true,
                     'placeholder' => '0px', 'show_if' => [ 'position' => 'sticky' ] ],
             'sticky_below_header' => [ 'type' => 'toggle', 'label' => 'Stay below the header', 'tab' => 'advanced', 'group' => 'Position', 'default' => true,
@@ -1200,6 +1201,9 @@ abstract class Shop_Builder_Constants {
                             'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Loop Template', 'tab' => 'content', 'default' => '',
                                     'help' => 'Empty: the one chosen for product cards in Loop templates.' ],
                             'empty_text'    => [ 'type' => 'text', 'label' => 'Text when nothing is found', 'tab' => 'content', 'default' => '', 'placeholder' => 'No products found' ],
+                            'columns'       => [ 'type' => 'number', 'label' => 'Products Per Row', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
+                                    'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 2 ] ],
+                            'gap'           => [ 'type' => 'length', 'label' => 'Gap Between Products', 'tab' => 'style', 'group' => 'Layout', 'responsive' => true, 'placeholder' => '16px' ],
                     ],
             ],
             'archive_pagination' => [
