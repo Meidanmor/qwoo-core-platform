@@ -338,6 +338,20 @@ abstract class Shop_Builder_Constants {
                     'show_if' => [ 'position' => 'sticky' ], 'help' => 'Adds the height of a header that stays on screen, so it never hides under it.' ],
     ];
 
+    /**
+     * "Order": a block's or nested section's place in its parent section
+     * (CSS flex order) per screen size, without moving it in the saved list;
+     * e.g. the photo above the text on phones only. Empty on tablet / phone =
+     * the bigger size's. `nested_only`: the dashboard leaves it out of
+     * top-level sections (the page isn't a flex box; drag those instead).
+     * Rendered by setOrderVars() in the frontend's useSectionStyle.js.
+     */
+    const ORDER_FIELDS = [
+            'order' => [ 'type' => 'number', 'label' => 'Order', 'tab' => 'advanced', 'group' => 'Order', 'responsive' => true, 'nested_only' => true,
+                    'min' => -99, 'max' => 99, 'default' => 0,
+                    'help' => 'Items with a lower number come first; 0 keeps the order of the list. Per screen size: e.g. -1 on phones puts it first there only.' ],
+    ];
+
     /* ------------------------------------------------------------------
        Container (section) style fields — top-level sections AND nested
        `section` blocks share this exact list.
@@ -392,7 +406,7 @@ abstract class Shop_Builder_Constants {
                     'options' => [ 'none' => 'None', 'zoom' => 'Zoom the background', 'darken' => 'Darken', 'lift' => 'Lift' ],
                     'help' => 'Plays when the mouse is over the section, and on phones while a finger touches it.' ],
 
-    ] + self::POSITION_FIELDS + [
+    ] + self::POSITION_FIELDS + self::ORDER_FIELDS + [
 
             // --- Advanced tab ---
             'hide_on' => [ 'type' => 'devices', 'label' => 'Hide On', 'tab' => 'advanced' ],
@@ -425,7 +439,7 @@ abstract class Shop_Builder_Constants {
                     'help' => 'Plays once when the block scrolls into view. Not in the page\'s first section, and never for visitors who turned animations off.' ],
             'animation_delay' => [ 'type' => 'number', 'label' => 'Delay (milliseconds)', 'tab' => 'advanced', 'group' => 'Animation', 'min' => 0, 'max' => 1500, 'default' => 0,
                     'show_if' => [ 'animation' => [ 'fade_up', 'fade', 'zoom_in', 'reveal' ] ] ],
-    ] + self::POSITION_FIELDS;
+    ] + self::POSITION_FIELDS + self::ORDER_FIELDS;
 
     /**
      * Allowed icon keys for Advantages cards. Each entry carries the Material
