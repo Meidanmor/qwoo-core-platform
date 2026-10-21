@@ -320,6 +320,23 @@ abstract class Shop_Builder_Constants {
             'shadow_inset' => [ 'type' => 'toggle', 'label' => 'Inside the box (inset)', 'tab' => 'style', 'group' => 'Shadow', 'responsive' => true, 'screens' => true, 'show_if' => [ 'shadow' => true ] ],
     ];
 
+    /**
+     * "Position": a section or block that stays in view while the page scrolls
+     * (CSS sticky), shared by containers and every block (Advanced tab). It
+     * only stays inside its parent: a top-level section for the whole page.
+     * Rendered by setStickyVars() in the frontend's useSectionStyle.js.
+     */
+    const POSITION_FIELDS = [
+            'position' => [ 'type' => 'select', 'label' => 'Position', 'tab' => 'advanced', 'group' => 'Position', 'default' => 'static',
+                    'options' => [ 'static' => 'Normal', 'sticky' => 'Sticky (stays in view while scrolling)' ],
+                    'help' => 'A sticky item stays in view only while its parent section is on screen. To keep it for a whole list, put it in the same section (or column) as the list.' ],
+            'sticky_off' => [ 'type' => 'devices', 'label' => 'Not Sticky On', 'tab' => 'advanced', 'group' => 'Position', 'show_if' => [ 'position' => 'sticky' ] ],
+            'sticky_top' => [ 'type' => 'length', 'label' => 'Distance From the Top', 'tab' => 'advanced', 'group' => 'Position', 'responsive' => true,
+                    'placeholder' => '0px', 'show_if' => [ 'position' => 'sticky' ] ],
+            'sticky_below_header' => [ 'type' => 'toggle', 'label' => 'Stay below the header', 'tab' => 'advanced', 'group' => 'Position', 'default' => true,
+                    'show_if' => [ 'position' => 'sticky' ], 'help' => 'Adds the height of a header that stays on screen, so it never hides under it.' ],
+    ];
+
     /* ------------------------------------------------------------------
        Container (section) style fields — top-level sections AND nested
        `section` blocks share this exact list.
@@ -374,6 +391,8 @@ abstract class Shop_Builder_Constants {
                     'options' => [ 'none' => 'None', 'zoom' => 'Zoom the background', 'darken' => 'Darken', 'lift' => 'Lift' ],
                     'help' => 'Plays when the mouse is over the section, and on phones while a finger touches it.' ],
 
+    ] + self::POSITION_FIELDS + [
+
             // --- Advanced tab ---
             'hide_on' => [ 'type' => 'devices', 'label' => 'Hide On', 'tab' => 'advanced' ],
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced',
@@ -405,7 +424,7 @@ abstract class Shop_Builder_Constants {
                     'help' => 'Plays once when the block scrolls into view. Not in the page\'s first section, and never for visitors who turned animations off.' ],
             'animation_delay' => [ 'type' => 'number', 'label' => 'Delay (milliseconds)', 'tab' => 'advanced', 'group' => 'Animation', 'min' => 0, 'max' => 1500, 'default' => 0,
                     'show_if' => [ 'animation' => [ 'fade_up', 'fade', 'zoom_in', 'reveal' ] ] ],
-    ];
+    ] + self::POSITION_FIELDS;
 
     /**
      * Allowed icon keys for Advantages cards. Each entry carries the Material
@@ -490,6 +509,14 @@ abstract class Shop_Builder_Constants {
             'travel'        => [ 'label' => 'Globe',            'icon' => 'travel_explore' ],
     ];
 
+    /** The Filters Button block's icons ('none': text only). */
+    const FILTER_ICONS = [
+            'filter_list' => [ 'label' => 'Lines',    'icon' => 'filter_list' ],
+            'tune'        => [ 'label' => 'Sliders',  'icon' => 'tune' ],
+            'filter_alt'  => [ 'label' => 'Funnel',   'icon' => 'filter_alt' ],
+            'none'        => [ 'label' => 'No icon',  'icon' => '' ],
+    ];
+
     /** Icon sets selectable by an `icon` field's `icon_set` key. */
     const ICON_SETS = [
             'advantage' => self::ADVANTAGE_ICONS,
@@ -498,6 +525,7 @@ abstract class Shop_Builder_Constants {
             'wishlist'  => self::WISHLIST_ICONS,
             'menu'      => self::MENU_ICONS,
             'search'    => self::SEARCH_ICONS,
+            'filter'    => self::FILTER_ICONS,
     ];
 
     /** Whether a header widget's drawer opens by swiping in from an edge of the screen (phones). */
@@ -1121,7 +1149,7 @@ abstract class Shop_Builder_Constants {
                     'label' => 'Filters', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'filter',
                     'fields' => [
                             'title'           => [ 'type' => 'text', 'label' => 'Heading', 'tab' => 'content', 'default' => '', 'placeholder' => 'Filters',
-                                    'help' => 'On phones the filters open from the "Filters" button of the Sort block.' ],
+                                    'help' => 'On phones the filters open from a "Filters" button: the Sort block\'s, or a Filters Button block placed anywhere.' ],
                             'show_search'     => [ 'type' => 'toggle', 'label' => 'Search box', 'tab' => 'content', 'default' => true ],
                             'show_categories' => [ 'type' => 'toggle', 'label' => 'Categories (All products only)', 'tab' => 'content', 'default' => true ],
                             'show_price'      => [ 'type' => 'toggle', 'label' => 'Price', 'tab' => 'content', 'default' => true ],
@@ -1138,7 +1166,32 @@ abstract class Shop_Builder_Constants {
             'archive_sort' => [
                     'label' => 'Sort', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'sort',
                     'fields' => [
-                            'show_filters_button' => [ 'type' => 'toggle', 'label' => 'Show the "Filters" button on phones', 'tab' => 'content', 'default' => true ],
+                            'show_filters_button' => [ 'type' => 'toggle', 'label' => 'Show the "Filters" button on phones', 'tab' => 'content', 'default' => true,
+                                    'help' => 'Turn it off when you use a Filters Button block instead.' ],
+                    ],
+            ],
+            'archive_filters_button' => [
+                    'label' => 'Filters Button', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'filter', 'summary' => 'text',
+                    'fields' => [
+                            'text'          => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Filters',
+                                    'help' => 'Shown on phones only, where the filters open as a drawer.' ],
+                            'icon'          => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'filter', 'default' => 'filter_list' ],
+                            'icon_position' => [ 'type' => 'select', 'label' => 'Icon Position', 'tab' => 'content', 'default' => 'start',
+                                    'options' => [ 'start' => 'Before the text', 'end' => 'After the text' ], 'hide_if' => [ 'icon' => 'none' ] ],
+                            'alignment'     => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
+                                    'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'default' ],
+                            'style'         => [ 'type' => 'select', 'label' => 'Style', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'secondary',
+                                    'options' => [ 'primary' => 'Primary (filled)', 'secondary' => 'Secondary (filled)', 'outline' => 'Outline', 'flat' => 'Text only', 'link' => 'Underlined link' ] ],
+                            'size'          => [ 'type' => 'select', 'label' => 'Size', 'tab' => 'style', 'group' => 'Appearance', 'default' => 'md',
+                                    'options' => [ 'sm' => 'Small', 'md' => 'Medium', 'lg' => 'Large' ] ],
+                            'btn_padding'   => [ 'type' => 'sides', 'label' => 'Button Padding', 'tab' => 'style', 'group' => 'Appearance', 'responsive' => true,
+                                    'help' => 'Space inside the button around its text. Replaces the size\'s padding where set (0 works too).' ],
+                            'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Appearance', 'placeholder' => 'e.g. 999px for a pill' ],
+                            'bg_color'      => [ 'type' => 'color', 'label' => 'Background Color', 'tab' => 'style', 'group' => 'Colors' ],
+                            'icon_size'     => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'placeholder' => '20px', 'hide_if' => [ 'icon' => 'none' ] ],
+                            'icon_color'    => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Icon', 'hide_if' => [ 'icon' => 'none' ],
+                                    'help' => 'Empty: the text colour.' ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'keys' => [ 'font' => 'font', 'size' => 'text_size', 'weight' => 'font_weight', 'color' => 'text_color' ] ],
                     ],
             ],
             'archive_products' => [

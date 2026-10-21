@@ -77,6 +77,8 @@ trait SB_Shop_Templates {
             'style' => $style + [ 'width_mode' => 'custom', 'width' => $width, 'padding_preset' => 'none' ], 'blocks' => $blocks,
         ];
         $types  = static fn( array $list ) => array_map( $block, $list );
+        // Sticky on phones only, below the header (the old Sort bar did that by itself).
+        $sticky_phones = static fn( array $b ) => array_merge( $b, [ 'style' => [ 'position' => 'sticky', 'sticky_off' => [ 'desktop' => true, 'tablet' => true ] ] ] );
 
         switch ( $page ) {
             case 'product':
@@ -113,7 +115,7 @@ trait SB_Shop_Templates {
                     [ $sec( [
                         $col( array_merge( $inside( 'before_filters' ), [ $block( 'archive_filters' ) ] ), $rwd( '25%', '25%', '100%' ), [ 'gap' => $rwd( '25px' ) ] ),
                         $col( array_merge(
-                            $types( [ 'archive_count', 'archive_sort' ] ),
+                            [ $block( 'archive_count' ), $sticky_phones( $block( 'archive_sort' ) ) ],
                             $inside( 'before_products_grid' ),
                             [ $block( 'archive_products' ) ],
                             $inside( 'after_products_grid' ),
