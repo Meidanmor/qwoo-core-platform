@@ -860,7 +860,7 @@ trait SB_Sanitizers {
         // Layouts with conditions (trait-sb-layouts.php); kept as stored when not sent.
         foreach ( array_keys( self::LAYOUT_PAGES ) as $page_slug ) {
             if ( isset( $input[ $page_slug ]['layouts'] ) ) {
-                $layouts = $this->sanitize_layouts( $input[ $page_slug ]['layouts'], $page_slug );
+                $layouts = $this->sanitize_layouts( $input[ $page_slug ]['layouts'], $page_slug, (array) ( $existing[ $page_slug ]['layouts'] ?? [] ) );
             } elseif ( isset( $existing[ $page_slug ]['layouts'] ) ) {
                 $layouts = $existing[ $page_slug ]['layouts'];
             } else {

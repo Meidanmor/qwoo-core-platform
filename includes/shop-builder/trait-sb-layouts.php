@@ -91,10 +91,18 @@ trait SB_Layouts {
 
     /* ---------------- layouts ---------------- */
 
-    /** A page's layouts, cleaned: [ { id, name, conditions, sections } ]. */
-    private function sanitize_layouts( $raw, $page ) {
+    /**
+     * A page's layouts, cleaned: [ { id, name, conditions, sections } ].
+     * A header template sent without `settings` keeps its stored ones
+     * (`$existing`), so a save that doesn't know them can't reset them.
+     */
+    private function sanitize_layouts( $raw, $page, $existing = [] ) {
         $kinds = self::LAYOUT_PAGES[ $page ] ?? [];
         $out   = [];
+        $saved = [];
+        foreach ( (array) $existing as $layout ) {
+            if ( is_array( $layout ) && isset( $layout['id'] ) ) $saved[ (string) $layout['id'] ] = $layout;
+        }
         foreach ( array_slice( array_values( is_array( $raw ) ? $raw : [] ), 0, self::MAX_LAYOUTS ) as $layout ) {
             if ( ! is_array( $layout ) ) continue;
             $conditions = [];
@@ -113,7 +121,10 @@ trait SB_Layouts {
                 'sections'   => $this->sanitize_sections( $layout['sections'] ?? [], $page ),
             ];
             if ( $page === 'header' ) {
-                $row['settings'] = self::sanitize_header_settings( (array) ( $layout['settings'] ?? [] ), [] );
+                $old = (array) ( $saved[ $row['id'] ]['settings'] ?? [] );
+                $row['settings'] = isset( $layout['settings'] )
+                    ? self::sanitize_header_settings( (array) $layout['settings'], $old )
+                    : self::sanitize_header_settings( $old, [] );
             }
             $out[] = $row;
         }
