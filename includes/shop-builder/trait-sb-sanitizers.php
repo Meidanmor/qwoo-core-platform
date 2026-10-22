@@ -760,8 +760,7 @@ trait SB_Sanitizers {
                 'sticky_mode' => in_array( $mode, [ 'sticky', 'fixed' ], true ) ? $mode : 'sticky',
                 'solid_bg'    => self::sanitize_color_value( $in['solid_bg'] ?? ( $old['solid_bg'] ?? '' ) ),
                 'solid_text'  => self::sanitize_color_value( $in['solid_text'] ?? ( $old['solid_text'] ?? '' ) ),
-                // The header's top sections that leave with the page (an announcement bar), and the gap above it when it stays.
-                'away_rows'   => max( 0, min( 3, (int) ( $in['away_rows'] ?? ( $old['away_rows'] ?? 0 ) ) ) ),
+                // The gap above the header while it stays. (`away_rows`, "Sections that scroll away", was removed: the user's call.)
                 'sticky_top'  => self::sanitize_css_length( $in['sticky_top'] ?? ( $old['sticky_top'] ?? '' ) ),
                 // The whole header's background and padding (around its sections); empty = the site's background, no padding.
                 'bg'          => self::sanitize_color_value( $in['bg'] ?? ( $old['bg'] ?? '' ) ),
