@@ -1244,6 +1244,11 @@ class Qwoo_Platform_Dashboard {
             'image'               => self::image_url( $image, 'medium' ),
             'google_verification' => (string) $s['google_verification'],
             'store_name'          => Qwoo_Seo::store_name(),
+            // The same name and description as Settings → General, editable here too.
+            'general'             => [
+                'name'        => html_entity_decode( (string) get_option( 'blogname' ), ENT_QUOTES ),
+                'description' => html_entity_decode( (string) get_option( 'blogdescription' ), ENT_QUOTES ),
+            ],
             'url'                 => Qwoo_Seo::url( '/' ),
             'defaults'            => Qwoo_Seo::home_defaults(),
         ];
@@ -1285,6 +1290,12 @@ class Qwoo_Platform_Dashboard {
         $code = trim( $code );
         if ( $code !== '' && ! preg_match( '/^[A-Za-z0-9_-]{10,100}$/', $code ) ) {
             return self::bad( 'That doesn\'t look like a Google verification code. Paste the code (or the whole tag) from Search Console.' );
+        }
+        if ( is_array( $f['general'] ?? null ) ) {
+            $saved = self::save_general_settings( array_intersect_key( $f['general'], [ 'name' => 1, 'description' => 1 ] ) );
+            if ( is_wp_error( $saved ) ) {
+                return $saved;
+            }
         }
         update_option( Qwoo_Seo::OPTION, [
             'home_title'          => $home['title'],
@@ -1679,7 +1690,7 @@ class Qwoo_Platform_Dashboard {
 
     /* ---------------- settings ---------------- */
 
-    /** Store details, checkout & emails and tax options, plus the lists the forms need. */
+    /** General, store details, checkout & emails and tax options, plus the lists the forms need. */
     private static function action_settings_get() {
         [ $country, $state ] = array_pad( explode( ':', (string) get_option( 'woocommerce_default_country', '' ) ), 2, '' );
         $new_order = (array) get_option( 'woocommerce_new_order_settings', [] );
@@ -1688,6 +1699,7 @@ class Qwoo_Platform_Dashboard {
             $currencies[ $code ] = html_entity_decode( $name . ' (' . get_woocommerce_currency_symbol( $code ) . ')', ENT_QUOTES );
         }
         return [
+            'general'  => self::general_settings(),
             'store'    => [
                 'name'           => html_entity_decode( get_option( 'blogname' ), ENT_QUOTES ),
                 'email'          => (string) ( $new_order['recipient'] ?? '' ) ?: (string) get_option( 'admin_email' ),
@@ -1792,15 +1804,23 @@ class Qwoo_Platform_Dashboard {
         return is_array( $plan ) && in_array( $feature, (array) ( $plan['features'] ?? [] ), true );
     }
 
-    /** { section: store | checkout | taxes, values }. */
+    /** { section: general | store | checkout | taxes, values }. */
     private static function action_settings_save( array $params ) {
         $v = is_array( $params['values'] ?? null ) ? $params['values'] : [];
         $text = static fn( $key, $max = 200 ) => mb_substr( trim( sanitize_text_field( (string) ( $v[ $key ] ?? '' ) ) ), 0, $max );
         $yes  = static fn( $key ) => ! empty( $v[ $key ] ) ? 'yes' : 'no';
 
         switch ( $params['section'] ?? '' ) {
+            case 'general':
+                $saved = self::save_general_settings( $v );
+                if ( is_wp_error( $saved ) ) {
+                    return $saved;
+                }
+                break;
+
             case 'store':
-                $name    = $text( 'name', 100 );
+                // Newer dashboards send the name with General; older ones send it here.
+                $name    = array_key_exists( 'name', $v ) ? $text( 'name', 100 ) : null;
                 $email   = sanitize_email( (string) ( $v['email'] ?? '' ) );
                 $country = strtoupper( $text( 'country', 2 ) );
                 $state   = strtoupper( $text( 'state', 10 ) );
@@ -1838,7 +1858,9 @@ class Qwoo_Platform_Dashboard {
                 if ( is_wp_error( $saved ) ) {
                     return $saved;
                 }
-                update_option( 'blogname', $name );
+                if ( $name !== null ) {
+                    update_option( 'blogname', $name );
+                }
                 break;
 
             case 'checkout':
@@ -1880,6 +1902,103 @@ class Qwoo_Platform_Dashboard {
                 return self::bad( 'Unknown settings section.' );
         }
         return self::action_settings_get();
+    }
+
+    /** Date and time formats the owner can pick (PHP date letters). */
+    const DATE_FORMATS = [ 'F j, Y', 'j F Y', 'd/m/Y', 'm/d/Y', 'd.m.Y', 'Y-m-d' ];
+    const TIME_FORMATS = [ 'g:i a', 'H:i' ];
+
+    /**
+     * General: { name, description, timezone, date_format, time_format, start_of_week }
+     * plus lists { timezones: { id: label }, date_formats / time_formats: { format: example } }.
+     * The time zone is a city (timezone_string), "UTC", or WordPress' fixed offset ("UTC+2").
+     */
+    private static function general_settings(): array {
+        $zone   = (string) get_option( 'timezone_string' );
+        $offset = (float) get_option( 'gmt_offset' );
+        if ( $zone === '' ) {
+            $zone = $offset ? 'UTC' . ( $offset > 0 ? '+' : '' ) . rtrim( rtrim( number_format( $offset, 2, '.', '' ), '0' ), '.' ) : 'UTC';
+        }
+        $now   = time();
+        $zones = [ 'UTC' => 'UTC' ];
+        foreach ( timezone_identifiers_list() as $id ) {
+            if ( $id === 'UTC' ) {
+                continue;
+            }
+            $secs         = ( new DateTimeZone( $id ) )->getOffset( new DateTime( '@' . $now ) );
+            $zones[ $id ] = str_replace( [ '_', '/' ], [ ' ', ' / ' ], $id ) . ' (UTC' . ( $secs < 0 ? '−' : '+' ) . gmdate( 'H:i', abs( $secs ) ) . ')';
+        }
+        if ( ! isset( $zones[ $zone ] ) ) {
+            $zones[ $zone ] = $zone;
+        }
+        $date  = (string) get_option( 'date_format' ) ?: 'F j, Y';
+        $time  = (string) get_option( 'time_format' ) ?: 'g:i a';
+        $dates = [];
+        foreach ( array_unique( array_merge( self::DATE_FORMATS, [ $date ] ) ) as $f ) {
+            $dates[ $f ] = wp_date( $f, $now );
+        }
+        $times = [];
+        foreach ( array_unique( array_merge( self::TIME_FORMATS, [ $time ] ) ) as $f ) {
+            $times[ $f ] = wp_date( $f, $now );
+        }
+        return [
+            'name'          => html_entity_decode( (string) get_option( 'blogname' ), ENT_QUOTES ),
+            'description'   => html_entity_decode( (string) get_option( 'blogdescription' ), ENT_QUOTES ),
+            'timezone'      => $zone,
+            'date_format'   => $date,
+            'time_format'   => $time,
+            'start_of_week' => (int) get_option( 'start_of_week', 0 ),
+            'lists'         => [ 'timezones' => $zones, 'date_formats' => $dates, 'time_formats' => $times ],
+        ];
+    }
+
+    /** Saves the General fields that were sent (the SEO screen sends only name and description). */
+    private static function save_general_settings( array $v ) {
+        $text = static fn( $key, $max ) => mb_substr( trim( sanitize_text_field( (string) ( $v[ $key ] ?? '' ) ) ), 0, $max );
+        $set  = [];
+        if ( array_key_exists( 'name', $v ) ) {
+            if ( $text( 'name', 100 ) === '' ) {
+                return self::bad( 'Enter your store name.' );
+            }
+            $set['blogname'] = $text( 'name', 100 );
+        }
+        if ( array_key_exists( 'description', $v ) ) {
+            $set['blogdescription'] = $text( 'description', 200 );
+        }
+        if ( array_key_exists( 'timezone', $v ) ) {
+            $zone = (string) $v['timezone'];
+            if ( $zone === 'UTC' ) {
+                $set['timezone_string'] = '';
+                $set['gmt_offset']      = 0;
+            } elseif ( preg_match( '/^UTC([+-]\d{1,2}(?:\.(?:25|5|75))?)$/', $zone, $m ) && abs( (float) $m[1] ) <= 14 ) {
+                $set['timezone_string'] = '';
+                $set['gmt_offset']      = (float) $m[1];
+            } elseif ( in_array( $zone, timezone_identifiers_list(), true ) ) {
+                $set['timezone_string'] = $zone;
+            } else {
+                return self::bad( 'Choose a time zone from the list.' );
+            }
+        }
+        foreach ( [ 'date_format' => self::DATE_FORMATS, 'time_format' => self::TIME_FORMATS ] as $key => $choices ) {
+            if ( array_key_exists( $key, $v ) ) {
+                // The current one may be an older custom format: keeping it is fine.
+                if ( ! in_array( $v[ $key ], $choices, true ) && $v[ $key ] !== get_option( $key ) ) {
+                    return self::bad( 'Choose a format from the list.' );
+                }
+                $set[ $key ] = (string) $v[ $key ];
+            }
+        }
+        if ( array_key_exists( 'start_of_week', $v ) ) {
+            $day = $v['start_of_week'];
+            if ( ! is_numeric( $day ) || (int) $day < 0 || (int) $day > 6 ) {
+                return self::bad( 'Choose the first day of the week.' );
+            }
+            $set['start_of_week'] = (int) $day;
+        }
+        foreach ( $set as $option => $value ) {
+            update_option( $option, $value );
+        }
+        return true;
     }
 
     private static function action_states( array $params ) {
