@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 trait SB_Languages {
 
     /** The option groups that can have their own copy per language. */
-    private static $translatable_keys = [ 'header', 'footer', 'home', 'checkout', 'contact', 'shop', 'category', 'product', 'cart', 'blog', 'blog_post' ];
+    private static $translatable_keys = [ 'header', 'footer', 'home', 'checkout', 'contact', 'shop', 'category', 'product', 'cart', 'blog', 'blog_post', 'blog_author', 'blog_authors' ];
 
     /** The options as one language sees them ('' or the main language: unchanged). */
     public static function options_for_language( array $options, $lang ) {

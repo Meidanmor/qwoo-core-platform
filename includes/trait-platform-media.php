@@ -190,6 +190,11 @@ trait Qwoo_Platform_Media {
         ];
         if ( $with_uses ) {
             $out['uses'] = self::media_uses( $id );
+            // SVGs: the cleaned code, so the dashboard can draw it (the app icon maker).
+            $item = $out['mime'] === 'image/svg+xml' ? Shop_Settings_Builder::platform_media_item( $id ) : null;
+            if ( ! empty( $item['svg'] ) ) {
+                $out['svg'] = $item['svg'];
+            }
         }
         return $out;
     }

@@ -63,6 +63,8 @@ trait SB_Platform {
             'loops'         => $loops,
             'loops_default' => (object) ( $all['loops_default'] ?? [] ),
             'template_pages' => self::TEMPLATE_PAGES,
+            // The author pages' templates show while author profiles are on (Blog → Authors).
+            'author_pages'  => class_exists( 'Qwoo_Blog_Authors' ) && Qwoo_Blog_Authors::is_public(),
             'blog_categories' => self::blog_category_labels(),
             'schema'        => [
                 // New blocks start with texts ("View all"…) in the store's language.

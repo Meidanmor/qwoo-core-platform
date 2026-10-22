@@ -20,6 +20,10 @@ class Qwoo_Icon_Generator {
             return new WP_Error( 'file_missing', 'Source image file not found.' );
         }
 
+        if ( get_post_mime_type( $attachment_id ) === 'image/svg+xml' ) {
+            return new WP_Error( 'svg_icon', 'An SVG can\'t be an app icon. In Store builder → Branding, use "Generate supported app icons for this image" under App icon, then publish again.' );
+        }
+
         $info = @getimagesize( $path );
         if ( ! $info ) {
             return new WP_Error( 'invalid_image', 'Could not read image dimensions.' );

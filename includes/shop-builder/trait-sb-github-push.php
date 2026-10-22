@@ -20,6 +20,8 @@ trait SB_Github_Push {
                 'cart'     => 'Cart',
                 'blog'     => 'Blog',
                 'blog_post' => 'Blog Post',
+                'blog_author' => 'Author Page',
+                'blog_authors' => 'Authors Page',
     ];
 
 

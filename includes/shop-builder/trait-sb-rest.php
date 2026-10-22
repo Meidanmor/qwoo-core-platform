@@ -46,6 +46,8 @@ trait SB_Rest {
                 'tab-cart'     => $frontend_domain ? $frontend_domain . '/cart' : '',
                 'tab-blog'     => $frontend_domain ? $frontend_domain . '/blog' : '',
                 'tab-blog_post' => $frontend_domain ? $frontend_domain . '/blog' . self::first_post_path() : '',
+                'tab-blog_author'  => $frontend_domain ? $frontend_domain . self::first_author_path() : '',
+                'tab-blog_authors' => $frontend_domain ? $frontend_domain . '/blog/authors' : '',
                 'tab-branding' => $root,
                 'tab-pwa'      => $root,
                 'tab-contact'  => $root,
@@ -97,6 +99,12 @@ trait SB_Rest {
     private static function first_post_path() {
         $posts = get_posts( [ 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => 1, 'fields' => 'ids' ] );
         return $posts ? '/' . get_post_field( 'post_name', $posts[0] ) : '';
+    }
+
+    /** "/blog/author/<slug>" of the default author (the author page's preview). */
+    private static function first_author_path() {
+        $term = class_exists( 'Qwoo_Blog_Authors' ) ? Qwoo_Blog_Authors::default_author() : null;
+        return $term ? '/blog/author/' . urldecode( $term->slug ) : '/blog';
     }
 
     /** Page slugs that are published as public/config/{slug}.json. */

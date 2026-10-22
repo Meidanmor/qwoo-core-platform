@@ -980,14 +980,69 @@ abstract class Shop_Builder_Constants {
                             'ts:link' => [ 'type' => 'text_style', 'label' => 'Link Text' ],
                     ],
             ],
+            'post_author' => [
+                    'label'  => 'Post Author',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog_post' ],
+                    'icon'   => 'person',
+                    'fields' => [
+                            'prefix'     => [ 'type' => 'text', 'label' => 'Text before the name', 'tab' => 'content', 'default' => '', 'placeholder' => 'Written by' ],
+                            'show_image' => [ 'type' => 'toggle', 'label' => 'Show the photo', 'tab' => 'content', 'default' => true ],
+                            'show_bio'   => [ 'type' => 'toggle', 'label' => 'Show the bio', 'tab' => 'content', 'default' => false ],
+                            'show_date'  => [ 'type' => 'toggle', 'label' => 'Show the date', 'tab' => 'content', 'default' => false ],
+                            'link'       => [ 'type' => 'toggle', 'label' => 'Link to the author\'s page', 'tab' => 'content', 'default' => true,
+                                    'help' => 'Only while author profiles are on (Blog → Authors).' ],
+                            'image_size' => [ 'type' => 'number', 'label' => 'Photo Size (px)', 'tab' => 'style', 'min' => 16, 'max' => 200, 'default' => 44, 'responsive' => true ],
+                            'align'      => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:name' => [ 'type' => 'text_style', 'label' => 'Name' ],
+                            'ts:meta' => [ 'type' => 'text_style', 'label' => 'Bio and date', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
+                    ],
+            ],
+            'author_profile' => [
+                    'label'  => 'Author Profile',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog_author' ],
+                    'icon'   => 'person',
+                    'fields' => [
+                            'show_image' => [ 'type' => 'toggle', 'label' => 'Show the photo', 'tab' => 'content', 'default' => true ],
+                            'show_name'  => [ 'type' => 'toggle', 'label' => 'Show the name', 'tab' => 'content', 'default' => true ],
+                            'show_bio'   => [ 'type' => 'toggle', 'label' => 'Show the bio', 'tab' => 'content', 'default' => true ],
+                            'show_count' => [ 'type' => 'toggle', 'label' => 'Show the number of posts', 'tab' => 'content', 'default' => true ],
+                            'layout'     => [ 'type' => 'select', 'label' => 'Layout', 'tab' => 'style', 'default' => 'row', 'responsive' => true,
+                                    'options' => [ 'row' => 'Photo beside the text', 'column' => 'Photo above the text' ] ],
+                            'image_size' => [ 'type' => 'number', 'label' => 'Photo Size (px)', 'tab' => 'style', 'min' => 32, 'max' => 400, 'default' => 120, 'responsive' => true ],
+                            'align'      => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:name' => [ 'type' => 'text_style', 'label' => 'Name', 'default_font' => 'headings' ],
+                            'ts:bio' => [ 'type' => 'text_style', 'label' => 'Bio', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
+                    ],
+            ],
+            'authors_list' => [
+                    'label'  => 'Authors Grid',
+                    'category' => 'dynamic',
+                    'pages'  => [ 'blog_authors' ],
+                    'icon'   => 'grid',
+                    'fields' => [
+                            'title'      => [ 'type' => 'text', 'label' => 'Heading', 'tab' => 'content', 'default' => '', 'placeholder' => 'Authors' ],
+                            'columns'    => [ 'type' => 'number', 'label' => 'Authors Per Row', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
+                                    'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
+                            'show_image' => [ 'type' => 'toggle', 'label' => 'Show the photos', 'tab' => 'content', 'default' => true ],
+                            'show_bio'   => [ 'type' => 'toggle', 'label' => 'Show the bios', 'tab' => 'content', 'default' => true ],
+                            'show_count' => [ 'type' => 'toggle', 'label' => 'Show the number of posts', 'tab' => 'content', 'default' => true ],
+                            'image_size' => [ 'type' => 'number', 'label' => 'Photo Size (px)', 'tab' => 'style', 'min' => 32, 'max' => 300, 'default' => 96, 'responsive' => true ],
+                            'align'      => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'center', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:heading' => [ 'type' => 'text_style', 'label' => 'Heading', 'default_font' => 'headings' ],
+                            'ts:name' => [ 'type' => 'text_style', 'label' => 'Names', 'default_font' => 'headings' ],
+                            'ts:bio' => [ 'type' => 'text_style', 'label' => 'Bios', 'parts' => [ 'font', 'size', 'line_height', 'color', 'spacing', 'case' ] ],
+                    ],
+            ],
             'blog_title' => [
                     'label'  => 'Blog Title',
                     'category' => 'dynamic',
-                    'pages'  => [ 'blog' ],
+                    'pages'  => [ 'blog', 'blog_author' ],
                     'icon'   => 'title',
                     'fields' => [
                             'title'            => [ 'type' => 'text', 'label' => 'Title on /blog', 'tab' => 'content', 'default' => 'Blog',
-                                    'help' => 'A category page shows the category\'s name.' ],
+                                    'help' => 'A category page shows the category\'s name, an author\'s page the author\'s name.' ],
                             'show_description' => [ 'type' => 'toggle', 'label' => 'Show the category\'s description', 'tab' => 'content', 'default' => true ],
                             'align'            => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
                             'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
@@ -997,7 +1052,7 @@ abstract class Shop_Builder_Constants {
             'blog_categories' => [
                     'label'  => 'Blog Category Links',
                     'category' => 'dynamic',
-                    'pages'  => [ 'blog' ],
+                    'pages'  => [ 'blog', 'blog_author' ],
                     'icon'   => 'category',
                     'fields' => [
                             'all_label' => [ 'type' => 'text', 'label' => 'Label for all posts', 'tab' => 'content', 'default' => 'All' ],
@@ -1007,7 +1062,7 @@ abstract class Shop_Builder_Constants {
             'blog_posts' => [
                     'label'  => 'Blog Posts Grid',
                     'category' => 'dynamic',
-                    'pages'  => [ 'blog' ],
+                    'pages'  => [ 'blog', 'blog_author' ],
                     'icon'   => 'grid',
                     'fields' => [
                             'per_page'     => [ 'type' => 'number', 'label' => 'Posts per page', 'tab' => 'content', 'min' => 1, 'max' => 24, 'default' => 9 ],
@@ -1185,8 +1240,10 @@ abstract class Shop_Builder_Constants {
             'archive_filters_button' => [
                     'label' => 'Filters Button', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'filter', 'summary' => 'text',
                     'fields' => [
+                            'show_text'     => [ 'type' => 'toggle', 'label' => 'Show text', 'tab' => 'content', 'default' => true,
+                                    'help' => 'Turn off for an icon-only button. Shown on phones only, where the filters open as a drawer.' ],
                             'text'          => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Filters',
-                                    'help' => 'Shown on phones only, where the filters open as a drawer.' ],
+                                    'show_if' => [ 'show_text' => true ] ],
                             'icon'          => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'filter', 'default' => 'filter_list' ],
                             'icon_position' => [ 'type' => 'select', 'label' => 'Icon Position', 'tab' => 'content', 'default' => 'start',
                                     'options' => [ 'start' => 'Before the text', 'end' => 'After the text' ], 'hide_if' => [ 'icon' => 'none' ] ],
@@ -2045,7 +2102,10 @@ abstract class Shop_Builder_Constants {
      * Template pages: built entirely from sections (like the homepage), with
      * dynamic blocks for what the page shows ("Post title", "Posts grid"…).
      */
-    const TEMPLATE_PAGES = [ 'blog', 'blog_post', 'shop', 'category', 'product', 'cart', 'checkout' ];
+    const TEMPLATE_PAGES = [ 'blog', 'blog_post', 'blog_author', 'blog_authors', 'shop', 'category', 'product', 'cart', 'checkout' ];
+
+    /** Shown in the Store builder only while author profiles are on (Qwoo_Blog_Authors). */
+    const AUTHOR_TEMPLATE_PAGES = [ 'blog_author', 'blog_authors' ];
 
     /**
      * The shop pages, block-built since the slots (PAGE_SECTION_LOCATIONS) were

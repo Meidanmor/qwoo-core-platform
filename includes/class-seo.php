@@ -286,6 +286,12 @@ class Qwoo_Seo {
         if ( preg_match( '#^blog/category/([^/]+)$#u', $path, $m ) ) {
             return self::blog_category( $m[1] );
         }
+        if ( $path === 'blog/authors' && Qwoo_Blog_Authors::is_public() ) {
+            return self::blog_authors();
+        }
+        if ( preg_match( '#^blog/author/([^/]+)$#u', $path, $m ) ) {
+            return self::blog_author( $m[1] );
+        }
         if ( preg_match( '#^blog/([^/]+)$#u', $path, $m ) ) {
             return self::post( $m[1] ) ?? self::moved( 'post', $m[1] );
         }
@@ -486,6 +492,41 @@ class Qwoo_Seo {
             'og_image'    => self::image_url( absint( self::settings()['image_id'] ) ),
             'og_type'     => 'website',
             'type'        => 'blog_category',
+        ];
+    }
+
+    /** The authors' list (author profiles on). */
+    private static function blog_authors(): array {
+        return [
+            'title'       => self::with_pattern( self::word( 'Authors' ) ),
+            'description' => self::home_defaults()['description'],
+            'canonical'   => self::url( '/blog/authors' ),
+            'robots'      => self::robots( true ),
+            'og_image'    => self::image_url( absint( self::settings()['image_id'] ) ),
+            'og_type'     => 'website',
+            'type'        => 'blog_authors',
+        ];
+    }
+
+    /** An author's profile and posts: the owner's SEO fields, else the name and the bio. */
+    private static function blog_author( string $slug ): ?array {
+        $term = Qwoo_Blog_Authors::is_public() ? Qwoo_Blog_Authors::find_by_slug( $slug ) : null;
+        if ( ! $term ) {
+            return null;
+        }
+        $own   = self::custom( (int) $term->term_id, 'term' );
+        $bio   = self::plain( (string) get_term_meta( $term->term_id, Qwoo_Blog_Authors::BIO_META, true ) );
+        $name  = self::plain( $term->name );
+        $count = Qwoo_Blog_Authors::post_counts()[ (int) $term->term_id ] ?? 0;
+        $image = absint( $own['image_id'] ?? 0 ) ?: (int) get_term_meta( $term->term_id, Qwoo_Blog_Authors::IMAGE_META, true );
+        return [
+            'title'       => ( $own['title'] ?? '' ) !== '' ? $own['title'] : self::with_pattern( $name ),
+            'description' => ( $own['description'] ?? '' ) !== '' ? $own['description'] : self::shorten( $bio !== '' ? $bio : $name . ' · ' . self::store_name() ),
+            'canonical'   => self::url( '/blog/author/' . $term->slug ),
+            'robots'      => self::robots( $count > 0 && ! self::is_noindex( (int) $term->term_id, 'term' ) ),
+            'og_image'    => self::image_url( $image ) ?: self::image_url( absint( self::settings()['image_id'] ) ),
+            'og_type'     => 'profile',
+            'type'        => 'blog_author',
         ];
     }
 
@@ -718,6 +759,16 @@ class Qwoo_Seo {
             $cats = get_terms( [ 'taxonomy' => 'category', 'hide_empty' => true, 'exclude' => [ (int) get_option( 'default_category' ) ], 'number' => 500 ] );
             foreach ( is_wp_error( $cats ) ? [] : $cats as $term ) {
                 $urls[] = [ 'path' => '/blog/category/' . $term->slug, 'lastmod' => '' ];
+            }
+            // Author profiles, while they're on: the ones with posts and not hidden from search.
+            if ( Qwoo_Blog_Authors::is_public() ) {
+                $urls[] = [ 'path' => '/blog/authors', 'lastmod' => '' ];
+                foreach ( Qwoo_Blog_Authors::post_counts() as $id => $n ) {
+                    $term = $n > 0 ? Qwoo_Blog_Authors::find( (int) $id ) : null;
+                    if ( $term && ! self::is_noindex( (int) $id, 'term' ) ) {
+                        $urls[] = [ 'path' => '/blog/author/' . $term->slug, 'lastmod' => '' ];
+                    }
+                }
             }
         }
 

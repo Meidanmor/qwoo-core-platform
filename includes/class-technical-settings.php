@@ -106,6 +106,65 @@ class Qwoo_Technical_Settings {
         return $secret;
     }
 
+    /**
+     * For this request: uploads addresses on the storefront's domain
+     * (attachment URLs and srcsets through upload_dir, anything else in
+     * the answer, like images inside post text, by replacing the base).
+     * Only the standard /wp-content/uploads layout, which is what the
+     * storefront route covers.
+     */
+    private static function uploads_via_frontend() {
+        $front = self::get_primary_frontend_domain();
+        if ( strpos( $front, 'https://' ) !== 0 || did_action( 'qwoo_uploads_via_frontend' ) ) {
+            return;
+        }
+        $from = untrailingslashit( (string) ( wp_get_upload_dir()['baseurl'] ?? '' ) );
+        if ( $from === '' || wp_parse_url( $from, PHP_URL_PATH ) !== '/wp-content/uploads' ) {
+            return;
+        }
+        do_action( 'qwoo_uploads_via_frontend' );
+        self::$uploads_backend_base = $from;
+        $to   = $front . '/wp-content/uploads';
+        $both = [ set_url_scheme( $from, 'https' ), set_url_scheme( $from, 'http' ) ];
+
+        add_filter( 'upload_dir', static function ( $dir ) use ( $both, $to ) {
+            foreach ( [ 'url', 'baseurl' ] as $key ) {
+                foreach ( $both as $base ) {
+                    if ( isset( $dir[ $key ] ) && strpos( $dir[ $key ], $base ) === 0 ) {
+                        $dir[ $key ] = $to . substr( $dir[ $key ], strlen( $base ) );
+                    }
+                }
+            }
+            return $dir;
+        } );
+        add_filter( 'rest_pre_echo_response', static function ( $data ) use ( $both, $to ) {
+            return self::swap_upload_urls( $data, $both, $to );
+        }, 99 );
+    }
+
+    /** The store's own uploads address while uploads_via_frontend() is on, else ''. */
+    private static $uploads_backend_base = '';
+
+    public static function uploads_backend_base() {
+        return self::$uploads_backend_base;
+    }
+
+    private static function swap_upload_urls( $value, array $from, $to ) {
+        if ( is_string( $value ) ) {
+            return strpos( $value, '/wp-content/uploads/' ) === false ? $value : str_replace( array_map( 'trailingslashit', $from ), $to . '/', $value );
+        }
+        if ( is_array( $value ) ) {
+            foreach ( $value as $k => $v ) {
+                $value[ $k ] = self::swap_upload_urls( $v, $from, $to );
+            }
+        } elseif ( $value instanceof stdClass ) {
+            foreach ( get_object_vars( $value ) as $k => $v ) {
+                $value->$k = self::swap_upload_urls( $v, $from, $to );
+            }
+        }
+        return $value;
+    }
+
     public static function regenerate_proxy_secret() {
         $secret = bin2hex( random_bytes( 32 ) );
         update_option( self::$secret_option, $secret );
@@ -127,6 +186,18 @@ class Qwoo_Technical_Settings {
         // the actual request that follows is still checked.
         if ( $request->get_method() === 'OPTIONS' ) {
             return $result;
+        }
+
+        // A storefront that serves the uploads folder itself (aura's
+        // /wp-content/uploads route, kept by its CDN) says so with
+        // X-Qwoo-Uploads: its answers get photo addresses on its own domain.
+        // Not qwoo/v1/site: the published files (uploads/qwoo-site) are read
+        // from the store itself, and that route only covers media files.
+        if ( $request->get_header( 'x-qwoo-uploads' ) === '1' && $request->get_route() !== '/qwoo/v1/site' ) {
+            $provided = (string) $request->get_header( 'x-proxy-secret' );
+            if ( $provided !== '' && hash_equals( self::get_proxy_secret(), $provided ) ) {
+                self::uploads_via_frontend();
+            }
         }
 
         $route = $request->get_route(); // e.g. "/wc/store/v1/cart"

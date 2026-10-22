@@ -5,7 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * The store's blog for the storefront: WordPress posts and their
  * categories, read live (no Store builder publish step).
  *
- *   GET qwoo/v1/blog?page=&per_page=&category=   published posts, newest first
+ *   GET qwoo/v1/blog?page=&per_page=&category=&author=   published posts, newest first
  *   GET qwoo/v1/blog/post?slug=                  one post, with a few more to read
  *
  * Addresses on the storefront: /blog, /blog/<post>, /blog/category/<category>.
@@ -92,6 +92,17 @@ class Qwoo_Blog {
             $args['cat'] = (int) $term->term_id;
             $category    = [ 'name' => html_entity_decode( $term->name, ENT_QUOTES ), 'slug' => urldecode( $term->slug ), 'description' => wp_strip_all_tags( $term->description ) ];
         }
+        // An author's posts: only while author profiles are on (Qwoo_Blog_Authors).
+        $author = null;
+        $slug   = (string) $r->get_param( 'author' );
+        if ( $slug !== '' ) {
+            $term = Qwoo_Blog_Authors::is_public() ? Qwoo_Blog_Authors::find_by_slug( $slug ) : null;
+            if ( ! $term ) {
+                return new WP_Error( 'qwoo_blog_not_found', 'This author doesn\'t exist.', [ 'status' => 404 ] );
+            }
+            $args['tax_query'] = Qwoo_Blog_Authors::tax_query( $term );
+            $author            = Qwoo_Blog_Authors::card( $term, true );
+        }
         $query = new WP_Query( self::only_translated( $args ) );
         return rest_ensure_response( [
             'posts'      => array_map( [ __CLASS__, 'card' ], array_map( [ __CLASS__, 'in_language' ], $query->posts ) ),
@@ -100,6 +111,7 @@ class Qwoo_Blog {
             'total'      => (int) $query->found_posts,
             'categories' => self::categories(),
             'category'   => $category,
+            'author'     => $author,
         ] );
     }
 
@@ -124,7 +136,8 @@ class Qwoo_Blog {
             $more = array_merge( $more, get_posts( self::only_translated( [ 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => 3 - count( $more ), 'post__not_in' => array_merge( [ $post->ID ], wp_list_pluck( $more, 'ID' ) ) ] ) ) );
         }
         $more = array_map( [ __CLASS__, 'in_language' ], $more );
-        return rest_ensure_response( self::card( $post ) + [
+        $author = Qwoo_Blog_Authors::of_post( $post->ID );
+        return rest_ensure_response( [ 'author' => $author ? Qwoo_Blog_Authors::card( $author, true ) : null ] + self::card( $post ) + [
             'content'  => self::clean_content( $post->post_content ),
             'modified' => (int) strtotime( $post->post_modified_gmt . ' UTC' ),
             'more'     => array_map( [ __CLASS__, 'card' ], $more ),
@@ -179,6 +192,7 @@ class Qwoo_Blog {
                 'alt'    => (string) get_post_meta( $image_id, '_wp_attachment_image_alt', true ),
             ] : null,
             'categories' => array_map( static fn( $c ) => [ 'name' => $c['name'], 'slug' => $c['slug'] ], self::post_categories( $post->ID ) ),
+            'author'     => ( $author = Qwoo_Blog_Authors::of_post( $post->ID ) ) ? Qwoo_Blog_Authors::card( $author ) : null,
         ];
     }
 
@@ -220,13 +234,22 @@ class Qwoo_Blog {
     public static function clean_content( $html ) {
         $html    = preg_replace( '#<(script|style)\b[^>]*>.*?</\1\s*>#is', '', (string) $html );
         $html    = wp_kses( $html, self::TAGS, [ 'http', 'https', 'mailto', 'tel' ] );
-        $uploads = preg_replace( '#^https?:#', '', (string) wp_get_upload_dir()['baseurl'] );
-        $html    = preg_replace_callback( '#<img\b[^>]*>#i', static function ( $m ) use ( $uploads ) {
+        // The uploads address (and the store's own one while the storefront serves them: Qwoo_Technical_Settings).
+        $bases = array_filter( array_map( static fn( $b ) => preg_replace( '#^https?:#', '', (string) $b ), [
+            wp_get_upload_dir()['baseurl'] ?? '',
+            class_exists( 'Qwoo_Technical_Settings' ) ? Qwoo_Technical_Settings::uploads_backend_base() : '',
+        ] ) );
+        $html    = preg_replace_callback( '#<img\b[^>]*>#i', static function ( $m ) use ( $bases ) {
             if ( ! preg_match( '#\ssrc="([^"]+)"#i', $m[0], $src ) ) {
                 return '';
             }
             $url = preg_replace( '#^https?:#', '', html_entity_decode( $src[1] ) );
-            return $uploads !== '' && strpos( $url, $uploads . '/' ) === 0 ? $m[0] : '';
+            foreach ( $bases as $base ) {
+                if ( strpos( $url, $base . '/' ) === 0 ) {
+                    return $m[0];
+                }
+            }
+            return '';
         }, $html );
         $html = preg_replace( '#<p>(\s|&nbsp;|<br\s*/?>)*</p>#i', '', $html );
         return trim( $html );

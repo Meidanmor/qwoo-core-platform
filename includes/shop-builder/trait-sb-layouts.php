@@ -41,6 +41,7 @@ trait SB_Layouts {
                 $block( 'post_back' ),
                 $block( 'post_meta' ),
                 $block( 'post_title' ),
+                $block( 'post_author' ),
                 $block( 'post_featured_image' ),
                 $block( 'post_content' ),
                 $block( 'post_more' ),
@@ -51,6 +52,15 @@ trait SB_Layouts {
                 $block( 'blog_categories' ),
                 $block( 'blog_posts' ),
             ], [ 'padding_preset' => 'small', 'gap' => [ 'desktop' => '20px' ] ] ) ];
+        } elseif ( $page === 'blog_author' ) {
+            $raw = [ $section( [
+                $block( 'author_profile' ),
+                $block( 'blog_posts' ),
+            ], [ 'padding_preset' => 'small', 'gap' => [ 'desktop' => '28px' ] ] ) ];
+        } elseif ( $page === 'blog_authors' ) {
+            $raw = [ $section( [
+                $block( 'authors_list' ),
+            ], [ 'padding_preset' => 'small' ] ) ];
         } elseif ( in_array( $page, self::SHOP_TEMPLATE_PAGES, true ) ) {
             $raw = self::shop_template_sections( $page );
         } else {
