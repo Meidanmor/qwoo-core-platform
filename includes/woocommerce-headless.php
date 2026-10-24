@@ -3,6 +3,43 @@ use Automattic\WooCommerce\StoreApi\StoreApi;
 use Automattic\WooCommerce\StoreApi\Schemas\ExtendSchema;
 use Automattic\WooCommerce\StoreApi\Schemas\V1\ProductSchema;
 
+// Whether the Store API request is for one product (/products/{id or slug}): only
+// those answers carry the variation prices, so product lists stay small.
+add_filter( 'rest_request_before_callbacks', function ( $response, $handler, $request ) {
+    $GLOBALS['qwoo_single_product_request'] = (bool) preg_match( '#^/wc/store(?:/v\d+)?/products/[^/]+/?$#', $request->get_route() );
+    return $response;
+}, 10, 3 );
+add_filter( 'rest_request_after_callbacks', function ( $response ) {
+    $GLOBALS['qwoo_single_product_request'] = false;
+    return $response;
+} );
+
+/**
+ * Each variation's prices in the store's smallest unit (like the Store API's own
+ * prices), from WooCommerce's cached price list: one lookup, not a load per variation.
+ * Hidden variations (not for sale) are left out.
+ */
+function qwoo_variation_prices( $product ) {
+    if ( empty( $GLOBALS['qwoo_single_product_request'] ) || ! $product->is_type( 'variable' ) ) {
+        return null;
+    }
+    $prices = $product->get_variation_prices( true );
+    $factor = 10 ** wc_get_price_decimals();
+    $minor  = function ( $v ) use ( $factor ) {
+        return (string) (int) round( (float) $v * $factor );
+    };
+    $out = [];
+    foreach ( $prices['price'] ?? [] as $id => $price ) {
+        $regular = $prices['regular_price'][ $id ] ?? $price;
+        $out[] = [
+            'id'            => (int) $id,
+            'price'         => $minor( $price ),
+            'regular_price' => $minor( '' === $regular ? $price : $regular ),
+        ];
+    }
+    return $out;
+}
+
 add_action( 'init', function() {
     // Make sure the function exists (added by WooCommerce Blocks/Store API)
     if (!function_exists('woocommerce_store_api_register_endpoint_data')) {
@@ -21,9 +58,10 @@ add_action( 'init', function() {
                 $reviews = class_exists('Qwoo_Reviews') && Qwoo_Reviews::settings()['enabled'];
                 // Videos in the product's gallery, and where each one goes.
                 $videos = class_exists('Qwoo_Media_Support') ? Qwoo_Media_Support::product_videos($product) : [];
+                $variation_prices = qwoo_variation_prices($product);
 
                 if (empty($terms) || is_wp_error($terms)) {
-                    return ['default_category' => null, 'reviews' => $reviews, 'videos' => $videos];
+                    return ['default_category' => null, 'reviews' => $reviews, 'videos' => $videos, 'variation_prices' => $variation_prices];
                 }
 
                 // Get the first term (you can customize sorting if needed)
@@ -37,6 +75,7 @@ add_action( 'init', function() {
                     ],
                     'reviews' => $reviews,
                     'videos' => $videos,
+                    'variation_prices' => $variation_prices,
                 ];
             },
             'schema_callback' => function () {
@@ -62,6 +101,12 @@ add_action( 'init', function() {
                         'videos' => [
                             'description' => 'Videos in the gallery: id, position (place in the gallery), src, type, width, height.',
                             'type' => 'array',
+                            'context' => ['view', 'edit'],
+                            'readonly' => true,
+                        ],
+                        'variation_prices' => [
+                            'description' => 'Single product answers of variable products only: [{ id, price, regular_price }] in the smallest currency unit; null otherwise.',
+                            'type' => ['array', 'null'],
                             'context' => ['view', 'edit'],
                             'readonly' => true,
                         ],
