@@ -93,6 +93,27 @@ class Qwoo_Technical_Settings {
         add_filter( 'http_request_args', [ $this, 'inject_internal_proxy_secret' ], 10, 2 );
     }
 
+    /**
+     * The storefront calls this store under its own name (Hostinger refuses
+     * a browser name that arrives too often from one address, and every
+     * shopper comes through a few storefront servers) and sends the
+     * shopper's own name in X-Qwoo-Client-UA. Put it back where WooCommerce
+     * (order details), trackers and other plugins read it, but only on
+     * requests that carry the proxy secret: anyone else's header is dropped.
+     */
+    public static function restore_client_user_agent() {
+        $client = (string) ( $_SERVER['HTTP_X_QWOO_CLIENT_UA'] ?? '' );
+        unset( $_SERVER['HTTP_X_QWOO_CLIENT_UA'] );
+        $provided = (string) ( $_SERVER['HTTP_X_PROXY_SECRET'] ?? '' );
+        if ( $client === '' || $provided === '' || ! hash_equals( self::get_proxy_secret(), $provided ) ) {
+            return;
+        }
+        $client = substr( preg_replace( '/[\x00-\x1F\x7F]/', '', $client ), 0, 512 );
+        if ( $client !== '' ) {
+            $_SERVER['HTTP_USER_AGENT'] = $client;
+        }
+    }
+
     /* ─────────────────────────────────────────
        Proxy secret: auto-generated, never
        manually typed by the site owner

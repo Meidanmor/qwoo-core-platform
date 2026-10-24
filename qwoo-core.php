@@ -114,6 +114,8 @@ require_once QWOO_PATH . 'includes/class-shop-settings.php';
 
 // Instantiate technical settings (registers AJAX hooks etc.)
 new Qwoo_Technical_Settings();
+// The shopper's browser name, before WooCommerce or anything else reads it.
+Qwoo_Technical_Settings::restore_client_user_agent();
 
 // qwoo's messages and emails in the store's language.
 Qwoo_I18n::init();
