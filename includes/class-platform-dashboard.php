@@ -690,6 +690,8 @@ class Qwoo_Platform_Dashboard {
             Qwoo_Seo::save( $product->get_id(), 'post', $common['seo'] );
         }
         Qwoo_Translations::save( 'product', $product->get_id(), ( is_array( $params['fields'] ?? null ) ? ( $params['fields']['translations'] ?? null ) : null ) );
+        // Questions and answers, bought-together products (only when sent).
+        Qwoo_Product_Extras::save( $product, $f );
         wc_delete_product_transients( $product->get_id() );
         return self::product_full( wc_get_product( $product->get_id() ) );
     }
@@ -1548,6 +1550,8 @@ class Qwoo_Platform_Dashboard {
         Shop_Settings_Builder::ensure_store_pages();
         Shop_Settings_Builder::upgrade_default_alignment();
         Shop_Settings_Builder::upgrade_margin_sides();
+        // The announcement bar becomes an "Above header" section.
+        Shop_Settings_Builder::upgrade_announcement();
         // The shop pages' old slots become block-built templates.
         Shop_Settings_Builder::upgrade_shop_templates();
         return Shop_Settings_Builder::platform_design_data( self::design_lang( $params ) );
@@ -2527,7 +2531,7 @@ class Qwoo_Platform_Dashboard {
             array_splice( $images, min( $video['position'], count( $images ) ), 0, [ [ 'id' => $video['id'], 'url' => $video['src'], 'kind' => 'video' ] ] );
         }
         $description = (string) $p->get_description();
-        return self::product_summary( $p ) + self::product_options( $p ) + self::sale_dates_of( $p ) + [
+        return self::product_summary( $p ) + self::product_options( $p ) + self::sale_dates_of( $p ) + Qwoo_Product_Extras::for_editor( $p ) + [
             'editable'     => $p->is_type( self::EDITABLE_TYPES ),
             // For the formatted editor: what it can show (anything else is dropped when saving).
             'description_html' => self::clean_description( wpautop( $description ) ),

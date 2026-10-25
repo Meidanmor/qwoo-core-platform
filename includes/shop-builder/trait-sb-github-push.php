@@ -165,6 +165,7 @@ trait SB_Github_Push {
         // Saved "Left" alignments become "Default" before the first publish after the update.
         self::upgrade_default_alignment();
         self::upgrade_margin_sides();
+        self::upgrade_announcement();
         self::upgrade_shop_templates();
         $options       = get_option( 'shop_builder_options', [] );
         $allowed_pages = self::publishable_pages();

@@ -91,6 +91,7 @@ class Shop_Settings_Builder extends Shop_Builder_Constants {
         add_action( 'admin_init',            [ $this, 'maybe_migrate_sections' ], 5 );
         add_action( 'admin_init',            [ __CLASS__, 'upgrade_default_alignment' ], 6 );
         add_action( 'admin_init',            [ __CLASS__, 'upgrade_margin_sides' ], 6 );
+        add_action( 'admin_init',            [ __CLASS__, 'upgrade_announcement' ], 6 );
         add_action( 'admin_init',            [ __CLASS__, 'ensure_store_pages' ], 6 );
         add_action( 'admin_init',            [ __CLASS__, 'upgrade_shop_templates' ], 7 );
         add_action( 'admin_init',            [ $this, 'register_shop_settings' ] );

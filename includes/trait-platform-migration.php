@@ -1200,6 +1200,8 @@ trait Qwoo_Platform_Migration {
         }
         if ( self::mig_is_package() ) {
             self::mig_save_i18n( 'product', $id, $p['i18n'] ?? [] );
+            $faq = Qwoo_Product_Extras::clean_faq( $p['faq'] ?? [] );
+            $faq ? update_post_meta( $id, Qwoo_Product_Extras::FAQ_META, $faq ) : delete_post_meta( $id, Qwoo_Product_Extras::FAQ_META );
             // The gallery's order with its videos (photos stay WooCommerce's gallery).
             $order = array_values( array_filter( array_map( [ __CLASS__, 'mig_image' ], (array) ( $p['media_order'] ?? [] ) ) ) );
             $has_video = (bool) array_filter( $order, static fn( $m ) => strpos( (string) get_post_mime_type( $m ), 'video/' ) === 0 );

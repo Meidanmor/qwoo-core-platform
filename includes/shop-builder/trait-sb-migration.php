@@ -63,6 +63,64 @@ trait SB_Migration {
        $force: run again on the options only (after a template import).
        ----------------------------------------------------------------- */
 
+    /* -----------------------------------------------------------------
+       The announcement bar became the header's "Above header" sections
+       (2026-10-25). A store whose bar is on gets it as an Above header
+       section (text, colours) in the main header and in each language copy,
+       and the bar is turned off. Runs once (flag in the options).
+       ----------------------------------------------------------------- */
+
+    public static function upgrade_announcement( $force = false ) {
+        $options = get_option( 'shop_builder_options', [] );
+        if ( ! is_array( $options ) || ( ! $force && ! empty( $options['_announcement_moved'] ) ) ) {
+            return;
+        }
+        $options['header'] = self::announcement_to_section( (array) ( $options['header'] ?? [] ) );
+        foreach ( (array) ( $options['i18n'] ?? [] ) as $lang => $copy ) {
+            if ( is_array( $copy['header'] ?? null ) ) {
+                $options['i18n'][ $lang ]['header'] = self::announcement_to_section( $copy['header'] );
+            }
+        }
+        $options['_announcement_moved'] = 1;
+        update_option( 'shop_builder_options', $options );
+    }
+
+    private static function announcement_to_section( array $header ) {
+        $ann  = (array) ( $header['announcement'] ?? [] );
+        $text = trim( (string) ( $ann['text'] ?? '' ) );
+        if ( empty( $ann['enabled'] ) || $text === '' ) {
+            return $header;
+        }
+        $rwd     = static fn( $v ) => [ 'desktop' => $v, 'tablet' => '', 'mobile' => '' ];
+        $section = [
+            'id' => self::new_id( 'sec' ), 'label' => 'Announcement', 'enabled' => true, 'location' => 'above',
+            'style' => [
+                'width_mode'     => 'full',
+                'padding_preset' => 'custom',
+                'padding'        => $rwd( [ 'top' => '8', 'right' => '16', 'bottom' => '8', 'left' => '16' ] ),
+                'bg_type'        => 'color',
+                'bg_color'       => $rwd( (string) ( $ann['bg_color'] ?? '' ) ?: '#000000' ),
+            ],
+            'blocks' => [ [
+                'id' => self::new_id( 'blk' ), 'type' => 'text_block', 'label' => '', 'enabled' => true, 'style' => [],
+                'data' => [
+                    'text'        => '<p>' . esc_html( $text ) . '</p>',
+                    'alignment'   => $rwd( 'center' ),
+                    'font_size'   => $rwd( '14px' ),
+                    'line_height' => $rwd( '1.4' ),
+                    'text_color'  => (string) ( $ann['text_color'] ?? '' ) ?: '#ffffff',
+                ],
+            ] ],
+        ];
+        $clean = self::instance()->sanitize_sections( [ $section ], 'header' );
+        if ( ! $clean ) {
+            return $header;
+        }
+        $header['sections']                = array_merge( $clean, (array) ( $header['sections'] ?? [] ) );
+        $header['announcement']['enabled'] = false;
+        return $header;
+    }
+
     public static function upgrade_default_alignment( $force = false ) {
         $options = get_option( 'shop_builder_options', [] );
         if ( ! is_array( $options ) || ( ! $force && ! empty( $options['_align_default'] ) ) ) {

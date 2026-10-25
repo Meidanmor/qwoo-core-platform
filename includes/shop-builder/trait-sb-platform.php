@@ -81,6 +81,8 @@ trait SB_Platform {
                 'icon_sets'        => self::ICON_SETS,
                 // No slots any more: the shop pages are templates (an older dashboard reads this).
                 'page_locations'   => (object) [],
+                // Header sections can sit "Above header" (location 'above').
+                'above_header'     => true,
                 'loop_types'       => self::LOOP_TYPES,
                 'max_loops'        => self::MAX_LOOPS,
                 'padding_presets'  => self::SECTION_PADDING_PRESETS,
@@ -147,6 +149,7 @@ trait SB_Platform {
                 'fonts'         => Qwoo_Brand_Fonts::get( $o ),
                 'logo_id'       => (int) ( $o['branding']['logo_id'] ?? 0 ),
                 'app_icon_id'   => (int) ( $o['branding']['app_icon_id'] ?? 0 ),
+                'loading_bar'   => (string) ( $o['branding']['loading_bar'] ?? '' ),
             ],
             'pwa'      => [
                 'name'             => (string) ( $o['pwa']['name'] ?? '' ),

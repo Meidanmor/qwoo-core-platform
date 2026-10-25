@@ -59,9 +59,11 @@ add_action( 'init', function() {
                 // Videos in the product's gallery, and where each one goes.
                 $videos = class_exists('Qwoo_Media_Support') ? Qwoo_Media_Support::product_videos($product) : [];
                 $variation_prices = qwoo_variation_prices($product);
+                // Questions and answers + bought-together ids (single product answers only).
+                $extras = class_exists('Qwoo_Product_Extras') ? Qwoo_Product_Extras::for_storefront($product) : ['faq' => null, 'bought_together' => null];
 
                 if (empty($terms) || is_wp_error($terms)) {
-                    return ['default_category' => null, 'reviews' => $reviews, 'videos' => $videos, 'variation_prices' => $variation_prices];
+                    return ['default_category' => null, 'reviews' => $reviews, 'videos' => $videos, 'variation_prices' => $variation_prices] + $extras;
                 }
 
                 // Get the first term (you can customize sorting if needed)
@@ -76,7 +78,7 @@ add_action( 'init', function() {
                     'reviews' => $reviews,
                     'videos' => $videos,
                     'variation_prices' => $variation_prices,
-                ];
+                ] + $extras;
             },
             'schema_callback' => function () {
                 return [
@@ -106,6 +108,18 @@ add_action( 'init', function() {
                         ],
                         'variation_prices' => [
                             'description' => 'Single product answers of variable products only: [{ id, price, regular_price }] in the smallest currency unit; null otherwise.',
+                            'type' => ['array', 'null'],
+                            'context' => ['view', 'edit'],
+                            'readonly' => true,
+                        ],
+                        'faq' => [
+                            'description' => 'Single product answers only: the product\'s questions and answers [{ q, a }] (plain text); null otherwise.',
+                            'type' => ['array', 'null'],
+                            'context' => ['view', 'edit'],
+                            'readonly' => true,
+                        ],
+                        'bought_together' => [
+                            'description' => 'Single product answers only: ids of the products shown as "bought together"; null otherwise.',
                             'type' => ['array', 'null'],
                             'context' => ['view', 'edit'],
                             'readonly' => true,

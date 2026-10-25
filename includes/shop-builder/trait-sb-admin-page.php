@@ -327,34 +327,7 @@ trait SB_Admin_Page {
                         <div id="tab-header" class="tab-content active">
                             <h2>Header Settings</h2>
 
-                            <div class="qwoo-section-block">
-                                <h3>Announcement Bar</h3>
-
-                                <label class="qwoo-switch-row">
-                                    <input type="checkbox"
-                                           class="qwoo-switch"
-                                           name="shop_builder_options[header][announcement][enabled]"
-                                           value="1"
-                                            <?php checked( $header['announcement']['enabled'] ?? false, true ); ?> />
-                                    <span class="qwoo-switch-label">Enable Announcement Bar</span>
-                                </label>
-
-                                <div class="field-group" style="margin-top:16px;">
-                                    <span class="field-label">Announcement Text</span>
-                                    <input type="text"
-                                           name="shop_builder_options[header][announcement][text]"
-                                           value="<?php echo esc_attr( $header['announcement']['text'] ?? '' ); ?>"
-                                           class="large-text"
-                                           placeholder="Enter announcement text..." />
-                                </div>
-
-                                <div class="qwoo-color-pair">
-                                    <?php
-                                    self::render_color_field( 'shop_builder_options[header][announcement][bg_color]', 'Background Color', $header['announcement']['bg_color'] ?? '', '#000000' );
-                                    self::render_color_field( 'shop_builder_options[header][announcement][text_color]', 'Text Color', $header['announcement']['text_color'] ?? '', '#ffffff' );
-                                    ?>
-                                </div>
-                            </div>
+                            <!-- The announcement bar became the header's "Above header" sections (YallaFlow dashboard → Store builder → Header). -->
 
                             <hr>
 

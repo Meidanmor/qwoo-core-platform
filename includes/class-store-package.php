@@ -559,6 +559,7 @@ class Qwoo_Store_Package {
                 'attributes' => self::product_attributes( $p ), 'default_attributes' => (array) $p->get_default_attributes( 'edit' ),
                 'image' => self::image( $p->get_image_id( 'edit' ) ), 'gallery' => $gallery,
                 'seo' => self::seo( $id, 'post' ), 'i18n' => Qwoo_Translations::get( $id ),
+                'faq' => Qwoo_Product_Extras::faq( $id ),
                 'media_order' => $order ? array_values( array_filter( array_map( [ __CLASS__, 'image' ], $order ) ) ) : [],
             ] + self::stock_fields( $p );
             if ( $p->is_type( 'variable' ) ) {

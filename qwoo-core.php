@@ -96,6 +96,7 @@ require_once QWOO_PATH . 'includes/trait-platform-coupons.php';
 require_once QWOO_PATH . 'includes/trait-platform-media.php';
 require_once QWOO_PATH . 'includes/class-media-support.php';
 require_once QWOO_PATH . 'includes/trait-platform-product-tools.php';
+require_once QWOO_PATH . 'includes/class-product-extras.php';
 require_once QWOO_PATH . 'includes/trait-platform-customers.php';
 require_once QWOO_PATH . 'includes/trait-platform-reviews.php';
 require_once QWOO_PATH . 'includes/class-reviews.php';

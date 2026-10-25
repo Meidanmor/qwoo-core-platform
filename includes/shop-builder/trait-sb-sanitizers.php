@@ -468,6 +468,10 @@ trait SB_Sanitizers {
                     'style'   => self::sanitize_fields( self::SECTION_STYLE_FIELDS, $section['style'] ?? [] ),
                     'blocks'  => $this->sanitize_blocks( $section['blocks'] ?? [] ),
             ];
+            // The header's "Above header" box: drawn before the header element, scrolls away with the page.
+            if ( $page_slug === 'header' && ( $section['location'] ?? '' ) === 'above' ) {
+                $row['location'] = 'above';
+            }
 
             $clean[] = $row;
         }
@@ -905,6 +909,8 @@ trait SB_Sanitizers {
                     'global_colors' => $colors,
                     'logo_id'       => self::sanitize_attachment_id( $input['branding']['logo_id'] ?? 0 ),
                     'app_icon_id'   => self::sanitize_attachment_id( $input['branding']['app_icon_id'] ?? 0 ),
+                    // The page loading bar ('' = the secondary colour); wp-admin's form doesn't send it.
+                    'loading_bar'   => self::sanitize_color_value( $input['branding']['loading_bar'] ?? ( $existing['branding']['loading_bar'] ?? '' ) ),
             ];
             // Brand fonts: only from the dashboard (wp-admin's Branding form keeps them as they are).
             if ( isset( $input['branding']['fonts'] ) ) {
