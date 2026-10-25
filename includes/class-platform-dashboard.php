@@ -732,6 +732,15 @@ class Qwoo_Platform_Dashboard {
                 return self::bad( 'The description is too long (20,000 characters at most).' );
             }
         }
+        // The short description (shown by the Product Description block set to "short"): left alone when missing.
+        $short = null;
+        if ( array_key_exists( 'short_description_html', $f ) ) {
+            $short = (string) $f['short_description_html'];
+            if ( mb_strlen( $short ) > 5000 ) {
+                return self::bad( 'The short description is too long. Shorten it a little.' );
+            }
+            $short = self::clean_description( $short );
+        }
         // Weight and size, in the store's units (Settings): left alone when missing.
         $shipping = null;
         if ( is_array( $f['shipping'] ?? null ) ) {
@@ -770,6 +779,7 @@ class Qwoo_Platform_Dashboard {
             'status'      => in_array( $f['status'] ?? '', self::PRODUCT_STATUSES, true ) ? $f['status'] : 'draft',
             'sku'         => $sku,
             'description' => $description,
+            'short'       => $short,
             'images'      => $images,
             'categories'  => $categories,
             'slug'        => $slug,
@@ -786,6 +796,9 @@ class Qwoo_Platform_Dashboard {
             $product->set_description( $c['description']['html'] );
         } elseif ( $c['description'] !== null ) {
             $product->set_description( self::from_text( $c['description'] ) );
+        }
+        if ( ( $c['short'] ?? null ) !== null ) {
+            $product->set_short_description( $c['short'] );
         }
         $product->set_category_ids( $c['categories'] );
         if ( $c['slug'] ) {
@@ -2535,7 +2548,8 @@ class Qwoo_Platform_Dashboard {
             'editable'     => $p->is_type( self::EDITABLE_TYPES ),
             // For the formatted editor: what it can show (anything else is dropped when saving).
             'description_html' => self::clean_description( wpautop( $description ) ),
-            'sku'          => $p->get_sku(),
+            'short_description_html' => self::clean_description( wpautop( (string) $p->get_short_description() ) ),
+            'sku'        => $p->get_sku(),
             'manage_stock' => $p->managing_stock(),
             'categories'   => array_map( 'intval', $p->get_category_ids() ),
             'images'       => $images,

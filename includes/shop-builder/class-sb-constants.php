@@ -609,6 +609,19 @@ abstract class Shop_Builder_Constants {
     /** Form field types that need an `options` list. */
     const FORM_FIELD_TYPES_WITH_OPTIONS = [ 'select', 'radio', 'checkboxes' ];
 
+    /** Shared by the checkout blocks: a title and the card look. */
+    const CHECKOUT_CARD_FIELDS = [
+        'show_title' => [ 'type' => 'toggle', 'label' => 'Show the title', 'tab' => 'content', 'default' => true ],
+        'card'       => [ 'type' => 'toggle', 'label' => 'In a card', 'tab' => 'style', 'default' => true,
+                'help' => 'Off: no frame or padding of its own, so the Style tab\'s box does it.' ],
+        'ts:title'   => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+    ];
+    /** The look of the checkout's input fields (contact, addresses, coupon). */
+    const CHECKOUT_FIELD_LOOK = [
+        'field_look' => [ 'type' => 'select', 'label' => 'Fields', 'tab' => 'style', 'default' => 'filled',
+                'options' => [ 'filled' => 'Filled', 'outlined' => 'Outlined', 'standard' => 'Underlined', 'borderless' => 'Plain' ] ],
+    ];
+
     /**
      * Whitelisted content-block types. `fields` describes the block's `data`
      * object (content + style tabs); BLOCK_COMMON_FIELDS describe its `style`
@@ -1165,10 +1178,42 @@ abstract class Shop_Builder_Constants {
             'product_gallery' => [
                     'label' => 'Product Photos', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'format-image',
                     'fields' => [
-                            'max_height' => [ 'type' => 'length', 'label' => 'Photo Height', 'tab' => 'content', 'responsive' => true, 'units' => [ 'px', 'vh' ],
-                                    'default' => [ 'desktop' => '400px' ], 'placeholder' => '400px' ],
+                            // 'max' is how the block always worked: photos keep their shape, never taller than the height.
+                            'height_mode' => [ 'type' => 'select', 'label' => 'Photo Height', 'tab' => 'content', 'default' => 'max',
+                                    'options' => [ 'max' => 'Up to a height', 'fixed' => 'The same height for every photo', 'min' => 'At least a height', 'auto' => 'Each photo\'s own height' ] ],
+                            'max_height' => [ 'type' => 'length', 'label' => 'Height', 'tab' => 'content', 'responsive' => true, 'units' => [ 'px', 'vh' ],
+                                    'default' => [ 'desktop' => '400px' ], 'placeholder' => '400px', 'hide_if' => [ 'height_mode' => 'auto' ] ],
+                            'fit'        => [ 'type' => 'select', 'label' => 'Photos In The Box', 'tab' => 'content', 'default' => 'contain',
+                                    'options' => [ 'contain' => 'Whole photo', 'cover' => 'Fill the box (cropped)' ], 'show_if' => [ 'height_mode' => [ 'fixed', 'min' ] ] ],
+                            'show_arrows' => [ 'type' => 'toggle', 'label' => 'Arrows', 'tab' => 'content', 'default' => true ],
+                            'show_dots'   => [ 'type' => 'toggle', 'label' => 'Dots', 'tab' => 'content', 'default' => true,
+                                    'help' => 'Turn off when the page has a Product Thumbnails block.' ],
                             'zoom'       => [ 'type' => 'toggle', 'label' => 'Open photos full screen on click', 'tab' => 'content', 'default' => true ],
+                            'photo_bg'   => [ 'type' => 'color', 'label' => 'Background Behind Photos', 'tab' => 'style', 'default' => '' ],
                             'rounded'    => [ 'type' => 'toggle', 'label' => 'Rounded corners', 'tab' => 'style', 'default' => false ],
+                    ],
+            ],
+            'product_thumbnails' => [
+                    'label' => 'Product Thumbnails', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'format-image',
+                    'fields' => [
+                            'direction' => [ 'type' => 'select', 'label' => 'Direction', 'tab' => 'content', 'responsive' => true, 'default' => 'row',
+                                    'options' => [ 'row' => 'In a row', 'column' => 'In a column' ],
+                                    'help' => 'Put the block above, below or beside the Product Photos block (a column next to it).' ],
+                            'size'      => [ 'type' => 'length', 'label' => 'Thumbnail Size', 'tab' => 'style', 'responsive' => true, 'units' => [ 'px' ], 'placeholder' => '72px' ],
+                            'ratio'     => [ 'type' => 'select', 'label' => 'Shape', 'tab' => 'style', 'default' => 'square',
+                                    'options' => [ 'square' => 'Square', 'portrait' => 'Tall (3:4)', 'landscape' => 'Wide (4:3)' ] ],
+                            'fit'       => [ 'type' => 'select', 'label' => 'Photos In The Thumbnail', 'tab' => 'style', 'default' => 'cover',
+                                    'options' => [ 'cover' => 'Fill (cropped)', 'contain' => 'Whole photo' ] ],
+                            'gap'       => [ 'type' => 'length', 'label' => 'Space Between', 'tab' => 'style', 'responsive' => true, 'units' => [ 'px' ], 'placeholder' => '8px' ],
+                            'align'     => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'radius'    => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'placeholder' => '8px' ],
+                            'bg'        => [ 'type' => 'color', 'label' => 'Background', 'tab' => 'style', 'default' => '' ],
+                            'border_color' => [ 'type' => 'color', 'label' => 'Border Color', 'tab' => 'style', 'default' => '' ],
+                            'active_color' => [ 'type' => 'color', 'label' => 'Chosen Thumbnail Border', 'tab' => 'style', 'default' => 'global:secondary' ],
+                            'active_width' => [ 'type' => 'length', 'label' => 'Chosen Border Width', 'tab' => 'style', 'units' => [ 'px' ], 'placeholder' => '2px' ],
+                            'dim'       => [ 'type' => 'toggle', 'label' => 'Fade the other thumbnails', 'tab' => 'style', 'default' => true ],
+                            'max_visible' => [ 'type' => 'number', 'label' => 'Thumbnails Before Scrolling', 'tab' => 'content', 'min' => 0, 'max' => 20, 'default' => 0,
+                                    'help' => '0 = all of them, wrapping onto more lines. Any other number: that many, then they scroll.' ],
                     ],
             ],
             'product_title' => [
@@ -1565,21 +1610,76 @@ abstract class Shop_Builder_Constants {
                             'label' => [ 'type' => 'text', 'label' => 'Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Have an account?' ],
                     ],
             ],
+            // The first checkout blocks held several parts each; they're split into the blocks
+            // below (split_checkout_blocks). Kept so older lists still read: never offered ('pages' empty).
             'checkout_details' => [
-                    'label' => 'Customer Details', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'person',
+                    'label' => 'Customer Details', 'category' => 'dynamic', 'pages' => [], 'legacy' => true, 'icon' => 'person',
                     'fields' => [
                             'show_coupon' => [ 'type' => 'toggle', 'label' => 'Coupon box', 'tab' => 'content', 'default' => true ],
                     ],
             ],
             'checkout_summary' => [
-                    'label' => 'Order Summary', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'cart',
+                    'label' => 'Order Summary', 'category' => 'dynamic', 'pages' => [], 'legacy' => true, 'icon' => 'cart',
                     'fields' => [
                             'show_items' => [ 'type' => 'toggle', 'label' => 'The cart\'s items', 'tab' => 'content', 'default' => true ],
+                    ],
+            ],
+            'checkout_contact' => [
+                    'label' => 'Contact Details', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'person',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Personal Details' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK,
+            ],
+            'checkout_shipping_address' => [
+                    'label' => 'Shipping Address', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'person',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Shipping Address' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK,
+            ],
+            'checkout_billing_address' => [
+                    'label' => 'Billing Address', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'card',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Billing Address' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + [
+                            'checkbox_label' => [ 'type' => 'text', 'label' => 'Checkbox Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Different billing address?' ],
+                    ],
+            ],
+            'checkout_coupon' => [
+                    'label' => 'Coupon Box', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'tag',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Coupon' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + [
+                            'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Apply' ],
+                            'button_bg'    => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
+                            'button_text'  => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
+                    ],
+            ],
+            'checkout_items' => [
+                    'label' => 'Cart Items', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'cart',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Your Cart' ] ] + self::CHECKOUT_CARD_FIELDS + [
+                            'image_size' => [ 'type' => 'length', 'label' => 'Photo Size', 'tab' => 'style', 'units' => [ 'px' ], 'placeholder' => '100px' ],
+                            'ts:item'    => [ 'type' => 'text_style', 'label' => 'Items', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
+                    ],
+            ],
+            'checkout_shipping' => [
+                    'label' => 'Delivery Options', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'cart',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Choose Shipping Method' ] ] + self::CHECKOUT_CARD_FIELDS + [
+                            'choice_color' => [ 'type' => 'color', 'label' => 'Chosen Option Color', 'tab' => 'style', 'default' => '' ],
+                            'ts:option'    => [ 'type' => 'text_style', 'label' => 'Options', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
+                    ],
+            ],
+            'checkout_payment' => [
+                    'label' => 'Payment Options', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'card',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Payment Method' ] ] + self::CHECKOUT_CARD_FIELDS + [
+                            'choice_color' => [ 'type' => 'color', 'label' => 'Chosen Option Color', 'tab' => 'style', 'default' => '' ],
+                            'ts:option'    => [ 'type' => 'text_style', 'label' => 'Options', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
+                    ],
+            ],
+            'checkout_totals' => [
+                    'label' => 'Order Totals', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'products',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Order Summary' ] ] + self::CHECKOUT_CARD_FIELDS + [
+                            'show_discount' => [ 'type' => 'toggle', 'label' => 'Show the discount', 'tab' => 'content', 'default' => true ],
+                            'ts:total'      => [ 'type' => 'text_style', 'label' => 'Total', 'default_font' => 'headings' ],
                     ],
             ],
             'checkout_place_order' => [
                     'label' => 'Place Order', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'check',
                     'fields' => [
+                            'show_total'   => [ 'type' => 'toggle', 'label' => 'Show the total above the button', 'tab' => 'content', 'default' => true,
+                                    'help' => 'Turn off when the page has an Order Totals block.' ],
+                            'card'         => [ 'type' => 'toggle', 'label' => 'In a card', 'tab' => 'style', 'default' => true ],
                             'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Place Order' ],
                             'full_width'   => [ 'type' => 'toggle', 'label' => 'Full-width button', 'tab' => 'style', 'default' => false ],
                             'button_bg'    => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
@@ -1815,6 +1915,19 @@ abstract class Shop_Builder_Constants {
                             'marker'   => [ 'type' => 'select', 'label' => 'Marker', 'tab' => 'content', 'default' => 'number',
                                     'options' => [ 'number' => 'Step number', 'check' => 'Check mark', 'icon' => 'Each step\'s icon', 'dot' => 'A dot' ] ],
                             'number_titles' => [ 'type' => 'toggle', 'label' => 'Number the titles ("1. ")', 'tab' => 'content' ],
+                            'interaction' => [ 'type' => 'select', 'label' => 'Interaction', 'tab' => 'content', 'default' => 'none',
+                                    'options' => [ 'none' => 'None', 'scroll' => 'The line fills as visitors scroll', 'click' => 'Visitors click a step', 'auto' => 'Plays by itself (stops when clicked)' ],
+                                    'help' => 'Steps after the current one are dimmed and the line fills up to it.' ],
+                            'step_seconds' => [ 'type' => 'number', 'label' => 'Seconds Per Step', 'tab' => 'content', 'min' => 2, 'max' => 20, 'default' => 5,
+                                    'show_if' => [ 'interaction' => 'auto' ] ],
+                            'collapse'    => [ 'type' => 'toggle', 'label' => 'Show only the current step\'s text', 'tab' => 'content', 'default' => false,
+                                    'show_if' => [ 'interaction' => [ 'click', 'auto' ] ] ],
+                            'active_line_color' => [ 'type' => 'color', 'label' => 'Filled Line Color', 'tab' => 'style', 'group' => 'Interaction',
+                                    'help' => 'Empty = the marker color.', 'show_if' => [ 'interaction' => [ 'scroll', 'click', 'auto' ] ] ],
+                            'idle_marker_color' => [ 'type' => 'color', 'label' => 'Later Steps\' Marker Color', 'tab' => 'style', 'group' => 'Interaction',
+                                    'show_if' => [ 'interaction' => [ 'scroll', 'click', 'auto' ] ] ],
+                            'dim_opacity' => [ 'type' => 'number', 'label' => 'Later Steps\' Opacity (%)', 'tab' => 'style', 'group' => 'Interaction', 'min' => 0, 'max' => 100, 'default' => 45,
+                                    'show_if' => [ 'interaction' => [ 'scroll', 'click', 'auto' ] ] ],
                             'marker_size' => [ 'type' => 'length', 'label' => 'Marker Size', 'tab' => 'style', 'group' => 'Line & marker', 'placeholder' => '40px' ],
                             'marker_bg'   => [ 'type' => 'color', 'label' => 'Marker Color', 'tab' => 'style', 'group' => 'Line & marker', 'default' => 'global:secondary' ],
                             'marker_bg2'  => [ 'type' => 'color', 'label' => 'Second Marker Color', 'tab' => 'style', 'group' => 'Line & marker', 'help' => 'Set it for a gradient.' ],

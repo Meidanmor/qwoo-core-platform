@@ -140,7 +140,6 @@ trait SB_Platform {
                 'hero_image_id'    => (int) ( $o['home']['hero_image_id'] ?? 0 ),
             ],
             'checkout' => [
-                'checkout_notice' => (string) ( $o['checkout']['checkout_notice'] ?? '' ),
                 'require_terms'   => (bool) ( $o['checkout']['require_terms'] ?? true ),
                 'allow_signup'    => (bool) ( $o['checkout']['allow_signup'] ?? true ),
             ],

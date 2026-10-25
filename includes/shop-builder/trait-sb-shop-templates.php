@@ -15,6 +15,10 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * stored options (upgrade_shop_templates: main language and every extra
  * language's copy). Published configs say `template: 1`; the storefront
  * converts an older published file the same way (src/utils/shop-templates.js).
+ *
+ * The checkout's first two big blocks (Customer Details, Order Summary) are
+ * split into one block per part (split_checkout_blocks), in an inner section
+ * where the old block was, so the page looks the same.
  */
 trait SB_Shop_Templates {
 
@@ -158,8 +162,13 @@ trait SB_Shop_Templates {
                             'id' => self::new_id( 'blk' ), 'type' => 'section', 'label' => '', 'enabled' => true,
                             'style' => [ 'width_mode' => 'full', 'padding_preset' => 'none', 'direction' => $rwd( 'row', 'row', 'column' ), 'justify' => $rwd( 'space-between' ), 'align_items' => $rwd( 'flex-start' ), 'gap' => $rwd( '16px' ) ],
                             'blocks' => [
-                                $col( array_merge( $inside( 'before_customer_details' ), [ $block( 'checkout_details' ) ], $inside( 'after_customer_details' ) ), $rwd( '57%', '57%', '100%' ) ),
-                                $col( array_merge( $inside( 'before_order_review' ), [ $block( 'checkout_summary' ) ], $inside( 'before_place_order' ), [ $block( 'checkout_place_order' ) ] ), $rwd( '41%', '41%', '100%' ) ),
+                                $col( array_merge( $inside( 'before_customer_details' ),
+                                    $types( [ 'checkout_contact', 'checkout_shipping_address', 'checkout_billing_address', 'checkout_coupon' ] ),
+                                    $inside( 'after_customer_details' ) ), $rwd( '57%', '57%', '100%' ) ),
+                                $col( array_merge( $inside( 'before_order_review' ),
+                                    $types( [ 'checkout_items', 'checkout_shipping', 'checkout_payment', 'checkout_totals' ] ),
+                                    $inside( 'before_place_order' ),
+                                    [ array_merge( $block( 'checkout_place_order' ), [ 'data' => [ 'show_total' => false ] ] ) ] ), $rwd( '41%', '41%', '100%' ) ),
                             ],
                         ],
                     ], $pad( '16', '16', '16', '16' ) + [ 'gap' => $rwd( '8px' ) ] ) ],
@@ -171,6 +180,51 @@ trait SB_Shop_Templates {
                 return [];
         }
         return array_values( $out );
+    }
+
+    /** The parts each of the first checkout blocks becomes (by its own switches). */
+    private static function checkout_block_parts( $type, array $data ) {
+        $off = static fn( $v ) => in_array( $v, [ false, 0, '0', 'false' ], true );
+        if ( $type === 'checkout_details' ) {
+            return array_merge( [ 'checkout_contact', 'checkout_shipping_address', 'checkout_billing_address' ],
+                $off( $data['show_coupon'] ?? true ) ? [] : [ 'checkout_coupon' ] );
+        }
+        return array_merge( $off( $data['show_items'] ?? true ) ? [] : [ 'checkout_items' ], [ 'checkout_shipping', 'checkout_payment' ] );
+    }
+
+    /**
+     * A checkout list with Customer Details / Order Summary blocks: each becomes
+     * an inner section (with the old block's own settings) holding its parts.
+     */
+    public static function split_checkout_blocks( array $nodes, &$changed = false ) {
+        $out = [];
+        foreach ( $nodes as $node ) {
+            if ( ! is_array( $node ) ) {
+                $out[] = $node;
+                continue;
+            }
+            $type = (string) ( $node['type'] ?? '' );
+            if ( $type === 'checkout_details' || $type === 'checkout_summary' ) {
+                $data  = is_array( $node['data'] ?? null ) ? $node['data'] : [];
+                $style = is_array( $node['style'] ?? null ) ? $node['style'] : [];
+                $out[] = [
+                    'id'      => self::new_id( 'blk' ),
+                    'type'    => 'section',
+                    'label'   => (string) ( $node['label'] ?? '' ),
+                    'enabled' => ! isset( $node['enabled'] ) || ( ! empty( $node['enabled'] ) && $node['enabled'] !== 'false' ),
+                    'style'   => $style + [ 'width_mode' => 'full', 'padding_preset' => 'none' ],
+                    'blocks'  => array_map( static fn( $t ) => [ 'id' => self::new_id( 'blk' ), 'type' => $t, 'label' => '', 'enabled' => true, 'style' => [], 'data' => [] ],
+                        self::checkout_block_parts( $type, $data ) ),
+                ];
+                $changed = true;
+                continue;
+            }
+            if ( is_array( $node['blocks'] ?? null ) ) {
+                $node['blocks'] = self::split_checkout_blocks( $node['blocks'], $changed );
+            }
+            $out[] = $node;
+        }
+        return $out;
     }
 
     /** An old top-level section as a section inside a column. */
@@ -196,6 +250,16 @@ trait SB_Shop_Templates {
                 if ( is_array( $layout ) && self::is_old_shop_list( $layout['sections'] ?? [], $page ) ) {
                     $page_opts['layouts'][ $i ]['sections'] = self::shop_template_sections( $page, (array) ( $layout['sections'] ?? [] ) );
                     $changed = true;
+                }
+            }
+        }
+        if ( $page === 'checkout' ) {
+            if ( is_array( $page_opts['sections'] ?? null ) ) {
+                $page_opts['sections'] = self::split_checkout_blocks( $page_opts['sections'], $changed );
+            }
+            foreach ( (array) ( $page_opts['layouts'] ?? [] ) as $i => $layout ) {
+                if ( is_array( $layout['sections'] ?? null ) ) {
+                    $page_opts['layouts'][ $i ]['sections'] = self::split_checkout_blocks( $layout['sections'], $changed );
                 }
             }
         }

@@ -888,9 +888,9 @@ trait SB_Sanitizers {
         }
 
         // Checkout (its sections are set above: merged, not replaced)
-        if ( isset( $input['checkout']['checkout_notice'] ) || isset( $input['checkout']['require_terms'] ) ) {
+        // (The old "Checkout notice" is gone: the storefront never showed it; a Text block does that now.)
+        if ( isset( $input['checkout']['require_terms'] ) || isset( $input['checkout']['allow_signup'] ) ) {
             $clean['checkout'] = [
-                    'checkout_notice' => sanitize_textarea_field( $input['checkout']['checkout_notice'] ?? '' ),
                     // Customers tick "I agree to the terms and the privacy policy" (when those pages are published).
                     'require_terms'   => ! empty( $input['checkout']['require_terms'] ),
                     // Guests can tick "Create an account" (WooCommerce emails them a link to set a password).

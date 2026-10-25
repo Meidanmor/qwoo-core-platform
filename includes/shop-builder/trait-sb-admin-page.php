@@ -459,12 +459,7 @@ trait SB_Admin_Page {
                         <div id="tab-checkout" class="tab-content">
                             <h2>Checkout Settings</h2>
 
-                            <div class="field-group">
-                                <span class="field-label">Checkout Notice</span>
-                                <textarea name="shop_builder_options[checkout][checkout_notice]"
-                                          class="large-text"
-                                          rows="5"><?php echo esc_textarea( $options['checkout']['checkout_notice'] ?? '' ); ?></textarea>
-                            </div>
+                            <p class="description">The checkout page is built from blocks in the YallaFlow dashboard (Store builder → Shop pages → Checkout).</p>
                         </div>
 
                         <!-- ===================== BRANDING TAB ===================== -->
