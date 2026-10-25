@@ -898,6 +898,11 @@ trait SB_Sanitizers {
             ] + ( $clean['checkout'] ?? [] );
         }
 
+        // My account: whether visitors can make an account themselves (Sign Up Form, Google).
+        if ( isset( $input['account']['allow_signup'] ) ) {
+            $clean['account'] = [ 'allow_signup' => ! empty( $input['account']['allow_signup'] ) ] + ( $clean['account'] ?? [] );
+        }
+
         // Branding
         if ( isset( $input['branding'] ) ) {
             $colors = [];

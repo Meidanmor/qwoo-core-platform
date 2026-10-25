@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 trait SB_Platform {
 
     /** Options other than page sections that the dashboard edits. */
-    private static $platform_option_groups = [ 'header', 'footer', 'home', 'checkout', 'branding', 'pwa', 'contact' ];
+    private static $platform_option_groups = [ 'header', 'footer', 'home', 'checkout', 'account', 'branding', 'pwa', 'contact' ];
 
     /**
      * Everything the Design screen needs: data, schema, display data and
@@ -143,6 +143,9 @@ trait SB_Platform {
                 'require_terms'   => (bool) ( $o['checkout']['require_terms'] ?? true ),
                 'allow_signup'    => (bool) ( $o['checkout']['allow_signup'] ?? true ),
             ],
+            'account'  => [
+                'allow_signup'    => (bool) ( $o['account']['allow_signup'] ?? true ),
+            ],
             'branding' => [
                 'global_colors' => self::get_global_colors(),
                 'fonts'         => Qwoo_Brand_Fonts::get( $o ),
@@ -214,6 +217,9 @@ trait SB_Platform {
         }
         if ( isset( $input['checkout']['allow_signup'] ) ) {
             Qwoo_Checkout_Extras::sync_signup( ! empty( $input['checkout']['allow_signup'] ) );
+        }
+        if ( isset( $input['account']['allow_signup'] ) ) {
+            Qwoo_Account_Signup::sync( ! empty( $input['account']['allow_signup'] ) );
         }
         return self::platform_design_data();
     }

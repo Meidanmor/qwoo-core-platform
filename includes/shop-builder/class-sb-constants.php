@@ -352,6 +352,19 @@ abstract class Shop_Builder_Constants {
                     'help' => 'Items with a lower number come first; 0 keeps the order of the list. Per screen size: e.g. -1 on phones puts it first there only.' ],
     ];
 
+    /**
+     * "Show To": everyone, visitors who aren't signed in, or signed-in
+     * customers (sections and blocks, Advanced tab). The storefront marks
+     * the page once it knows (html.qa-in / html.qa-out) and CSS shows the
+     * right items, so the server's page and the browser's stay the same.
+     * A look only: never for anything secret (it's in the page's code).
+     */
+    const AUDIENCE_FIELDS = [
+            'audience' => [ 'type' => 'select', 'label' => 'Show To', 'tab' => 'advanced', 'group' => 'Visibility', 'default' => 'all',
+                    'options' => [ 'all' => 'Everyone', 'guests' => 'Visitors who aren\'t signed in', 'customers' => 'Signed-in customers' ],
+                    'help' => 'E.g. a sign-in form for visitors and a "Welcome back" banner for customers. Only hides it from view: don\'t use it for anything secret.' ],
+    ];
+
     /* ------------------------------------------------------------------
        Container (section) style fields — top-level sections AND nested
        `section` blocks share this exact list.
@@ -410,6 +423,7 @@ abstract class Shop_Builder_Constants {
 
             // --- Advanced tab ---
             'hide_on' => [ 'type' => 'devices', 'label' => 'Hide On', 'tab' => 'advanced' ],
+    ] + self::AUDIENCE_FIELDS + [
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced',
                     'help' => 'Lets a button link to this section with #your-id.' ],
     ];
@@ -432,6 +446,7 @@ abstract class Shop_Builder_Constants {
                     'help' => 'Mostly useful when the parent section arranges blocks horizontally.' ],
             'max_width' => [ 'type' => 'length', 'label' => 'Max Width', 'tab' => 'advanced', 'group' => 'Size', 'responsive' => true, 'placeholder' => 'e.g. 640px' ],
             'hide_on' => [ 'type' => 'devices', 'label' => 'Hide On', 'tab' => 'advanced', 'group' => 'Visibility' ],
+    ] + self::AUDIENCE_FIELDS + [
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced', 'group' => 'Visibility' ],
             // Entrance animation: this block only (never whole sections), once, when it scrolls into view.
             'animation' => [ 'type' => 'select', 'label' => 'Entrance Animation', 'tab' => 'advanced', 'group' => 'Animation', 'default' => 'none',
@@ -547,7 +562,16 @@ abstract class Shop_Builder_Constants {
             'bit' => 'Bit', 'apple_pay' => 'Apple Pay', 'google_pay' => 'Google Pay', 'paypal' => 'PayPal',
     ];
 
+    /** The Account widget's icons (header). */
+    const ACCOUNT_ICONS = [
+            'person_outline' => [ 'label' => 'Person outline', 'icon' => 'person_outline' ],
+            'person'         => [ 'label' => 'Person',         'icon' => 'person' ],
+            'account_circle' => [ 'label' => 'Person in a circle', 'icon' => 'account_circle' ],
+            'login'          => [ 'label' => 'Sign in arrow',  'icon' => 'login' ],
+    ];
+
     const ICON_SETS = [
+            'account'   => self::ACCOUNT_ICONS,
             'advantage' => self::ADVANTAGE_ICONS,
             'general'   => self::GENERAL_ICONS,
             'cart'      => self::CART_ICONS,
@@ -620,6 +644,32 @@ abstract class Shop_Builder_Constants {
     const CHECKOUT_FIELD_LOOK = [
         'field_look' => [ 'type' => 'select', 'label' => 'Fields', 'tab' => 'style', 'default' => 'filled',
                 'options' => [ 'filled' => 'Filled', 'outlined' => 'Outlined', 'standard' => 'Underlined', 'borderless' => 'Plain' ] ],
+    ];
+
+    /**
+     * The Sign In / Sign Up forms (any page, popups, the header). Social
+     * buttons show only when the store has that provider's public key
+     * (published in branding.json `account`).
+     */
+    const AUTH_FORM_FIELDS = [
+        'show_social' => [ 'type' => 'toggle', 'label' => 'Sign in with Google', 'tab' => 'content', 'default' => true,
+                'help' => 'Shown only once Google sign-in is set up for your store.' ],
+        'after'       => [ 'type' => 'select', 'label' => 'Afterwards', 'tab' => 'content', 'group' => 'After signing in', 'default' => 'stay',
+                'options' => [ 'stay' => 'Stay on this page', 'account' => 'Go to My account', 'page' => 'Go to another page' ] ],
+        'redirect_url' => [ 'type' => 'url', 'label' => 'Page', 'tab' => 'content', 'group' => 'After signing in', 'placeholder' => '/products',
+                'show_if' => [ 'after' => 'page' ] ],
+        'when_signed_in' => [ 'type' => 'select', 'label' => 'For Customers Already Signed In', 'tab' => 'content', 'default' => 'note',
+                'options' => [ 'note' => 'Show "You\'re signed in"', 'hide' => 'Show nothing' ] ],
+        'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '' ],
+        'button_bg'    => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
+        'button_text'  => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
+    ];
+
+    /** Where an account block shows on the My account page (the Account Menu switches parts). */
+    const ACCOUNT_PART_FIELD = [
+        'show_on' => [ 'type' => 'select', 'label' => 'Show On', 'tab' => 'content', 'default' => 'own',
+                'options' => [ 'own' => 'Its own part of My account', 'always' => 'Every part of My account' ],
+                'help' => 'The Account Menu opens one part at a time (Dashboard, My Orders, Account Details).' ],
     ];
 
     /**
@@ -1687,6 +1737,94 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
 
+            /* ---- Signing in: the forms go on any page; the account blocks belong to My account. ---- */
+            'login_form' => [
+                    'label' => 'Sign In Form', 'category' => 'interactive', 'icon' => 'person',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Sign in' ] ]
+                            + self::CHECKOUT_CARD_FIELDS + self::AUTH_FORM_FIELDS + self::CHECKOUT_FIELD_LOOK + [
+                            'show_remember' => [ 'type' => 'toggle', 'label' => 'Show "Remember me"', 'tab' => 'content', 'default' => true ],
+                            'show_forgot'   => [ 'type' => 'toggle', 'label' => 'Show "Forgot password?"', 'tab' => 'content', 'default' => true ],
+                    ],
+            ],
+            'signup_form' => [
+                    'label' => 'Sign Up Form', 'category' => 'interactive', 'icon' => 'person',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Create an account',
+                            'help' => 'Shows nothing while sign-up is off (Store builder → My account).' ] ]
+                            + self::CHECKOUT_CARD_FIELDS + self::AUTH_FORM_FIELDS + self::CHECKOUT_FIELD_LOOK,
+            ],
+            'account_title' => [
+                    'label' => 'Account Title', 'category' => 'dynamic', 'pages' => [ 'account' ], 'icon' => 'title',
+                    'fields' => [
+                            'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'My account' ],
+                            'tag'   => [ 'type' => 'select', 'label' => 'Heading Level', 'tab' => 'content', 'default' => 'h1', 'options' => [ 'h1' => 'H1', 'h2' => 'H2' ] ],
+                            'align' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+                    ],
+            ],
+            'account_menu' => [
+                    'label' => 'Account Menu', 'category' => 'dynamic', 'pages' => [ 'account' ], 'icon' => 'menu',
+                    'fields' => [
+                            'layout' => [ 'type' => 'select', 'label' => 'Show As', 'tab' => 'content', 'responsive' => true,
+                                    'default' => [ 'desktop' => 'list', 'tablet' => 'list', 'mobile' => 'tabs' ],
+                                    'options' => [ 'list' => 'A list down the side', 'tabs' => 'Tabs in a row' ] ],
+                            'show_dashboard' => [ 'type' => 'toggle', 'label' => 'Dashboard', 'tab' => 'content', 'group' => 'Links', 'default' => true ],
+                            'dashboard_label' => [ 'type' => 'text', 'label' => 'Dashboard Text', 'tab' => 'content', 'group' => 'Links', 'placeholder' => 'Dashboard', 'show_if' => [ 'show_dashboard' => true ] ],
+                            'show_orders'    => [ 'type' => 'toggle', 'label' => 'My Orders', 'tab' => 'content', 'group' => 'Links', 'default' => true ],
+                            'orders_label'   => [ 'type' => 'text', 'label' => 'My Orders Text', 'tab' => 'content', 'group' => 'Links', 'placeholder' => 'My Orders', 'show_if' => [ 'show_orders' => true ] ],
+                            'show_details'   => [ 'type' => 'toggle', 'label' => 'Account Details', 'tab' => 'content', 'group' => 'Links', 'default' => true ],
+                            'details_label'  => [ 'type' => 'text', 'label' => 'Account Details Text', 'tab' => 'content', 'group' => 'Links', 'placeholder' => 'Account Details', 'show_if' => [ 'show_details' => true ] ],
+                            'show_logout'    => [ 'type' => 'toggle', 'label' => 'Sign out', 'tab' => 'content', 'group' => 'Links', 'default' => true ],
+                            'logout_label'   => [ 'type' => 'text', 'label' => 'Sign Out Text', 'tab' => 'content', 'group' => 'Links', 'placeholder' => 'Sign out', 'show_if' => [ 'show_logout' => true ] ],
+                            'gap'          => [ 'type' => 'length', 'label' => 'Space Between Links', 'tab' => 'style', 'responsive' => true, 'placeholder' => '4px' ],
+                            'link_padding' => [ 'type' => 'sides', 'label' => 'Link Padding', 'tab' => 'style', 'responsive' => true ],
+                            'link_radius'  => [ 'type' => 'length', 'label' => 'Link Corner Radius', 'tab' => 'style', 'placeholder' => '8px' ],
+                            'active_color' => [ 'type' => 'color', 'label' => 'Current Part Text Color', 'tab' => 'style', 'group' => 'Colors' ],
+                            'active_bg'    => [ 'type' => 'color', 'label' => 'Current Part Background', 'tab' => 'style', 'group' => 'Colors' ],
+                            'hover_bg'     => [ 'type' => 'color', 'label' => 'Hover Background', 'tab' => 'style', 'group' => 'Colors' ],
+                            'ts:link' => [ 'type' => 'text_style', 'label' => 'Links' ],
+                    ],
+            ],
+            'account_welcome' => [
+                    'label' => 'Account Welcome', 'category' => 'dynamic', 'pages' => [ 'account' ], 'icon' => 'person',
+                    'fields' => [
+                            'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Hello, {name}',
+                                    'help' => '{name} becomes the customer\'s first name.' ],
+                            'text'  => [ 'type' => 'textarea', 'label' => 'Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'From here you can see your orders and change your details.' ],
+                            'show_links' => [ 'type' => 'toggle', 'label' => 'Show shortcuts to the other parts', 'tab' => 'content', 'default' => true ],
+                            'show_on' => [ 'type' => 'select', 'label' => 'Show On', 'tab' => 'content', 'default' => 'own',
+                                    'options' => [ 'own' => 'The Dashboard part only', 'always' => 'Every part of My account' ] ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+                            'ts:text'  => [ 'type' => 'text_style', 'label' => 'Text' ],
+                    ],
+            ],
+            'account_orders' => [
+                    'label' => 'Account Orders', 'category' => 'dynamic', 'pages' => [ 'account' ], 'icon' => 'cart',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'My Orders' ] ]
+                            + self::CHECKOUT_CARD_FIELDS + self::ACCOUNT_PART_FIELD + [
+                            'empty_text' => [ 'type' => 'text', 'label' => 'Text When There Are No Orders', 'tab' => 'content', 'default' => '', 'placeholder' => 'No orders yet.' ],
+                    ],
+            ],
+            'account_details' => [
+                    'label' => 'Account Details', 'category' => 'dynamic', 'pages' => [ 'account' ], 'icon' => 'person',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Account Details' ] ]
+                            + self::CHECKOUT_CARD_FIELDS + self::ACCOUNT_PART_FIELD + self::CHECKOUT_FIELD_LOOK + [
+                            'show_delete' => [ 'type' => 'toggle', 'label' => 'Let customers delete their account', 'tab' => 'content', 'default' => true,
+                                    'help' => 'They confirm it by email. Privacy laws usually require offering it.' ],
+                            'button_bg'   => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
+                            'button_text' => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
+                    ],
+            ],
+            'account_logout' => [
+                    'label' => 'Sign Out Button', 'category' => 'dynamic', 'pages' => [ 'account' ], 'icon' => 'button',
+                    'fields' => [
+                            'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Sign out' ],
+                            'style'        => [ 'type' => 'select', 'label' => 'Style', 'tab' => 'style', 'default' => 'outline',
+                                    'options' => [ 'filled' => 'Filled', 'outline' => 'Outline', 'link' => 'Underlined link' ] ],
+                            'button_bg'    => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
+                            'button_text'  => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
+                    ],
+            ],
+
             'latest_posts' => [
                     'label'  => 'Latest Blog Posts',
                     'category' => 'shop',
@@ -2447,7 +2585,42 @@ abstract class Shop_Builder_Constants {
                             'badge_color' => [ 'type' => 'color', 'label' => 'Count Text Color', 'tab' => 'style', 'group' => 'Count' ],
                             'ts:label' => [ 'type' => 'text_style', 'label' => 'Text' ],
             ],
-        ]
+        ],
+
+        // The header's account button: a menu of shortcuts for signed-in customers,
+        // the sign-in page (or another page) for visitors.
+        'account_widget' => [
+            'label'    => 'Account',
+            'category' => 'basic',
+            'icon'     => 'person',
+            'fields'   => [
+                            'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'account', 'default' => 'person_outline' ],
+                            'custom_icon' => [ 'type' => 'image', 'label' => 'Your Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],
+                                    'help' => 'A small square image or SVG. It keeps its own colors.' ],
+                            'label'       => [ 'type' => 'text', 'label' => 'Text Next to the Icon', 'tab' => 'content', 'placeholder' => 'e.g. Sign in',
+                                    'help' => 'Optional, for visitors. Leave empty to show only the icon.' ],
+                            'signed_in_look' => [ 'type' => 'select', 'label' => 'For Signed-in Customers', 'tab' => 'content', 'default' => 'icon',
+                                    'options' => [ 'icon' => 'The icon (and the text)', 'initials' => 'Their initials in a circle', 'name' => 'The icon and their first name' ] ],
+                            'guest_url'   => [ 'type' => 'url', 'label' => 'Visitors Go To', 'tab' => 'content', 'group' => 'When Clicked', 'placeholder' => '/my-account',
+                                    'help' => 'Empty: the My account page, where they sign in.' ],
+                            'show_menu'   => [ 'type' => 'toggle', 'label' => 'Customers get a menu', 'tab' => 'content', 'group' => 'When Clicked', 'default' => true,
+                                    'help' => 'Off: the button opens My account.' ],
+                            'menu_account' => [ 'type' => 'toggle', 'label' => 'My account', 'tab' => 'content', 'group' => 'Menu', 'default' => true, 'show_if' => [ 'show_menu' => true ] ],
+                            'menu_orders'  => [ 'type' => 'toggle', 'label' => 'My Orders', 'tab' => 'content', 'group' => 'Menu', 'default' => true, 'show_if' => [ 'show_menu' => true ] ],
+                            'menu_details' => [ 'type' => 'toggle', 'label' => 'Account Details', 'tab' => 'content', 'group' => 'Menu', 'default' => true, 'show_if' => [ 'show_menu' => true ] ],
+                            'menu_logout'  => [ 'type' => 'toggle', 'label' => 'Sign out', 'tab' => 'content', 'group' => 'Menu', 'default' => true, 'show_if' => [ 'show_menu' => true ] ],
+                            'show_greeting' => [ 'type' => 'toggle', 'label' => 'Show "Hello, name" at the top', 'tab' => 'content', 'group' => 'Menu', 'default' => true, 'show_if' => [ 'show_menu' => true ] ],
+                            'icon_size'   => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Icon', 'responsive' => true, 'placeholder' => '14px' ],
+                            'icon_color'  => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Icon' ],
+                            'initials_bg'    => [ 'type' => 'color', 'label' => 'Initials Background', 'tab' => 'style', 'group' => 'Icon', 'show_if' => [ 'signed_in_look' => 'initials' ] ],
+                            'initials_color' => [ 'type' => 'color', 'label' => 'Initials Color', 'tab' => 'style', 'group' => 'Icon', 'show_if' => [ 'signed_in_look' => 'initials' ] ],
+                            'menu_bg'     => [ 'type' => 'color', 'label' => 'Menu Background', 'tab' => 'style', 'group' => 'Menu', 'show_if' => [ 'show_menu' => true ] ],
+                            'menu_text'   => [ 'type' => 'color', 'label' => 'Menu Text Color', 'tab' => 'style', 'group' => 'Menu', 'show_if' => [ 'show_menu' => true ] ],
+                            'menu_radius' => [ 'type' => 'length', 'label' => 'Menu Corner Radius', 'tab' => 'style', 'group' => 'Menu', 'placeholder' => '8px', 'show_if' => [ 'show_menu' => true ] ],
+                            'ts:label' => [ 'type' => 'text_style', 'label' => 'Text' ],
+                            'ts:item'  => [ 'type' => 'text_style', 'label' => 'Menu Links', 'show_if' => [ 'show_menu' => true ] ],
+            ],
+        ],
     ];
 
     /**
@@ -2513,7 +2686,7 @@ abstract class Shop_Builder_Constants {
      * Template pages: built entirely from sections (like the homepage), with
      * dynamic blocks for what the page shows ("Post title", "Posts grid"…).
      */
-    const TEMPLATE_PAGES = [ 'blog', 'blog_post', 'blog_author', 'blog_authors', 'shop', 'category', 'product', 'cart', 'checkout' ];
+    const TEMPLATE_PAGES = [ 'blog', 'blog_post', 'blog_author', 'blog_authors', 'shop', 'category', 'product', 'cart', 'checkout', 'account' ];
 
     /** Shown in the Store builder only while author profiles are on (Qwoo_Blog_Authors). */
     const AUTHOR_TEMPLATE_PAGES = [ 'blog_author', 'blog_authors' ];
@@ -2522,7 +2695,7 @@ abstract class Shop_Builder_Constants {
      * The shop pages, block-built since the slots (PAGE_SECTION_LOCATIONS) were
      * replaced: their published config says `template: 1` (trait-sb-shop-templates.php).
      */
-    const SHOP_TEMPLATE_PAGES = [ 'shop', 'category', 'product', 'cart', 'checkout' ];
+    const SHOP_TEMPLATE_PAGES = [ 'shop', 'category', 'product', 'cart', 'checkout', 'account' ];
 
     /**
      * Pages that can have extra layouts, each used where its conditions

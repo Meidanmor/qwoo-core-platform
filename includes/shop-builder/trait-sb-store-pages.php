@@ -162,6 +162,7 @@ trait SB_Store_Pages {
         $right = $nested( [ 'width_mode' => 'full', 'padding_preset' => 'none' ] + $row( 'flex-start', '5', 'nowrap' ), [
             self::store_page_block( 'language_switcher', [ 'display' => 'flag' ], $hide( false, true, true ) ),
             self::store_page_block( 'menu_widget', $menu + [ 'mobile_menu_breakpoint' => 'custom', 'mobile_menu_custom_breakpoint' => 1024, 'drawer_show_languages' => true ], $hide( true, false, false ) ),
+            self::store_page_block( 'account_widget', [ 'icon' => 'person_outline' ] ),
             self::store_page_block( 'mini_wishlist', [ 'icon' => 'heart_outline', 'drawer_title' => Qwoo_I18n::t( 'Wishlist' ), 'swipe' => 'none' ] ),
             self::store_page_block( 'mini_cart', [ 'icon' => 'cart', 'click_action' => 'drawer', 'drawer_title' => Qwoo_I18n::t( 'Cart' ), 'swipe' => 'auto' ] ),
         ] );

@@ -298,7 +298,7 @@ function qwoo_handle_google_login(WP_REST_Request $request): WP_REST_Response {
     }
 
     // Verify token with Google
-    $response = wp_remote_get("https://oauth2.googleapis.com/tokeninfo?id_token={$token}");
+    $response = wp_remote_get('https://oauth2.googleapis.com/tokeninfo?id_token=' . rawurlencode($token));
     if (is_wp_error($response)) {
         return new WP_REST_Response(['success' => false, 'message' => 'Google token validation failed'], 401);
     }
@@ -316,6 +316,10 @@ function qwoo_handle_google_login(WP_REST_Request $request): WP_REST_Response {
     $user = get_user_by('email', $data->email);
 
     if (!$user) {
+        // A new account: only while the store lets visitors sign up (Store builder → My account).
+        if (class_exists('Qwoo_Account_Signup') && !Qwoo_Account_Signup::allowed()) {
+            return new WP_REST_Response(['success' => false, 'code' => 'qwoo_signup_off', 'message' => "This store doesn't take new accounts here."], 403);
+        }
         $email      = sanitize_email($data->email);
         $base_name  = sanitize_user(current(explode('@', $email)), true);
         $username   = username_exists($base_name)
@@ -323,7 +327,9 @@ function qwoo_handle_google_login(WP_REST_Request $request): WP_REST_Response {
             : $base_name;
         $first_name = ucfirst($base_name);
 
-        $user_id = wp_create_user($username, wp_generate_password(), $email);
+        $user_id = function_exists('wc_create_new_customer')
+            ? wc_create_new_customer($email, $username, wp_generate_password())
+            : wp_create_user($username, wp_generate_password(), $email);
 
         if (is_wp_error($user_id)) {
             return new WP_REST_Response(['success' => false, 'message' => 'User creation failed'], 500);
@@ -335,7 +341,9 @@ function qwoo_handle_google_login(WP_REST_Request $request): WP_REST_Response {
             'display_name' => $first_name,
         ]);
 
-        wp_new_user_notification($user_id, null, 'user');
+        if (!function_exists('wc_create_new_customer')) {
+            wp_new_user_notification($user_id, null, 'user');
+        }
 
         $user = get_userdata($user_id);
     }

@@ -48,6 +48,7 @@ trait SB_Rest {
                 'tab-blog_post' => $frontend_domain ? $frontend_domain . '/blog' . self::first_post_path() : '',
                 'tab-blog_author'  => $frontend_domain ? $frontend_domain . self::first_author_path() : '',
                 'tab-blog_authors' => $frontend_domain ? $frontend_domain . '/blog/authors' : '',
+                'tab-account'  => $frontend_domain ? $frontend_domain . '/my-account' : '',
                 'tab-branding' => $root,
                 'tab-pwa'      => $root,
                 'tab-contact'  => $root,

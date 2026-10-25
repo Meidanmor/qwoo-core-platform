@@ -3,7 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * The shop pages (SHOP_TEMPLATE_PAGES: All products, category pages, the
- * product page, cart and checkout) as block-built templates, like the blog.
+ * product page, cart, checkout and My account) as block-built templates, like the blog.
+ * My account never had slots: a store without one gets the default template.
  *
  * They used to be fixed pages with slots ("After Product Images"…): each
  * section carried a `location`. Such a list (no block of the page's own and
@@ -174,6 +175,21 @@ trait SB_Shop_Templates {
                     ], $pad( '16', '16', '16', '16' ) + [ 'gap' => $rwd( '8px' ) ] ) ],
                     $top( 'after_checkout' )
                 );
+                break;
+
+            case 'account':
+                // Visitors: sign in and sign up side by side; customers: the menu beside the parts.
+                $out = [
+                    $sec( [ $block( 'account_title' ) ], $pad( '16', '16', '0', '16' ) ),
+                    $sec( [
+                        $col( [ $block( 'login_form' ) ], $rwd( '50%', '50%', '100%' ) ),
+                        $col( [ $block( 'signup_form' ) ], $rwd( '50%', '50%', '100%' ) ),
+                    ], $pad( '16', '16', '24', '16' ) + [ 'audience' => 'guests', 'direction' => $rwd( 'row', 'row', 'column' ), 'align_items' => $rwd( 'flex-start' ), 'gap' => $rwd( '24px' ) ] ),
+                    $sec( [
+                        $col( [ $block( 'account_menu' ) ], $rwd( '25%', '30%', '100%' ) ),
+                        $col( $types( [ 'account_welcome', 'account_orders', 'account_details' ] ), $rwd( '75%', '70%', '100%' ), [ 'gap' => $rwd( '16px' ) ] ),
+                    ], $pad( '16', '16', '24', '16' ) + [ 'audience' => 'customers', 'direction' => $rwd( 'row', 'row', 'column' ), 'align_items' => $rwd( 'flex-start' ), 'gap' => $rwd( '24px' ) ] ),
+                ];
                 break;
 
             default:

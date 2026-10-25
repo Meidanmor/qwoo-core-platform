@@ -22,6 +22,7 @@ trait SB_Github_Push {
                 'blog_post' => 'Blog Post',
                 'blog_author' => 'Author Page',
                 'blog_authors' => 'Authors Page',
+                'account'  => 'My Account',
     ];
 
 
@@ -304,6 +305,8 @@ trait SB_Github_Push {
 
         // checkout.json always goes out: it carries the legal pages the terms checkbox links to.
         $options['checkout'] = is_array( $options['checkout'] ?? null ) ? $options['checkout'] : [];
+        // branding.json too: it carries the sign-in settings every form reads (`account`).
+        $options['branding'] = is_array( $options['branding'] ?? null ) ? $options['branding'] : [];
 
         // The shop pages always go out, saying they're templates (an older storefront file
         // without `template` is the old slot shape). shop.json / category.json also carry the
@@ -398,6 +401,9 @@ trait SB_Github_Push {
                         }
                     }
                 }
+
+                // Signing in, for every Sign In / Sign Up form and the Account widget (public values only).
+                $page_data['account'] = Qwoo_Account_Signup::published();
 
                 // Brand fonts: their files, served by the storefront itself.
                 $fonts = Qwoo_Brand_Fonts::stage( $batch, (array) ( $page_data['fonts'] ?? [] ), $path_to_label, $label );
