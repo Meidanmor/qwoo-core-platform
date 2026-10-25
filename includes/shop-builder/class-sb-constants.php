@@ -1388,6 +1388,8 @@ abstract class Shop_Builder_Constants {
                                     'help' => 'One list per attribute set in Products → Attributes, with the values your products use.' ],
                             'attributes_style' => [ 'type' => 'select', 'label' => 'Attribute Values As', 'tab' => 'content', 'default' => 'checkbox', 'show_if' => [ 'show_attributes' => true ],
                                     'options' => [ 'checkbox' => 'Checkboxes', 'chips' => 'Chips' ] ],
+                            'attributes_only' => [ 'type' => 'textarea', 'label' => 'Filter By These Details', 'tab' => 'content', 'placeholder' => 'One name per line. Empty: all of them.', 'show_if' => [ 'show_attributes' => true ],
+                                    'help' => 'Names as written in Products → Attributes. Shown in this order.' ],
                             'show_stock'      => [ 'type' => 'toggle', 'label' => '"In stock only" switch', 'tab' => 'content', 'default' => false ],
                             'ts:heading' => [ 'type' => 'text_style', 'label' => 'Heading', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
                     ],
