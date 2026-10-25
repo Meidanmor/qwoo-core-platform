@@ -162,6 +162,24 @@ trait SB_Sanitizers {
     }
 
     /**
+     * Product details picked in the Store builder (field type details): a list of keys, a
+     * shared attribute's taxonomy (pa_size) or a product's own detail name ("Cable length").
+     * Older blocks saved typed names, one per line: those become the list.
+     */
+    private static function sanitize_detail_keys( $value ) {
+        if ( is_string( $value ) ) $value = preg_split( '/\r\n|\r|\n/', $value );
+        if ( ! is_array( $value ) ) return [];
+        $out = [];
+        foreach ( $value as $key ) {
+            $key = is_scalar( $key ) ? trim( sanitize_text_field( (string) $key ) ) : '';
+            if ( $key === '' || mb_strlen( $key ) > 200 || in_array( $key, $out, true ) ) continue;
+            $out[] = $key;
+            if ( count( $out ) >= 30 ) break;
+        }
+        return $out;
+    }
+
+    /**
      * Sanitizes one (non-responsive) value. $allow_empty: '' is a valid,
      * meaningful value (a tablet/mobile value inheriting from the device above).
      */
@@ -192,6 +210,9 @@ trait SB_Sanitizers {
 
             case 'product_tags':
                 return self::sanitize_product_tags( $value, (int) ( $spec['max_items'] ?? 6 ) );
+
+            case 'details':
+                return self::sanitize_detail_keys( $value );
 
             case 'number':
                 if ( $allow_empty && ( $value === '' || $value === null ) ) return '';

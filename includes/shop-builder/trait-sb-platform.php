@@ -283,6 +283,8 @@ trait SB_Platform {
             foreach ( is_wp_error( $terms ) ? [] : $terms as $t ) {
                 $out[] = [ 'id' => (int) $t->term_id, 'text' => html_entity_decode( $t->name, ENT_QUOTES ), 'thumb' => '', 'href' => '/blog/category/' . $t->slug ];
             }
+        } elseif ( $kind === 'attributes' ) {
+            return self::platform_details();
         } elseif ( $kind === 'categories' || $kind === 'tags' ) {
             $terms = get_terms( [ 'taxonomy' => $kind === 'tags' ? 'product_tag' : 'product_cat', 'hide_empty' => false, 'name__like' => $term, 'number' => 20 ] );
             foreach ( is_wp_error( $terms ) ? [] : $terms as $t ) {
@@ -291,6 +293,68 @@ trait SB_Platform {
             }
         }
         return $out;
+    }
+
+    /**
+     * Every product detail (attribute) the store has, for the Store builder's details picker:
+     * [ { id, text, count, global, option, sample } ]. id = the taxonomy for shared ones
+     * (pa_size), else the detail's own name; count = products that have it; option = some
+     * product lets shoppers choose it; sample = a few values. Shared details no product
+     * uses yet are listed too (count 0).
+     */
+    public static function platform_details() {
+        global $wpdb;
+        $found = [];
+        $add   = function ( $key, $label, $global ) use ( &$found ) {
+            if ( ! isset( $found[ $key ] ) ) {
+                $found[ $key ] = [ 'id' => $key, 'text' => $label, 'count' => 0, 'global' => $global, 'option' => false, 'sample' => [] ];
+            }
+            return $key;
+        };
+        foreach ( wc_get_attribute_taxonomies() as $tax ) {
+            $add( 'pa_' . $tax->attribute_name, html_entity_decode( $tax->attribute_label ?: $tax->attribute_name, ENT_QUOTES ), true );
+        }
+        // The products' own lists (shared and own details), newest first, up to 3,000 products.
+        $rows = $wpdb->get_col(
+            "SELECT pm.meta_value FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+             WHERE pm.meta_key = '_product_attributes' AND p.post_type = 'product' AND p.post_status IN ('publish','draft','pending','private','future')
+             ORDER BY p.ID DESC LIMIT 3000"
+        );
+        foreach ( (array) $rows as $raw ) {
+            $list = maybe_unserialize( $raw );
+            if ( ! is_array( $list ) ) continue;
+            foreach ( $list as $a ) {
+                if ( ! is_array( $a ) || empty( $a['name'] ) ) continue;
+                if ( ! empty( $a['is_taxonomy'] ) ) {
+                    $key = (string) $a['name'];
+                    if ( ! isset( $found[ $key ] ) ) $add( $key, wc_attribute_label( $key ), true );
+                } else {
+                    $label = trim( html_entity_decode( (string) $a['name'], ENT_QUOTES ) );
+                    if ( $label === '' ) continue;
+                    // Own details with the same name (any letter case) are one.
+                    $key = $label;
+                    foreach ( $found as $k => $f ) {
+                        if ( ! $f['global'] && mb_strtolower( $k ) === mb_strtolower( $label ) ) { $key = $k; break; }
+                    }
+                    $add( $key, $label, false );
+                    // Show the spelling with capitals ("Cable length") over an all-lowercase one.
+                    if ( $found[ $key ]['text'] === mb_strtolower( $found[ $key ]['text'] ) && $label !== mb_strtolower( $label ) ) $found[ $key ]['text'] = $label;
+                    foreach ( array_map( 'trim', explode( '|', (string) ( $a['value'] ?? '' ) ) ) as $v ) {
+                        if ( $v !== '' && count( $found[ $key ]['sample'] ) < 3 && ! in_array( $v, $found[ $key ]['sample'], true ) ) $found[ $key ]['sample'][] = $v;
+                    }
+                }
+                $found[ $key ]['count']++;
+                if ( ! empty( $a['is_variation'] ) ) $found[ $key ]['option'] = true;
+            }
+        }
+        foreach ( $found as $key => $f ) {
+            if ( ! $f['global'] ) continue;
+            $terms = get_terms( [ 'taxonomy' => $key, 'hide_empty' => false, 'number' => 3, 'orderby' => 'menu_order' ] );
+            $found[ $key ]['sample'] = is_wp_error( $terms ) ? [] : array_map( function ( $t ) { return html_entity_decode( $t->name, ENT_QUOTES ); }, $terms );
+        }
+        $out = array_values( $found );
+        usort( $out, function ( $a, $b ) { return $b['count'] <=> $a['count'] ?: strcasecmp( $a['text'], $b['text'] ); } );
+        return array_slice( $out, 0, 300 );
     }
 
     /** What each list filter shows (post_mime_type). image = every image, SVGs too. */

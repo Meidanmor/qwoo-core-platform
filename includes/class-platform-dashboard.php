@@ -1630,7 +1630,7 @@ class Qwoo_Platform_Dashboard {
     /** { kind: products | categories | tags, term }. */
     private static function action_design_search( array $params ) {
         $kind = (string) ( $params['kind'] ?? '' );
-        if ( ! in_array( $kind, [ 'products', 'categories', 'tags', 'blog_categories' ], true ) ) {
+        if ( ! in_array( $kind, [ 'products', 'categories', 'tags', 'blog_categories', 'attributes' ], true ) ) {
             return self::bad( 'Unknown search.' );
         }
         return [ 'items' => Shop_Settings_Builder::platform_search( $kind, $params['term'] ?? '' ) ];
