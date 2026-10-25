@@ -248,6 +248,10 @@ class Qwoo_I18n {
         'Cart'                                                                                      => 'עגלה',
         'Wishlist'                                                                                  => 'רשימת משאלות',
         'Menu'                                                                                      => 'תפריט',
+        // The "Sign in" popup new stores get (trait-sb-popups.php).
+        'Sign in'                                                                                   => 'התחברות',
+        'New here?'                                                                                 => 'חדשים כאן?',
+        'Create an account'                                                                         => 'יצירת חשבון',
         'Main menu'                                                                                 => 'תפריט ראשי',
         'Footer menu'                                                                               => 'תפריט תחתון',
         'Checkout'                                                                                  => 'קופה',

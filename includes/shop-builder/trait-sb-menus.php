@@ -167,6 +167,8 @@ trait SB_Menus {
     private static function sanitize_menu_url( $url ) {
         $url = trim( $url );
         if ( $url === '' ) return '';
+        // "#popup:{id}" opens a popup.
+        if ( preg_match( '/^#popup:pp_[A-Za-z0-9]{3,20}$/', $url ) ) return $url;
         if ( $url[0] === '/' && ( $url[1] ?? '' ) !== '/' ) {
             return mb_substr( preg_replace( '/[\s<>"\'`]/u', '', $url ), 0, 500 );
         }

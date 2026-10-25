@@ -446,5 +446,6 @@ trait SB_Github_Push {
         }
 
         $this->stage_custom_pages( $batch, $options, $path_to_label, $kept_section_images, $dir );
+        $this->stage_popups( $batch, $options, $dir, $path_to_label, $kept_section_images );
     }
 }

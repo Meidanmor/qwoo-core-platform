@@ -39,6 +39,8 @@ trait SB_Platform {
         }
         $layouts = self::platform_layouts_data( $options, $pages, $refs );
         $loops   = self::platform_loops_data( $all, $pages, $refs );
+        // Popups: shared by every language, edited in the main one.
+        $popups  = self::platform_popups_data( $all, $pages, $refs );
         $custom_pages = self::platform_pages_data( $options, $refs );
         foreach ( [ $options['home']['hero_image_id'] ?? 0, $options['branding']['logo_id'] ?? 0, $options['branding']['app_icon_id'] ?? 0 ] as $id ) {
             if ( (int) $id ) $refs['media'][ (int) $id ] = true;
@@ -62,6 +64,7 @@ trait SB_Platform {
             // Card designs: shared by every language, edited in the main one.
             'loops'         => $loops,
             'loops_default' => (object) ( $all['loops_default'] ?? [] ),
+            'popups'        => $popups,
             'template_pages' => self::TEMPLATE_PAGES,
             // The author pages' templates show while author profiles are on (Blog → Authors).
             'author_pages'  => class_exists( 'Qwoo_Blog_Authors' ) && Qwoo_Blog_Authors::is_public(),
@@ -85,6 +88,9 @@ trait SB_Platform {
                 'above_header'     => true,
                 'loop_types'       => self::LOOP_TYPES,
                 'max_loops'        => self::MAX_LOOPS,
+                'popup_settings'   => self::POPUP_SETTINGS_FIELDS,
+                'max_popups'       => self::MAX_POPUPS,
+                'chrome_targets'   => self::CHROME_TARGETS,
                 'padding_presets'  => self::SECTION_PADDING_PRESETS,
                 'contact_types'    => self::CONTACT_METHOD_TYPES,
                 'max_depth'        => self::MAX_NESTING_DEPTH,
@@ -183,7 +189,7 @@ trait SB_Platform {
      * Saves the dashboard's draft: the option groups and every page's
      * sections go through sanitize_options(), exactly like Save Draft.
      */
-    public static function platform_save( array $options, array $pages, ?array $custom_pages = null, ?array $menus = null, ?array $layouts = null, ?array $sync = null, ?array $loops = null, ?array $loops_default = null ) {
+    public static function platform_save( array $options, array $pages, ?array $custom_pages = null, ?array $menus = null, ?array $layouts = null, ?array $sync = null, ?array $loops = null, ?array $loops_default = null, ?array $popups = null ) {
         $input = array_intersect_key( $options, array_flip( self::$platform_option_groups ) );
         // Card designs: [ { id, type, name, sections } ] and { product: id }.
         if ( $loops !== null ) {
@@ -191,6 +197,10 @@ trait SB_Platform {
         }
         if ( $loops_default !== null ) {
             $input['loops_default'] = $loops_default;
+        }
+        // Popups: [ { id, name, enabled, settings, sections } ].
+        if ( $popups !== null ) {
+            $input['popups'] = $popups;
         }
         if ( $custom_pages !== null ) {
             $input['custom_pages'] = $custom_pages;

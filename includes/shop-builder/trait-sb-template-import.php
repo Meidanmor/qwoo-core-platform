@@ -224,6 +224,8 @@ trait SB_Template_Import {
         // Templates made before the header was built from blocks have none. Only the owner's
         // own logo goes in it (the template's logo isn't theirs); without one, the store's name.
         self::ensure_default_header( $final, (int) ( $state['logo_id'] ?? 0 ), $name );
+        // A "Sign in" popup the header's Account widget opens (stores without popups).
+        self::ensure_default_popups( $final );
         update_option( 'shop_builder_options', $final );
         self::record_revision( $final );
 

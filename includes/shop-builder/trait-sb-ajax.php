@@ -213,7 +213,7 @@ trait SB_Ajax {
         if ( isset( $new_options['menus'] ) ) {
             $updated_options['menus'] = $new_options['menus'];
         }
-        foreach ( [ 'loops', 'loops_default' ] as $key ) {
+        foreach ( [ 'loops', 'loops_default', 'popups' ] as $key ) {
             if ( isset( $new_options[ $key ] ) ) {
                 $updated_options[ $key ] = $new_options[ $key ];
             }

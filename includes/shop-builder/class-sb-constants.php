@@ -241,6 +241,56 @@ abstract class Shop_Builder_Constants {
     ];
     const MAX_LOOPS = 30;
 
+    /** Popups a store can hold (trait-sb-popups.php). */
+    const MAX_POPUPS = 20;
+
+    /**
+     * A popup's settings (Store builder → Popups), shown in groups in the dashboard.
+     * Type 'targets' = kinds of pages (CHROME_TARGETS) and own page ids; 'date' = YYYY-MM-DD.
+     */
+    const POPUP_SETTINGS_FIELDS = [
+            'trigger' => [ 'type' => 'select', 'label' => 'Opens', 'group' => 'When it opens', 'default' => 'manual',
+                    'options' => [ 'manual' => 'Only when a button or link opens it', 'load' => 'As the page opens', 'delay' => 'After some seconds',
+                            'scroll' => 'After scrolling part of the page', 'exit' => 'When the visitor is about to leave (computers)', 'pages' => 'After visiting a few pages' ],
+                    'help' => 'Any link can open a popup: choose "Open a popup" in its link field. At most one popup opens by itself on each page.' ],
+            'delay'  => [ 'type' => 'number', 'label' => 'Seconds', 'group' => 'When it opens', 'min' => 1, 'max' => 120, 'default' => 5, 'show_if' => [ 'trigger' => 'delay' ] ],
+            'scroll' => [ 'type' => 'number', 'label' => 'Scrolled (%)', 'group' => 'When it opens', 'min' => 5, 'max' => 100, 'default' => 50, 'show_if' => [ 'trigger' => 'scroll' ] ],
+            'pages'  => [ 'type' => 'number', 'label' => 'Pages Visited', 'group' => 'When it opens', 'min' => 2, 'max' => 20, 'default' => 3, 'show_if' => [ 'trigger' => 'pages' ] ],
+
+            'where'   => [ 'type' => 'select', 'label' => 'Show On', 'group' => 'Where', 'default' => 'all',
+                    'options' => [ 'all' => 'Every page', 'chosen' => 'Chosen pages' ], 'show_if' => [ 'trigger' => [ 'load', 'delay', 'scroll', 'exit', 'pages' ] ] ],
+            'targets' => [ 'type' => 'targets', 'label' => 'Pages', 'group' => 'Where', 'show_if' => [ 'where' => 'chosen', 'trigger' => [ 'load', 'delay', 'scroll', 'exit', 'pages' ] ] ],
+            'exclude' => [ 'type' => 'targets', 'label' => 'Never On', 'group' => 'Where', 'show_if' => [ 'trigger' => [ 'load', 'delay', 'scroll', 'exit', 'pages' ] ],
+                    'help' => 'E.g. never on the checkout.' ],
+
+            'audience' => [ 'type' => 'select', 'label' => 'Show To', 'group' => 'Who', 'default' => 'all',
+                    'options' => [ 'all' => 'Everyone', 'guests' => 'Visitors who aren\'t signed in', 'customers' => 'Signed-in customers' ] ],
+            'hide_on'  => [ 'type' => 'devices', 'label' => 'Not On', 'group' => 'Who' ],
+
+            'frequency' => [ 'type' => 'select', 'label' => 'How Often', 'group' => 'How often', 'default' => 'session',
+                    'options' => [ 'always' => 'Every time', 'session' => 'Once per visit', 'days' => 'Once every few days', 'once' => 'Once, then never again' ],
+                    'show_if' => [ 'trigger' => [ 'load', 'delay', 'scroll', 'exit', 'pages' ] ] ],
+            'days'       => [ 'type' => 'number', 'label' => 'Days', 'group' => 'How often', 'min' => 1, 'max' => 365, 'default' => 7, 'show_if' => [ 'frequency' => 'days' ] ],
+            'start_date' => [ 'type' => 'date', 'label' => 'From', 'group' => 'How often', 'help' => 'Empty: from now on.' ],
+            'end_date'   => [ 'type' => 'date', 'label' => 'Until', 'group' => 'How often', 'help' => 'Empty: no end. The popup stops showing after this day.' ],
+
+            'position'    => [ 'type' => 'select', 'label' => 'Position', 'group' => 'Look', 'default' => 'center',
+                    'options' => [ 'center' => 'Middle of the screen', 'top' => 'Top', 'bottom' => 'Bottom', 'left' => 'Left side', 'right' => 'Right side' ] ],
+            'full_screen' => [ 'type' => 'toggle', 'label' => 'Cover the whole screen', 'group' => 'Look' ],
+            'width'       => [ 'type' => 'length', 'label' => 'Width', 'group' => 'Look', 'responsive' => true, 'placeholder' => '560px' ],
+            'radius'      => [ 'type' => 'length', 'label' => 'Corner Radius', 'group' => 'Look', 'placeholder' => '16px' ],
+            'bg'          => [ 'type' => 'color', 'label' => 'Background', 'group' => 'Look' ],
+            'backdrop'    => [ 'type' => 'select', 'label' => 'Behind the Popup', 'group' => 'Look', 'default' => 'dim',
+                    'options' => [ 'dim' => 'Dim the page', 'none' => 'Nothing: the page stays usable' ] ],
+            'backdrop_color' => [ 'type' => 'color', 'label' => 'Dim Color', 'group' => 'Look', 'show_if' => [ 'backdrop' => 'dim' ] ],
+            'animation'   => [ 'type' => 'select', 'label' => 'Animation', 'group' => 'Look', 'default' => 'auto',
+                    'options' => [ 'auto' => 'Fits the position', 'fade' => 'Fade', 'scale' => 'Grow', 'slide' => 'Slide in', 'none' => 'None' ] ],
+            'show_close'    => [ 'type' => 'toggle', 'label' => 'Show a close button', 'group' => 'Closing', 'default' => true ],
+            'close_color'   => [ 'type' => 'color', 'label' => 'Close Button Color', 'group' => 'Closing', 'show_if' => [ 'show_close' => true ] ],
+            'close_outside' => [ 'type' => 'toggle', 'label' => 'Close when clicking outside it', 'group' => 'Closing', 'default' => true ],
+            'close_esc'     => [ 'type' => 'toggle', 'label' => 'Close with the Esc key', 'group' => 'Closing', 'default' => true ],
+    ];
+
     /** Text-style parts for a card's texts. */
     const LOOP_TEXT_PARTS = [ 'font', 'size', 'weight', 'line_height', 'color', 'spacing', 'case' ];
 
@@ -2607,7 +2657,7 @@ abstract class Shop_Builder_Constants {
                             'signed_in_look' => [ 'type' => 'select', 'label' => 'For Signed-in Customers', 'tab' => 'content', 'default' => 'icon',
                                     'options' => [ 'icon' => 'The icon (and the text)', 'initials' => 'Their initials in a circle', 'name' => 'The icon and their first name' ] ],
                             'guest_url'   => [ 'type' => 'url', 'label' => 'Visitors Go To', 'tab' => 'content', 'group' => 'When Clicked', 'placeholder' => '/my-account',
-                                    'help' => 'Empty: the My account page, where they sign in.' ],
+                                    'help' => 'Empty: the My account page, where they sign in. Or choose a popup, like a Sign in popup (Store builder → Popups).' ],
                             'show_menu'   => [ 'type' => 'toggle', 'label' => 'Customers get a menu', 'tab' => 'content', 'group' => 'When Clicked', 'default' => true,
                                     'help' => 'Off: the button opens My account.' ],
                             'menu_account' => [ 'type' => 'toggle', 'label' => 'My account', 'tab' => 'content', 'group' => 'Menu', 'default' => true, 'show_if' => [ 'show_menu' => true ] ],

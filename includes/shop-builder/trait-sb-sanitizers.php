@@ -348,6 +348,10 @@ trait SB_Sanitizers {
     private static function sanitize_url_value( $value ) {
         $value = is_scalar( $value ) ? trim( (string) $value ) : '';
         if ( $value === '' ) return '';
+        // "#popup:{id}": the link opens one of the store's popups (trait-sb-popups.php).
+        if ( preg_match( '/^#popup:(pp_[A-Za-z0-9]{3,20})$/', $value, $m ) ) {
+            return '#popup:' . $m[1];
+        }
         if ( $value[0] === '#' ) {
             return '#' . preg_replace( '/[^A-Za-z0-9_-]/', '', substr( $value, 1 ) );
         }
@@ -903,6 +907,10 @@ trait SB_Sanitizers {
         // Card designs (trait-sb-loops.php); kept as stored when not sent.
         if ( isset( $input['loops'] ) ) {
             $clean['loops'] = $this->sanitize_loops( $input['loops'] );
+        }
+        // Popups (trait-sb-popups.php); kept as stored when not sent.
+        if ( isset( $input['popups'] ) ) {
+            $clean['popups'] = $this->sanitize_popups( $input['popups'] );
         }
         if ( isset( $input['loops_default'] ) ) {
             $clean['loops_default'] = self::sanitize_loops_default( $input['loops_default'], $clean['loops'] ?? (array) ( $existing['loops'] ?? [] ) );
