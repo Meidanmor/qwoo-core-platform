@@ -1384,6 +1384,7 @@ abstract class Shop_Builder_Constants {
                             'buttons_layout'      => [ 'type' => 'select', 'label' => 'Buttons', 'tab' => 'style', 'default' => 'auto',
                                     'options' => [ 'auto' => 'Side by side, their own width', 'equal' => 'Side by side, equal width', 'stack' => 'One under the other' ] ],
                             'button_radius'       => [ 'type' => 'length', 'label' => 'Button Corner Radius', 'tab' => 'style', 'placeholder' => 'e.g. 999px' ],
+                            'btn_padding'         => [ 'type' => 'sides', 'label' => 'Button Padding', 'tab' => 'style', 'responsive' => true ],
                             'button_bg'           => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
                             'button_bg2'          => [ 'type' => 'color', 'label' => 'Second Button Color', 'tab' => 'style', 'help' => 'Set it for a gradient.' ],
                             'button_style'        => [ 'type' => 'select', 'label' => 'Add To Cart Style', 'tab' => 'style', 'default' => 'filled',
