@@ -689,6 +689,9 @@ class Qwoo_Seo {
     /* ---------------- qwoo/v1/sitemap ---------------- */
 
     public static function rest_sitemap() {
+        if ( ! self::store_indexable() ) {
+            return rest_ensure_response( [ 'base' => Qwoo_Technical_Settings::get_primary_frontend_domain(), 'urls' => [] ] );
+        }
         $urls = [
             [ 'path' => '/', 'lastmod' => '' ],
             [ 'path' => '/products', 'lastmod' => '' ],
@@ -818,8 +821,13 @@ class Qwoo_Seo {
         return preg_replace( '/^[\s|–-]+|[\s|–-]+$/u', '', strtr( $pattern, [ '{title}' => $title, '{store}' => self::store_name() ] ) );
     }
 
+    /** False when WordPress's "Discourage search engines" (Settings → Reading) is on: a private demo store. */
+    public static function store_indexable(): bool {
+        return (string) get_option( 'blog_public', '1' ) !== '0';
+    }
+
     private static function robots( bool $index ): string {
-        return $index
+        return $index && self::store_indexable()
             ? 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'
             : 'noindex, follow';
     }
