@@ -111,6 +111,8 @@ class Qwoo_Platform_Dashboard {
         'languages_get'   => 'action_languages_get',
         'languages_save'  => 'action_languages_save',
         'plan_set'        => 'action_plan_set',
+        'visibility_get'  => 'action_visibility_get',
+        'visibility_save' => 'action_visibility_save',
         'states'          => 'action_states',
         'tax_rate_save'   => 'action_tax_rate_save',
         'tax_rate_delete' => 'action_tax_rate_delete',
@@ -1839,6 +1841,22 @@ class Qwoo_Platform_Dashboard {
         $features = array_values( array_filter( array_map( 'sanitize_key', (array) ( $params['features'] ?? [] ) ) ) );
         update_option( 'qwoo_plan', [ 'plan' => sanitize_key( (string) ( $params['plan'] ?? 'basic' ) ), 'features' => $features ], false );
         return [ 'plan' => get_option( 'qwoo_plan' ) ];
+    }
+
+    /** { hidden, since, key }: Coming soon (Qwoo_Store_Visibility). */
+    private static function action_visibility_get( array $params ) {
+        return Qwoo_Store_Visibility::dashboard_state();
+    }
+
+    /** { hidden?: bool, new_link?: bool }. */
+    private static function action_visibility_save( array $params ) {
+        if ( array_key_exists( 'hidden', $params ) ) {
+            Qwoo_Store_Visibility::set_hidden( ! empty( $params['hidden'] ) );
+        }
+        if ( ! empty( $params['new_link'] ) ) {
+            Qwoo_Store_Visibility::new_key();
+        }
+        return Qwoo_Store_Visibility::dashboard_state();
     }
 
     /** Whether the platform's plan lets this store use a premium addon. */

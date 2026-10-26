@@ -141,6 +141,7 @@ class Qwoo_I18n {
         'Please enter your password.'                                                               => 'יש להזין סיסמה.',
         'Please enter your username or email.'                                                      => 'יש להזין שם משתמש או אימייל.',
         'Please fix the highlighted fields.'                                                        => 'יש לתקן את השדות המסומנים.',
+        'This store isn\'t open yet, so it can\'t take orders.'                                     => 'החנות עוד לא פתוחה, ולכן אי אפשר לבצע בה הזמנות.',
         'Please tick the box to agree to the store\'s terms before placing your order.'             => 'יש לסמן את התיבה כדי להסכים לתנאי החנות לפני ביצוע ההזמנה.',
         '"{n}" is required.'                                                                        => '"{n}" הוא שדה חובה.',
         '"{n}" must be a number.'                                                                   => '"{n}" חייב להיות מספר.',

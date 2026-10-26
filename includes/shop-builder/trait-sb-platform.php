@@ -98,7 +98,8 @@ trait SB_Platform {
                 'max_blocks'       => self::MAX_BLOCKS,
             ],
             'global_colors' => self::get_global_colors(),
-            'preview'       => [ 'urls' => self::build_preview_urls( $frontend ), 'origin' => $origin ],
+            // key: a hidden store's preview key, so the live preview opens the real store.
+            'preview'       => [ 'urls' => self::build_preview_urls( $frontend ), 'origin' => $origin, 'key' => Qwoo_Store_Visibility::hidden() ? Qwoo_Store_Visibility::key() : '' ],
             'timezone'      => wp_timezone_string(),
             'templates'     => self::template_summaries(),
             // Which language this is, and what it has its own copy of yet.

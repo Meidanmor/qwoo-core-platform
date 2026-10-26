@@ -74,7 +74,7 @@ class Qwoo_Site_Content {
 
     /**
      * { version, manifest, files } of the live version, or { version: null }
-     * before the first one. Also where a new storefront says it reads from
+     * before the first one, plus hidden / preview (Qwoo_Store_Visibility). Also where a new storefront says it reads from
      * here, which switches publishing over for good.
      */
     public static function rest_site( WP_REST_Request $request ) {
@@ -92,6 +92,7 @@ class Qwoo_Site_Content {
             ]
             : [ 'version' => null ];
         $body['mode'] = self::enabled() ? 'local' : 'github';
+        $body        += Qwoo_Store_Visibility::site_fields();
 
         $response = new WP_REST_Response( $body );
         $response->header( 'Cache-Control', 'no-store, max-age=0' );
