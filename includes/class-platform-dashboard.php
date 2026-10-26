@@ -42,6 +42,7 @@ class Qwoo_Platform_Dashboard {
     use Qwoo_Platform_Blog;
     use Qwoo_Platform_Migration;
     use Qwoo_Platform_Package;
+    use Qwoo_Platform_Attributes;
 
     const KEY_OPTION   = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
@@ -90,6 +91,11 @@ class Qwoo_Platform_Dashboard {
         'category_get'    => 'action_category_get',
         'category_save'   => 'action_category_save',
         'category_delete' => 'action_category_delete',
+        'attributes_list'  => 'action_attributes_list',
+        'attribute_create' => 'action_attribute_create',
+        'attribute_get'    => 'action_attribute_get',
+        'attribute_save'   => 'action_attribute_save',
+        'attribute_delete' => 'action_attribute_delete',
         'seo_get'         => 'action_seo_get',
         'seo_save'        => 'action_seo_save',
         'seo_audit'       => 'action_seo_audit',
@@ -644,6 +650,7 @@ class Qwoo_Platform_Dashboard {
                 return self::bad( 'Add a sale price to at least one variant to schedule the sale.' );
             }
             $plan['dates'] = $dates;
+            $details       = self::details_plan( $f, array_keys( $plan['attributes'] ) );
         } else {
             $stock = self::stock_fields( $f );
             if ( is_wp_error( $stock ) ) {
@@ -655,6 +662,10 @@ class Qwoo_Platform_Dashboard {
             if ( $scheduled && $stock['sale'] === '' ) {
                 return self::bad( 'Add a sale price to schedule the sale.' );
             }
+            $details = self::details_plan( $f );
+        }
+        if ( is_wp_error( $details ) ) {
+            return $details;
         }
 
         try {
@@ -663,6 +674,9 @@ class Qwoo_Platform_Dashboard {
                     $product = self::change_type( $id, 'variable' );
                 }
                 self::apply_common( $product, $common );
+                if ( $details !== null ) {
+                    $plan['details'] = self::build_details( $details );
+                }
                 $product->set_attributes( self::build_attributes( $plan ) );
                 // Prices and stock are on the combinations.
                 $product->set_regular_price( '' );
@@ -679,6 +693,9 @@ class Qwoo_Platform_Dashboard {
                     $product = new WC_Product_Simple();
                 }
                 self::apply_common( $product, $common );
+                if ( $details !== null ) {
+                    $product->set_attributes( self::build_details( $details ) );
+                }
                 self::apply_stock( $product, $stock );
                 self::apply_sale_dates( $product, $dates );
                 $product->save();
@@ -964,7 +981,8 @@ class Qwoo_Platform_Dashboard {
 
         $details = [];
         foreach ( $existing as $key => $attr ) {
-            if ( ! $attr->get_variation() ) {
+            // Sent with the save: checked against the options in details_plan.
+            if ( ! $attr->get_variation() && ! array_key_exists( 'details', $f ) ) {
                 $label = mb_strtolower( $attr->is_taxonomy() ? wc_attribute_label( $attr->get_name() ) : $attr->get_name() );
                 if ( isset( $attributes[ $label ] ) ) {
                     return self::bad( "\"{$attributes[ $label ]['name']}\" is already a product detail. Use another name." );
@@ -2546,7 +2564,7 @@ class Qwoo_Platform_Dashboard {
             array_splice( $images, min( $video['position'], count( $images ) ), 0, [ [ 'id' => $video['id'], 'url' => $video['src'], 'kind' => 'video' ] ] );
         }
         $description = (string) $p->get_description();
-        return self::product_summary( $p ) + self::product_options( $p ) + self::sale_dates_of( $p ) + Qwoo_Product_Extras::for_editor( $p ) + [
+        return self::product_summary( $p ) + self::product_options( $p ) + [ 'details' => self::product_details( $p ) ] + self::sale_dates_of( $p ) + Qwoo_Product_Extras::for_editor( $p ) + [
             'editable'     => $p->is_type( self::EDITABLE_TYPES ),
             // For the formatted editor: what it can show (anything else is dropped when saving).
             'description_html' => self::clean_description( wpautop( $description ) ),
