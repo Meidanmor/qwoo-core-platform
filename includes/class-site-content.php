@@ -82,6 +82,21 @@ class Qwoo_Site_Content {
             update_option( self::MODE, 'local', true );
         }
 
+        $body = self::pointer_body();
+        // The same answer as a plain file the storefront can read without starting WordPress
+        // (written whenever it changes; this puts it right if a change was ever missed).
+        if ( self::enabled() ) {
+            self::write_pointer( $body );
+            $body['pointer'] = self::url( 'current.json' );
+        }
+
+        $response = new WP_REST_Response( $body );
+        $response->header( 'Cache-Control', 'no-store, max-age=0' );
+        return $response;
+    }
+
+    /** What qwoo/v1/site answers (public through the storefront's CDN: no secrets in it). */
+    public static function pointer_body(): array {
         $current = get_option( self::CURRENT );
         $body    = is_array( $current ) && ! empty( $current['version'] )
             ? [
@@ -95,10 +110,33 @@ class Qwoo_Site_Content {
         $body        += Qwoo_Store_Visibility::site_fields();
         // Tracking & custom code: only a hash of its stamp (the settings come from qwoo/v1/site/code).
         $body        += Qwoo_Custom_Code::site_fields();
+        // Changes when anything shoppers see changes: the storefront's server keeps the store's
+        // public answers until then (Qwoo_Content_Stamp).
+        if ( class_exists( 'Qwoo_Content_Stamp' ) ) {
+            $stamp          = get_option( Qwoo_Content_Stamp::OPTION );
+            $body['stamp']  = Qwoo_Content_Stamp::get();
+            $body['shared'] = Qwoo_Content_Stamp::shared();
+            // What changed it last (a setting's name or the kind of change), to find a stamp that changes too often.
+            $body['why']    = is_array( $stamp ) ? (string) ( $stamp['why'] ?? '' ) : '';
+        }
+        return $body;
+    }
 
-        $response = new WP_REST_Response( $body );
-        $response->header( 'Cache-Control', 'no-store, max-age=0' );
-        return $response;
+    /**
+     * uploads/qwoo-site/current.json: the live version and the stamp, read by the storefront every
+     * few seconds as a plain file (no WordPress start-up, a few ms instead of a few hundred).
+     */
+    public static function write_pointer( ?array $body = null ) {
+        if ( ! self::enabled() || ! self::ensure_dirs() ) return;
+        $body    = $body ?? self::pointer_body();
+        $encoded = wp_json_encode( $body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+        $target  = self::dir() . 'current.json';
+        if ( ! $encoded || ( is_readable( $target ) && file_get_contents( $target ) === $encoded ) ) return;
+        $tmp = $target . '.' . wp_generate_password( 8, false ) . '.tmp';
+        if ( file_put_contents( $tmp, $encoded ) === false || ! @rename( $tmp, $target ) ) {
+            @unlink( $tmp );
+            error_log( 'Qwoo: could not write current.json.' );
+        }
     }
 
     /* ---------------- storage ---------------- */
