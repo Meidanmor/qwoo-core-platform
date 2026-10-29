@@ -2853,6 +2853,46 @@ abstract class Shop_Builder_Constants {
 
     private static $block_schema = null;
 
+    /** Carousel fields that choose which products: Related Products finds its own. */
+    const RELATED_SKIP_FIELDS = [ 'source', 'slides', 'images', 'query_type', 'category_ids', 'slide_category_ids', 'tag_ids', 'product_ids',
+            'limit', 'hide_out_of_stock', 'card_template', 'category_card_template' ];
+    /** Carousel fields that also shape the grid. */
+    const RELATED_SHARED_FIELDS = [ 'items_per_view', 'gap' ];
+
+    /**
+     * Related Products (product page): its own fields, then every Carousel
+     * option that applies to products (so a new carousel option comes along by
+     * itself), shown when "Show As" is Carousel. Items Per Slide and the gap
+     * also set the grid.
+     */
+    private static function related_fields( array $own, array $carousel ) {
+        $fields = [
+                'title'      => $own['title'],
+                'show_title' => [ 'type' => 'toggle', 'label' => 'Show the heading', 'tab' => 'content', 'default' => true ],
+                'title_align' => [ 'type' => 'select', 'label' => 'Heading Alignment', 'tab' => 'style', 'group' => 'Heading', 'responsive' => true, 'default' => 'center',
+                        'options' => self::ALIGN_OPTIONS, 'show_if' => [ 'show_title' => true ] ],
+                'ts:title'   => [ 'type' => 'text_style', 'label' => 'Heading', 'default_font' => 'headings', 'show_if' => [ 'show_title' => true ] ],
+                'display'    => [ 'type' => 'select', 'label' => 'Show As', 'tab' => 'content', 'default' => 'carousel',
+                        'options' => [ 'carousel' => 'Carousel', 'grid' => 'Grid' ] ],
+                'limit'      => [ 'type' => 'number', 'label' => 'Number of Products', 'tab' => 'content', 'min' => 1, 'max' => 24, 'default' => 8 ],
+                'hide_out_of_stock' => [ 'type' => 'toggle', 'label' => 'Hide out-of-stock products', 'tab' => 'content' ],
+                'card_template' => $own['card_template'],
+        ];
+        foreach ( $carousel as $key => $spec ) {
+            if ( in_array( $key, self::RELATED_SKIP_FIELDS, true ) || strpos( $key, 'ts:' ) === 0 ) continue;
+            $show = $spec['show_if'] ?? [];
+            if ( isset( $show['source'] ) ) {
+                if ( ! in_array( 'products', (array) $show['source'], true ) ) continue;
+                unset( $show['source'] );
+            }
+            if ( $key === 'items_per_view' ) $spec['label'] = 'Products Per Row / Slide';
+            if ( ! in_array( $key, self::RELATED_SHARED_FIELDS, true ) ) $show['display'] = 'carousel';
+            if ( $show ) $spec['show_if'] = $show; else unset( $spec['show_if'] );
+            $fields[ $key ] = $spec;
+        }
+        return $fields;
+    }
+
     /**
      * BLOCK_SCHEMA with every text style turned into its fields (Font, Size,
      * Weight, Line Height, Color), grouped under the text's name on the Style
@@ -2861,6 +2901,9 @@ abstract class Shop_Builder_Constants {
     public static function block_schema() {
         if ( self::$block_schema !== null ) return self::$block_schema;
         $schema = self::BLOCK_SCHEMA;
+        if ( isset( $schema['product_related'], $schema['carousel'] ) ) {
+            $schema['product_related']['fields'] = self::related_fields( $schema['product_related']['fields'], $schema['carousel']['fields'] );
+        }
         foreach ( $schema as &$block ) {
             $fields = [];
             foreach ( (array) ( $block['fields'] ?? [] ) as $key => $spec ) {
