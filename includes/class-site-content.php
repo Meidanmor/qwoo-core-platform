@@ -93,6 +93,8 @@ class Qwoo_Site_Content {
             : [ 'version' => null ];
         $body['mode'] = self::enabled() ? 'local' : 'github';
         $body        += Qwoo_Store_Visibility::site_fields();
+        // Tracking & custom code: only a hash of its stamp (the settings come from qwoo/v1/site/code).
+        $body        += Qwoo_Custom_Code::site_fields();
 
         $response = new WP_REST_Response( $body );
         $response->header( 'Cache-Control', 'no-store, max-age=0' );

@@ -90,6 +90,8 @@ add_action( 'init', function() {
                 $variation_prices = qwoo_variation_prices($product);
                 // Questions and answers + bought-together ids (single product answers only).
                 $extras = class_exists('Qwoo_Product_Extras') ? Qwoo_Product_Extras::for_storefront($product) : ['faq' => null, 'bought_together' => null];
+                // Products with no price or 0: what shows instead of Add to cart (Settings → General).
+                $extras['zero_price'] = class_exists('Qwoo_Zero_Price') ? Qwoo_Zero_Price::for_storefront($product) : null;
 
                 if (empty($terms) || is_wp_error($terms)) {
                     return ['default_category' => null, 'reviews' => $reviews, 'videos' => $videos, 'variation_prices' => $variation_prices] + $extras;
@@ -150,6 +152,12 @@ add_action( 'init', function() {
                         'bought_together' => [
                             'description' => 'Single product answers only: ids of the products shown as "bought together"; null otherwise.',
                             'type' => ['array', 'null'],
+                            'context' => ['view', 'edit'],
+                            'readonly' => true,
+                        ],
+                        'zero_price' => [
+                            'description' => 'Products with no price or 0: what the storefront shows instead of Add to cart { action buy|replace|hide, button, link product|url, url }; null for priced products.',
+                            'type' => ['object', 'null'],
                             'context' => ['view', 'edit'],
                             'readonly' => true,
                         ],

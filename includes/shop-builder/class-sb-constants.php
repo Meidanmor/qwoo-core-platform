@@ -605,6 +605,14 @@ abstract class Shop_Builder_Constants {
             'none'        => [ 'label' => 'No icon',  'icon' => '' ],
     ];
 
+    /** The Sort block's button icons ('none': text only). */
+    const SORT_ICONS = [
+            'sort'      => [ 'label' => 'Lines',   'icon' => 'sort' ],
+            'swap_vert' => [ 'label' => 'Arrows',  'icon' => 'swap_vert' ],
+            'tune'      => [ 'label' => 'Sliders', 'icon' => 'tune' ],
+            'none'      => [ 'label' => 'No icon', 'icon' => '' ],
+    ];
+
     /** Icon sets selectable by an `icon` field's `icon_set` key. */
     // Payment Icons block (keys match aura's src/utils/payment-icons.js).
     const PAYMENT_ICONS = [
@@ -630,6 +638,7 @@ abstract class Shop_Builder_Constants {
             'search'    => self::SEARCH_ICONS,
             'filter'    => self::FILTER_ICONS,
             'dropdown'  => self::DROPDOWN_ICONS,
+            'sort'      => self::SORT_ICONS,
     ];
 
     /** Whether a header widget's drawer opens by swiping in from an edge of the screen (phones). */
@@ -1554,14 +1563,43 @@ abstract class Shop_Builder_Constants {
                     'label' => 'Sort', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'sort',
                     // Its "Filters" button (phones) hides by itself when the page has a Filters Button block.
                     // Every look field is empty by default: the dropdown looks as it always did.
+                    // Show As is per screen size (an older single value is the computer's, smaller screens inherit).
+                    // "Button" looks like the Filters Button block (sbt_* fields) and opens the choices:
+                    // a menu on computers, a sheet from the bottom on phones.
                     'fields' => [
-                            'display'     => [ 'type' => 'select', 'label' => 'Show As', 'tab' => 'content', 'default' => 'dropdown',
-                                    'options' => [ 'dropdown' => 'Dropdown list', 'buttons' => 'Buttons' ] ],
+                            'display'     => [ 'type' => 'select', 'label' => 'Show As', 'tab' => 'content', 'default' => 'dropdown', 'responsive' => true,
+                                    'options' => [ 'dropdown' => 'Dropdown list', 'buttons' => 'Buttons', 'button' => 'One button (like Filters)' ] ],
+                            'sbt_show_text' => [ 'type' => 'toggle', 'label' => 'Show text', 'tab' => 'content', 'group' => 'Sort button', 'default' => true,
+                                    'show_if' => [ 'display' => 'button' ], 'help' => 'Turn off for an icon-only button.' ],
+                            'sbt_text'      => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'group' => 'Sort button', 'default' => '', 'placeholder' => 'Sort',
+                                    'show_if' => [ 'display' => 'button', 'sbt_show_text' => true ] ],
+                            'sbt_icon'      => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'group' => 'Sort button', 'icon_set' => 'sort', 'default' => 'sort',
+                                    'show_if' => [ 'display' => 'button' ] ],
+                            'sbt_icon_position' => [ 'type' => 'select', 'label' => 'Icon Position', 'tab' => 'content', 'group' => 'Sort button', 'default' => 'start',
+                                    'options' => [ 'start' => 'Before the text', 'end' => 'After the text' ], 'show_if' => [ 'display' => 'button' ], 'hide_if' => [ 'sbt_icon' => 'none' ] ],
                             'show_label'  => [ 'type' => 'toggle', 'label' => 'Show the label', 'tab' => 'content', 'default' => true ],
                             'label_text'  => [ 'type' => 'text', 'label' => 'Label', 'tab' => 'content', 'default' => '', 'placeholder' => 'Sort by',
                                     'show_if' => [ 'show_label' => true ] ],
                             'alignment'   => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'default' ],
+
+                            'sbt_style'     => [ 'type' => 'select', 'label' => 'Style', 'tab' => 'style', 'group' => 'Sort button', 'default' => 'secondary',
+                                    'options' => [ 'primary' => 'Primary (filled)', 'secondary' => 'Secondary (filled)', 'outline' => 'Outline', 'flat' => 'Text only', 'link' => 'Underlined link' ],
+                                    'show_if' => [ 'display' => 'button' ] ],
+                            'sbt_size'      => [ 'type' => 'select', 'label' => 'Size', 'tab' => 'style', 'group' => 'Sort button', 'default' => 'md',
+                                    'options' => [ 'sm' => 'Small', 'md' => 'Medium', 'lg' => 'Large' ], 'show_if' => [ 'display' => 'button' ] ],
+                            'sbt_padding'   => [ 'type' => 'sides', 'label' => 'Button Padding', 'tab' => 'style', 'group' => 'Sort button', 'responsive' => true,
+                                    'show_if' => [ 'display' => 'button' ], 'help' => 'Space inside the button around its text. Replaces the size\'s padding where set (0 works too).' ],
+                            'sbt_radius'    => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Sort button', 'placeholder' => 'e.g. 999px for a pill',
+                                    'show_if' => [ 'display' => 'button' ] ],
+                            'sbt_bg'        => [ 'type' => 'color', 'label' => 'Background Color', 'tab' => 'style', 'group' => 'Sort button', 'show_if' => [ 'display' => 'button' ] ],
+                            'sbt_icon_size' => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Sort button', 'placeholder' => '20px',
+                                    'show_if' => [ 'display' => 'button' ], 'hide_if' => [ 'sbt_icon' => 'none' ] ],
+                            'sbt_icon_gap'  => [ 'type' => 'length', 'label' => 'Space Between Icon and Text', 'tab' => 'style', 'group' => 'Sort button', 'responsive' => true, 'placeholder' => '12px',
+                                    'show_if' => [ 'display' => 'button' ], 'hide_if' => [ 'sbt_icon' => 'none' ] ],
+                            'sbt_icon_color' => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Sort button',
+                                    'show_if' => [ 'display' => 'button' ], 'hide_if' => [ 'sbt_icon' => 'none' ], 'help' => 'Empty: the text colour.' ],
+                            'ts:sbl'        => [ 'type' => 'text_style', 'label' => 'Sort Button Text', 'default_font' => 'buttons', 'show_if' => [ 'display' => 'button' ] ],
 
                             'field_look'   => [ 'type' => 'select', 'label' => 'Look', 'tab' => 'style', 'group' => 'Box', 'default' => 'filled',
                                     'options' => [ 'filled' => 'Filled', 'outlined' => 'Outlined', 'underlined' => 'Underlined', 'plain' => 'Plain' ],
@@ -1589,12 +1627,12 @@ abstract class Shop_Builder_Constants {
                             'arrow_color'  => [ 'type' => 'color', 'label' => 'Arrow Color', 'tab' => 'style', 'group' => 'Arrow',
                                     'show_if' => [ 'display' => 'dropdown' ], 'hide_if' => [ 'arrow_icon' => 'none' ] ],
 
-                            'list_bg'          => [ 'type' => 'color', 'label' => 'Background Color', 'tab' => 'style', 'group' => 'Open list', 'show_if' => [ 'display' => 'dropdown' ] ],
-                            'list_text'        => [ 'type' => 'color', 'label' => 'Text Color', 'tab' => 'style', 'group' => 'Open list', 'show_if' => [ 'display' => 'dropdown' ] ],
-                            'list_hover_bg'    => [ 'type' => 'color', 'label' => 'Hover Background', 'tab' => 'style', 'group' => 'Open list', 'show_if' => [ 'display' => 'dropdown' ] ],
-                            'list_active_text' => [ 'type' => 'color', 'label' => 'Chosen Option Color', 'tab' => 'style', 'group' => 'Open list', 'show_if' => [ 'display' => 'dropdown' ] ],
+                            'list_bg'          => [ 'type' => 'color', 'label' => 'Background Color', 'tab' => 'style', 'group' => 'Open list', 'show_if' => [ 'display' => [ 'dropdown', 'button' ] ] ],
+                            'list_text'        => [ 'type' => 'color', 'label' => 'Text Color', 'tab' => 'style', 'group' => 'Open list', 'show_if' => [ 'display' => [ 'dropdown', 'button' ] ] ],
+                            'list_hover_bg'    => [ 'type' => 'color', 'label' => 'Hover Background', 'tab' => 'style', 'group' => 'Open list', 'show_if' => [ 'display' => [ 'dropdown', 'button' ] ] ],
+                            'list_active_text' => [ 'type' => 'color', 'label' => 'Chosen Option Color', 'tab' => 'style', 'group' => 'Open list', 'show_if' => [ 'display' => [ 'dropdown', 'button' ] ] ],
                             'list_radius'      => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Open list', 'placeholder' => '4px',
-                                    'show_if' => [ 'display' => 'dropdown' ] ],
+                                    'show_if' => [ 'display' => [ 'dropdown', 'button' ] ] ],
 
                             'btn_gap'           => [ 'type' => 'length', 'label' => 'Gap Between Buttons', 'tab' => 'style', 'group' => 'Buttons', 'responsive' => true, 'placeholder' => '8px',
                                     'show_if' => [ 'display' => 'buttons' ] ],

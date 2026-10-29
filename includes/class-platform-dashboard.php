@@ -113,6 +113,8 @@ class Qwoo_Platform_Dashboard {
         'plan_set'        => 'action_plan_set',
         'visibility_get'  => 'action_visibility_get',
         'visibility_save' => 'action_visibility_save',
+        'code_get'        => 'action_code_get',
+        'code_save'       => 'action_code_save',
         'states'          => 'action_states',
         'tax_rate_save'   => 'action_tax_rate_save',
         'tax_rate_delete' => 'action_tax_rate_delete',
@@ -1745,6 +1747,8 @@ class Qwoo_Platform_Dashboard {
         }
         return [
             'general'  => self::general_settings(),
+            // Products with no price or 0 (Qwoo_Zero_Price).
+            'zero_price' => Qwoo_Zero_Price::for_dashboard(),
             'store'    => [
                 'name'           => html_entity_decode( get_option( 'blogname' ), ENT_QUOTES ),
                 'email'          => (string) ( $new_order['recipient'] ?? '' ) ?: (string) get_option( 'admin_email' ),
@@ -1859,6 +1863,17 @@ class Qwoo_Platform_Dashboard {
         return Qwoo_Store_Visibility::dashboard_state();
     }
 
+    /** Tracking & code (Qwoo_Custom_Code). */
+    private static function action_code_get( array $params ) {
+        return Qwoo_Custom_Code::dashboard_state();
+    }
+
+    /** See Qwoo_Custom_Code::save(); `by` (owner | ai) comes from the platform. */
+    private static function action_code_save( array $params ) {
+        $out = Qwoo_Custom_Code::save( $params );
+        return isset( $out['error'] ) ? new WP_Error( 'qwoo_code', $out['error'], [ 'status' => 400 ] ) : $out;
+    }
+
     /** Whether the platform's plan lets this store use a premium addon. */
     public static function has_feature( $feature ) {
         $plan = get_option( 'qwoo_plan', [] );
@@ -1874,6 +1889,13 @@ class Qwoo_Platform_Dashboard {
         switch ( $params['section'] ?? '' ) {
             case 'general':
                 $saved = self::save_general_settings( $v );
+                if ( is_wp_error( $saved ) ) {
+                    return $saved;
+                }
+                break;
+
+            case 'zero_price':
+                $saved = Qwoo_Zero_Price::save( $v );
                 if ( is_wp_error( $saved ) ) {
                     return $saved;
                 }
