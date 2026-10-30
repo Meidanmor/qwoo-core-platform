@@ -216,10 +216,13 @@ trait SB_Template_Import {
             $pwa['name']       = $name;
             $pwa['short_name'] = mb_substr( $name, 0, 12 );
         }
-        if ( ! empty( $input['colors']['primary'] ) && sanitize_hex_color( $input['colors']['primary'] ) ) {
-            $pwa['theme_color'] = $input['colors']['primary'];
+        // The app's bar takes the main color ("secondary": "primary" is the page background).
+        if ( ! empty( $input['colors']['secondary'] ) && sanitize_hex_color( $input['colors']['secondary'] ) ) {
+            $pwa['theme_color'] = $input['colors']['secondary'];
         }
-        $pwa['background_color'] = $pwa['background_color'] ?? '#ffffff';
+        $pwa['background_color'] = ! empty( $input['colors']['primary'] ) && sanitize_hex_color( $input['colors']['primary'] )
+            ? $input['colors']['primary']
+            : ( $pwa['background_color'] ?? '#ffffff' );
 
         $clean = self::instance()->sanitize_options( [ 'branding' => $branding, 'pwa' => $pwa ] );
         $final = array_merge( $options, $clean );

@@ -14,6 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   package_export_start { parts }  package_export_step  package_chunk { index }  package_export_discard
  *   package_upload { index, total, size, data }   package_inspect
  *   package_import_start { parts, mode: add | replace, template }   package_import_cancel   package_import_discard
+ *   package_import_revert: stops the import and puts the store back as it was (Qwoo_Import_Snapshot)
  */
 trait Qwoo_Platform_Package {
 
@@ -110,6 +111,12 @@ trait Qwoo_Platform_Package {
         $key  = (string) $file['key'];
         $what = array_merge( [ 'package' ], $parts );
 
+        // Cancel puts the store back: a copy of its content first (not for a new store's template).
+        if ( empty( $params['template'] ) ) {
+            $saved = Qwoo_Import_Snapshot::take();
+            if ( is_wp_error( $saved ) ) return $saved;
+        }
+
         // Replace: what's here and didn't come from this file's store goes to the trash first.
         $remove = [];
         $types  = array_values( array_filter( [ in_array( 'products', $parts, true ) ? 'product' : '', in_array( 'blog', $parts, true ) ? 'post' : '', in_array( 'coupons', $parts, true ) ? 'shop_coupon' : '' ] ) );
@@ -155,6 +162,32 @@ trait Qwoo_Platform_Package {
             $s['status'] = 'cancelled';
             update_option( Qwoo_Migration::OPTION, $s, false );
         }
+        return self::package_public();
+    }
+
+    /**
+     * Stops the import and puts the store back as it was before it started. While a step is still
+     * working it answers 409 with retry: true (the dashboard asks again in a few seconds).
+     */
+    private static function action_package_import_revert( array $params ) {
+        $s = self::mig_state();
+        if ( ( $s['source']['kind'] ?? '' ) !== 'package' || ! Qwoo_Import_Snapshot::exists() ) {
+            return self::bad( 'There\'s no import to undo.' );
+        }
+        if ( ( $s['status'] ?? '' ) === 'running' ) {
+            $s['status'] = 'cancelled';
+            update_option( Qwoo_Migration::OPTION, $s, false );
+        }
+        if ( get_transient( 'qwoo_migration_lock' ) ) {
+            return new WP_Error( 'qwoo_import_busy', 'Stopping the import…', [ 'status' => 409, 'retry' => true ] );
+        }
+        $done = Qwoo_Import_Snapshot::restore();
+        if ( is_wp_error( $done ) ) return $done;
+        $s = self::mig_state();
+        $s['status']   = 'reverted';
+        $s['finished'] = time();
+        update_option( Qwoo_Migration::OPTION, $s, false );
+        Qwoo_Store_Package::import_mark( 'checked' );
         return self::package_public();
     }
 

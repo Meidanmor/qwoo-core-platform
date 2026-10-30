@@ -115,6 +115,8 @@ class Qwoo_Site_Content {
         $body        += Qwoo_Store_Visibility::site_fields();
         // Tracking & custom code: only a hash of its stamp (the settings come from qwoo/v1/site/code).
         $body        += Qwoo_Custom_Code::site_fields();
+        // An import is running: the storefront shows its pages under an "updating" overlay.
+        if ( class_exists( 'Qwoo_Import_Lock' ) ) $body += Qwoo_Import_Lock::site_fields();
         // Changes when anything shoppers see changes: the storefront's server keeps the store's
         // public answers until then (Qwoo_Content_Stamp).
         if ( class_exists( 'Qwoo_Content_Stamp' ) ) {

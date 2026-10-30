@@ -54,6 +54,7 @@ class Qwoo_Platform_Dashboard {
     /** action => method. Anything else is refused. */
     const ACTIONS = [
         'overview'        => 'action_overview',
+        'legal_reviewed'  => 'action_legal_reviewed',
         'products_list'   => 'action_products_list',
         'product_get'     => 'action_product_get',
         'product_save'    => 'action_product_save',
@@ -174,6 +175,7 @@ class Qwoo_Platform_Dashboard {
         'package_inspect'        => 'action_package_inspect',
         'package_import_start'   => 'action_package_import_start',
         'package_import_cancel'  => 'action_package_import_cancel',
+        'package_import_revert'  => 'action_package_import_revert',
         'package_import_discard' => 'action_package_import_discard',
     ];
 
@@ -484,7 +486,15 @@ class Qwoo_Platform_Dashboard {
             'recent'   => $recent,
             'launch'   => self::launch_steps(),
             'reviews'  => self::action_reviews_pending(),
+            // Legal pages written and published at setup: the owner is asked to read them.
+            'legal_review' => Shop_Settings_Builder::legal_review(),
         ];
+    }
+
+    /** The owner read the generated legal pages: the Overview stops asking. */
+    private static function action_legal_reviewed( array $params ) {
+        delete_option( Shop_Settings_Builder::$legal_review_option );
+        return [ 'ok' => true ];
     }
 
     /**

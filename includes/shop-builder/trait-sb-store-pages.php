@@ -18,6 +18,23 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 trait SB_Store_Pages {
 
+    /** Roles of the legal pages made and published at setup that the owner hasn't marked as read. */
+    /** (A static property: trait constants need PHP 8.2.) */
+    public static $legal_review_option = 'qwoo_legal_review';
+
+    /** For the Overview: [ { role, id, title, slug } ] of the generated legal pages still to read. */
+    public static function legal_review(): array {
+        $roles = (array) get_option( self::$legal_review_option, [] );
+        if ( ! $roles ) return [];
+        $out = [];
+        foreach ( self::custom_pages_of( (array) get_option( 'shop_builder_options', [] ) ) as $page ) {
+            if ( in_array( $page['role'] ?? '', $roles, true ) ) {
+                $out[] = [ 'role' => (string) $page['role'], 'id' => (string) $page['id'], 'title' => (string) $page['title'], 'slug' => (string) $page['slug'] ];
+            }
+        }
+        return $out;
+    }
+
     /**
      * Makes sure the store has its homepage (and, with $legal, the legal
      * pages). $name: the store's name when it's newer than the site title.
@@ -33,10 +50,13 @@ trait SB_Store_Pages {
         if ( ! in_array( 'home', $roles, true ) ) {
             $add[] = self::home_page( (array) ( $options['home'] ?? [] ), $legal, (string) $name );
         }
+        $review = [];
         if ( $legal ) {
             foreach ( [ 'privacy', 'terms', 'returns' ] as $role ) {
                 if ( ! in_array( $role, $roles, true ) ) {
-                    $add[] = self::store_page_template( $role, (string) $name ) + [ 'id' => self::new_id( 'pg' ), 'parent' => '', 'status' => 'draft', 'seo' => [] ];
+                    // Live from the start (user, 2026-10-30); the Overview asks the owner to read them.
+                    $add[]    = self::store_page_template( $role, (string) $name ) + [ 'id' => self::new_id( 'pg' ), 'parent' => '', 'status' => 'publish', 'seo' => [] ];
+                    $review[] = $role;
                 }
             }
         }
@@ -46,6 +66,7 @@ trait SB_Store_Pages {
 
         $options['custom_pages'] = self::instance()->sanitize_custom_pages( array_merge( $add, $pages ), $pages );
         update_option( 'shop_builder_options', $options );
+        if ( $review ) update_option( self::$legal_review_option, $review, false );
         return true;
     }
 
@@ -222,7 +243,12 @@ trait SB_Store_Pages {
             return null;
         }
         $f    = self::store_page_facts( $name );
-        $html = strtr( self::legal_text( $role, Qwoo_Store_Language::get() ), [ '{name}' => $f['name'], '{email}' => $f['email'], '{address}' => $f['address'], '{today}' => $f['today'] ] );
+        $lang = Qwoo_Store_Language::get();
+        $html = self::legal_text( $role, $lang );
+        // No address yet: "{name}, {address}." becomes "{name}." (a bracket would show on a live page).
+        if ( strpos( $f['address'], '[' ) === 0 ) $html = str_replace( ', {address}', '', $html );
+        $html = strtr( $html, [ '{name}' => $f['name'], '{email}' => $f['email'], '{address}' => $f['address'], '{today}' => $f['today'] ] );
+        $html = self::fill_brackets( $html, $lang );
         return [
             'title'      => Qwoo_I18n::t( $titles[ $role ][0] ),
             'slug'       => $titles[ $role ][1],
@@ -230,6 +256,71 @@ trait SB_Store_Pages {
             'show_title' => true,
             'sections'   => [ self::text_section( preg_replace( '/>\s+</', '><', trim( $html ) ) ) ],
         ];
+    }
+
+    /**
+     * The [brackets] filled with the store's own settings (currency, country, taxes) or common
+     * choices (14 days to return…), so the pages can go live at setup (user, 2026-10-30): the owner
+     * is asked on the Overview to read them. Anything left in brackets loses them.
+     */
+    private static function fill_brackets( $html, $lang ) {
+        $country_code = explode( ':', (string) get_option( 'woocommerce_default_country', '' ) )[0];
+        $countries    = function_exists( 'WC' ) && WC()->countries ? WC()->countries->get_countries() : [];
+        $country      = html_entity_decode( (string) ( $countries[ $country_code ] ?? '' ), ENT_QUOTES );
+        $code         = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : '';
+        $currencies   = function_exists( 'get_woocommerce_currencies' ) ? get_woocommerce_currencies() : [];
+        $currency     = html_entity_decode( (string) ( $currencies[ $code ] ?? $code ), ENT_QUOTES );
+        $with_tax     = get_option( 'woocommerce_prices_include_tax' ) === 'yes' || ! ( function_exists( 'wc_tax_enabled' ) && wc_tax_enabled() );
+        if ( $lang === 'he' ) {
+            $country = $country_code === 'IL' || $country === '' ? 'מדינת ישראל' : $country;
+            $map = [
+                ' [יש לפרט שירותים נוספים, כמו כלי ניתוח או שיווק]' => '',
+                ' [אם יש כלי ניתוח או פרסום, יש לכתוב כאן את שמם ואיך אפשר לסרב להם.]' => ' אם נשתמש בכלי ניתוח או פרסום, נבקש את הסכמתך קודם, ואפשר לשנות את הבחירה בכל זמן.',
+                '[הזמנות ומבצעים]' => 'הזמנות ומבצעים',
+                ' [למשל 7 שנים]' => '',
+                '[30]' => '30',
+                'ב[מטבע]' => $code === 'ILS' ? 'בשקלים' : 'ב' . $currency,
+                '[כוללים / לא כוללים]' => $with_tax ? 'כוללים' : 'לא כוללים',
+                '[בעת ההזמנה / במסירה]' => 'בעת ההזמנה',
+                'דיני [מדינת ישראל]' => 'דיני ' . $country,
+                'ב[עיר]' => 'במחוז שבו נמצא העסק',
+                '[מדינות או אזורים]' => $country === 'מדינת ישראל' ? 'כל הארץ' : $country,
+                '[1–3]' => '1–3',
+                '[3–7]' => '3–7',
+                ' [משלוח חינם בהזמנות מעל …]' => '',
+                ' [עם מספר מעקב]' => ' עם פרטי המעקב',
+                '[14]' => '14',
+                '[7]' => '7',
+                '[פריטים שאי אפשר להחזיר, למשל: כרטיסי מתנה, מוצרים בהתאמה אישית או מוצרי היגיינה.]' => 'כרטיסי מתנה, מוצרים בהתאמה אישית ומוצרי היגיינה אינם ניתנים להחזרה, אלא אם הגיעו פגומים.',
+                ' [דמי המשלוח בהחזרה על הלקוח / עלינו.]' => ' דמי המשלוח בהחזרה על הלקוח, אלא אם הפריט הגיע פגום או שגוי.',
+            ];
+        } else {
+            $country = $country !== '' ? $country : 'the country where we\'re based';
+            $map = [
+                ' [list any others, like analytics or marketing tools]' => '',
+                ' [If you use analytics or advertising tools, name them here and how to opt out.]' => ' If we use analytics or advertising tools, we ask for your consent first, and you can change your choice at any time.',
+                '[orders and offers]' => 'orders and offers',
+                ' [for example, 7 years]' => '',
+                '[30]' => '30',
+                '[currency]' => $currency !== '' ? $currency : 'the store\'s currency',
+                '[include / don\'t include]' => $with_tax ? 'include' : 'don\'t include',
+                '[when you order / on delivery]' => 'when you order',
+                'laws of [country]' => 'laws of ' . $country,
+                'courts of [city / country]' => 'courts of ' . $country,
+                '[countries or areas]' => $country,
+                '[1–3]' => '1–3',
+                '[3–7]' => '3–7',
+                ' [Free shipping on orders over …]' => '',
+                ' [with a tracking number]' => ' with its tracking details',
+                '[14]' => '14',
+                '[7]' => '7',
+                '[Items that can\'t be returned, for example: gift cards, personalised or hygiene products.]' => 'Gift cards, personalised items and hygiene products can\'t be returned unless they arrived damaged.',
+                ' [Return shipping is paid by the customer / by us.]' => ' Return shipping is paid by the customer, unless the item arrived damaged or wrong.',
+            ];
+        }
+        $html = strtr( $html, $map );
+        // Anything still in brackets: its words stay, the brackets go.
+        return preg_replace( '/\[([^\[\]<>]{1,200})\]/u', '$1', $html );
     }
 
     /** Today, written out in the store's language ("9 October 2026" / "9 באוקטובר 2026"). */
