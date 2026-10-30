@@ -19,7 +19,7 @@ class Qwoo_Content_Stamp {
     const OPTION = 'qwoo_content_stamp'; // { stamp, time, why }
 
     /** Options that change on their own all the time, or say nothing shoppers see. */
-    const QUIET_OPTIONS = [ 'cron', 'doing_cron', 'rewrite_rules', self::OPTION, 'qwoo_site_lock', 'recently_activated', 'active_plugins_count' ];
+    const QUIET_OPTIONS = [ 'cron', 'doing_cron', 'rewrite_rules', self::OPTION, 'qwoo_site_lock', 'recently_activated', 'active_plugins_count', 'qwoo_push_lock', 'qwoo_push_sends', 'qwoo_push_owner_key' ];
     const QUIET_PREFIXES = [ '_transient_', '_site_transient_', 'action_scheduler', 'as_', 'woocommerce_admin_', 'wc_admin_', 'wcpay_', 'jetpack_', 'litespeed', 'hostinger', 'auto_updater', 'wp_' ];
 
     /** Post meta that changes while someone edits in wp-admin, not the post itself. */

@@ -350,7 +350,7 @@ function get_wishlist() {
 --------------------------------------------------------------*/
 
 /** Bump when the CREATE TABLE below changes; dbDelta() applies the diff. */
-const QWOO_PUSH_DB_VERSION = '1';
+const QWOO_PUSH_DB_VERSION = '2';
 
 /**
  * Creates the table on the first request after install/update.
@@ -368,6 +368,7 @@ function qwoo_maybe_install_push_table() {
         return;
     }
     pwa_create_push_subscriptions_table();
+    Qwoo_Push_Engine::install_tables();
 
     global $wpdb;
     $table = $wpdb->prefix . 'pwa_push_subscriptions';
@@ -398,6 +399,12 @@ function pwa_create_push_subscriptions_table() {
         cart_token VARCHAR(255) NULL,
         platform VARCHAR(20) NULL,
         last_seen_at DATETIME NULL,
+        lang VARCHAR(10) NULL,
+        customer_id BIGINT UNSIGNED NULL,
+        wishlist TEXT NULL,
+        cart_items INT NULL,
+        last_order_at DATETIME NULL,
+        owner TINYINT(1) NOT NULL DEFAULT 0,
         created_at DATETIME NOT NULL,
         updated_at DATETIME NOT NULL,
         PRIMARY KEY (id),
@@ -463,6 +470,21 @@ function pwa_save_push_subscription($request)
 
     $now = current_time('mysql');
 
+    // Language, account and saved products (Qwoo_Push_Engine targets by them); the owner's
+    // own test devices come with the code from the dashboard's test link.
+    $extra = [ 'lang' => Qwoo_Push_Engine::request_lang() ];
+    if ( get_current_user_id() ) {
+        $extra['customer_id'] = get_current_user_id();
+    }
+    if ( isset( $data['wishlist'] ) && is_array( $data['wishlist'] ) ) {
+        $extra['wishlist'] = Qwoo_Push_Engine::wishlist_value( $data['wishlist'] );
+    }
+    $owner_code = (string) ( $data['owner_code'] ?? '' );
+    $is_owner = $owner_code !== '' && hash_equals( Qwoo_Push::owner_key(), $owner_code );
+    if ( $is_owner ) {
+        $extra['owner'] = 1;
+    }
+
     $existing_id = null;
 
 // First priority = same device
@@ -498,13 +520,14 @@ function pwa_save_push_subscription($request)
                 'auth_key' => $auth_key,
                 'platform' => $platform,
                 'updated_at' => $now,
-            ],
+            ] + $extra,
             ['id' => $existing_id]
         );
 
         return rest_ensure_response([
             'success' => true,
-            'action' => 'updated'
+            'action' => 'updated',
+            'owner' => $is_owner,
         ]);
     }
 
@@ -520,12 +543,17 @@ function pwa_save_push_subscription($request)
             'platform' => $platform,
             'created_at' => $now,
             'updated_at' => $now,
-        ]
+        ] + $extra
     );
+    // A shopper's first subscription starts the "subscribed" automations (a welcome); not the owner's test device.
+    if ( $wpdb->insert_id && ! $is_owner ) {
+        Qwoo_Push_Engine::on_subscribed( (int) $wpdb->insert_id );
+    }
 
     return rest_ensure_response([
         'success' => true,
-        'action' => 'inserted'
+        'action' => 'inserted',
+        'owner' => $is_owner,
     ]);
 }
 
@@ -541,27 +569,20 @@ function pwa_remove_push_subscription($request) {
     $endpoint = !empty($data['endpoint']) ? trim($data['endpoint']) : null;
     $device_id = !empty($data['device_id']) ? sanitize_text_field($data['device_id']) : null;
 
+    // Also drops its "Notify me" requests and anything still waiting to go to it.
+    $id = 0;
     if ($endpoint) {
-        $deleted = $wpdb->delete(
-            $table,
-            ['endpoint_hash' => hash('sha256', $endpoint)]
-        );
-
-        return rest_ensure_response([
-            'success' => true,
-            'removed' => (bool) $deleted
-        ]);
+        $id = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM $table WHERE endpoint_hash = %s", hash('sha256', $endpoint)));
+    } elseif ($device_id) {
+        $id = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM $table WHERE device_id = %s LIMIT 1", $device_id));
     }
-
-    if ($device_id) {
-        $deleted = $wpdb->delete(
-            $table,
-            ['device_id' => $device_id]
-        );
-
+    if ($endpoint || $device_id) {
+        if ($id) {
+            Qwoo_Push_Engine::forget_device($id);
+        }
         return rest_ensure_response([
             'success' => true,
-            'removed' => (bool) $deleted
+            'removed' => (bool) $id
         ]);
     }
 
@@ -612,6 +633,11 @@ function update_subscription_cart_token($request)
     if ($new_cart_token) {
         $fields['cart_token'] = $new_cart_token;
     }
+    // How many items the cart has (newer storefronts send it): one-off sends to "people with items
+    // in their cart" and cart reminders read it.
+    if (isset($data['items']) && is_numeric($data['items'])) {
+        $fields['cart_items'] = max(0, min(999, (int) $data['items']));
+    }
 
     $where = ['device_id' => $device_id];
 
@@ -626,6 +652,9 @@ function update_subscription_cart_token($request)
             'message' => 'Database update failed'
         ], 500);
     }
+
+    // Starts (hidden) or cancels (active) the cart reminders.
+    Qwoo_Push_Engine::on_cart_state($device_id, $status, $new_cart_token);
 
     return rest_ensure_response([
         'success' => true,

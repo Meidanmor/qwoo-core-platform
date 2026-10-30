@@ -115,6 +115,12 @@ class Qwoo_Platform_Dashboard {
         'visibility_save' => 'action_visibility_save',
         'code_get'        => 'action_code_get',
         'code_save'       => 'action_code_save',
+        'push_get'        => 'action_push_get',
+        'push_save'       => 'action_push_save',
+        'push_send'       => 'action_push_send',
+        'push_cancel'     => 'action_push_cancel',
+        'push_test'       => 'action_push_test',
+        'push_owner'      => 'action_push_owner',
         'states'          => 'action_states',
         'tax_rate_save'   => 'action_tax_rate_save',
         'tax_rate_delete' => 'action_tax_rate_delete',
@@ -1872,6 +1878,46 @@ class Qwoo_Platform_Dashboard {
     private static function action_code_save( array $params ) {
         $out = Qwoo_Custom_Code::save( $params );
         return isset( $out['error'] ) ? new WP_Error( 'qwoo_code', $out['error'], [ 'status' => 400 ] ) : $out;
+    }
+
+    /* ---------------- push notifications (Qwoo_Push, Qwoo_Push_Engine) ---------------- */
+
+    private static function action_push_get( array $params ) {
+        return Qwoo_Push::dashboard_state();
+    }
+
+    /** { ask?, quiet?, cap?, sender?, automations? (the whole list) }. */
+    private static function action_push_save( array $params ) {
+        $out = Qwoo_Push::save( $params );
+        return is_array( $out ) && isset( $out['error'] ) ? new WP_Error( 'qwoo_push', $out['error'], [ 'status' => 400 ] ) : Qwoo_Push::dashboard_state();
+    }
+
+    /** A one-off send: { texts, link, image, audience, send_at, dry, by }. */
+    private static function action_push_send( array $params ) {
+        $out = Qwoo_Push::create_send( $params );
+        return isset( $out['error'] ) ? new WP_Error( 'qwoo_push', $out['error'], [ 'status' => 400 ] ) : $out;
+    }
+
+    private static function action_push_cancel( array $params ) {
+        $out = Qwoo_Push::cancel_send( (string) ( $params['id'] ?? '' ) );
+        return is_array( $out ) && isset( $out['error'] ) ? new WP_Error( 'qwoo_push', $out['error'], [ 'status' => 400 ] ) : Qwoo_Push::dashboard_state();
+    }
+
+    /** To the owner's own devices now: { automation, texts? } or { texts, link, image }. */
+    private static function action_push_test( array $params ) {
+        $out = Qwoo_Push_Engine::send_test( $params );
+        return isset( $out['error'] ) ? new WP_Error( 'qwoo_push', $out['error'], [ 'status' => 400 ] ) : $out;
+    }
+
+    /** { op: new_link | disconnect }: the owner's test devices. */
+    private static function action_push_owner( array $params ) {
+        if ( ( $params['op'] ?? '' ) === 'disconnect' ) {
+            Qwoo_Push_Engine::disconnect_owner_devices();
+        } elseif ( ( $params['op'] ?? '' ) === 'new_link' ) {
+            Qwoo_Push::new_owner_key();
+            Qwoo_Push_Engine::disconnect_owner_devices();
+        }
+        return Qwoo_Push::dashboard_state();
     }
 
     /** Whether the platform's plan lets this store use a premium addon. */

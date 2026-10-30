@@ -90,6 +90,11 @@ class Qwoo_Site_Content {
             $body['pointer'] = self::url( 'current.json' );
         }
 
+        // Push notifications that are due start from here when the store is otherwise quiet.
+        if ( class_exists( 'Qwoo_Push_Engine' ) ) {
+            Qwoo_Push_Engine::maybe_spawn();
+        }
+
         $response = new WP_REST_Response( $body );
         $response->header( 'Cache-Control', 'no-store, max-age=0' );
         return $response;
