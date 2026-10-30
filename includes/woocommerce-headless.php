@@ -16,8 +16,8 @@ add_filter( 'rest_request_after_callbacks', function ( $response ) {
 
 /**
  * Product, variation and cart item names come HTML-encoded from the Store API ("ג&#8217;מייקה"),
- * and the storefront prints them as text, so the codes showed. Numeric codes become their
- * characters; < > & and quotes stay encoded.
+ * and the storefront prints them as text, so the codes showed ("Denim &amp; Trousers"). Codes
+ * become their characters; only < and > stay encoded, so a name can never become a tag.
  */
 add_filter( 'rest_post_dispatch', function ( $response, $server, $request ) {
     if ( $response instanceof WP_REST_Response && strpos( $request->get_route(), '/wc/store' ) === 0 ) {
@@ -31,10 +31,16 @@ function qwoo_plain_names( $data ) {
         return $data;
     }
     foreach ( $data as $key => $value ) {
-        if ( $key === 'name' && is_string( $value ) && strpos( $value, '&#' ) !== false ) {
-            $data[ $key ] = preg_replace_callback( '/&#(x[0-9a-f]+|\d+);/i', function ( $m ) {
-                $code = stripos( $m[1], 'x' ) === 0 ? hexdec( substr( $m[1], 1 ) ) : (int) $m[1];
-                return in_array( $code, [ 34, 38, 39, 60, 62 ], true ) || $code < 32 || $code > 0x10FFFF ? $m[0] : mb_chr( $code, 'UTF-8' );
+        if ( $key === 'name' && is_string( $value ) && strpos( $value, '&' ) !== false ) {
+            // One pass, so "&amp;#8217;" stays the text "&#8217;" instead of decoding twice.
+            $data[ $key ] = preg_replace_callback( '/&(#x[0-9a-f]+|#\d+|amp|quot|apos);/i', function ( $m ) {
+                $named = [ 'amp' => '&', 'quot' => '"', 'apos' => "'" ];
+                $name  = strtolower( $m[1] );
+                if ( isset( $named[ $name ] ) ) {
+                    return $named[ $name ];
+                }
+                $code = stripos( $m[1], '#x' ) === 0 ? hexdec( substr( $m[1], 2 ) ) : (int) substr( $m[1], 1 );
+                return in_array( $code, [ 60, 62 ], true ) || $code < 32 || $code > 0x10FFFF ? $m[0] : mb_chr( $code, 'UTF-8' );
             }, $value );
         } elseif ( is_array( $value ) ) {
             $data[ $key ] = qwoo_plain_names( $value );
