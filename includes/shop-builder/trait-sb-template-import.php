@@ -132,6 +132,8 @@ trait SB_Template_Import {
      *   'colors' => [ 'primary' => '#hex', 'secondary' => ..., 'accent' => ..., 'text' => ... ] (any subset),
      *   'logo'   => [ 'name' => file name, 'data' => base64 ] (optional),
      *   'icon'   => [ 'name' => file name, 'data' => base64 ] (optional, square PNG/JPG/WebP),
+     *   'template' => [ 'names' => [ the template shop's names ], 'keep' => bool ] (a store copy template:
+     *                 unless kept, its logo and shop name become the owner's),
      * ]
      * @return array [ 'done' => true, 'warnings' => [...] ] or [ 'error' => message ].
      */
@@ -221,6 +223,11 @@ trait SB_Template_Import {
 
         $clean = self::instance()->sanitize_options( [ 'branding' => $branding, 'pwa' => $pwa ] );
         $final = array_merge( $options, $clean );
+        // A store copy template: its logo and shop name become the owner's (unless the owner kept them).
+        $template = (array) ( $input['template'] ?? [] );
+        if ( $template && empty( $template['keep'] ) && $name !== '' ) {
+            self::template_brand_swap( $final, (array) ( $template['names'] ?? [] ), (int) ( $options['branding']['logo_id'] ?? 0 ), (int) ( $state['logo_id'] ?? 0 ), $name );
+        }
         // Templates made before the header was built from blocks have none. Only the owner's
         // own logo goes in it (the template's logo isn't theirs); without one, the store's name.
         self::ensure_default_header( $final, (int) ( $state['logo_id'] ?? 0 ), $name );
@@ -242,6 +249,176 @@ trait SB_Template_Import {
 
         update_option( self::$branding_option, [ 'done' => true, 'warnings' => $warnings ], false );
         return [ 'done' => true, 'warnings' => $warnings ];
+    }
+
+    /* ---------------- a store copy template's brand ---------------- */
+
+    /**
+     * Swaps a store copy template's logo and shop name for the owner's.
+     *  - Header and footer (and their templates): a block showing the template's
+     *    logo shows the owner's logo instead. Without one, it goes when a text
+     *    beside it already names the shop, else it becomes the store's name as a
+     *    linked text. With the owner's logo, a text beside it that only names
+     *    the shop goes (the logo says it).
+     *  - Every Store builder text naming the template's shop names the store.
+     */
+    private static function template_brand_swap( array &$options, array $names, $old_logo, $new_logo, $name ) {
+        $names = array_values( array_unique( array_filter( array_map( static fn( $n ) => trim( (string) $n ), $names ), static fn( $n ) => $n !== '' && mb_strlen( $n ) <= 60 ) ) );
+        // Longest first: "Lumi Jewelry" before "Lumi".
+        usort( $names, static fn( $a, $b ) => mb_strlen( $b ) - mb_strlen( $a ) );
+
+        if ( $old_logo > 0 ) {
+            foreach ( [ 'header', 'footer' ] as $area ) {
+                if ( ! empty( $options[ $area ]['sections'] ) ) {
+                    $options[ $area ]['sections'] = self::brand_swap_blocks( (array) $options[ $area ]['sections'], $names, $old_logo, $new_logo, $name );
+                }
+                foreach ( (array) ( $options[ $area ]['layouts'] ?? [] ) as $i => $layout ) {
+                    if ( ! empty( $layout['sections'] ) ) {
+                        $options[ $area ]['layouts'][ $i ]['sections'] = self::brand_swap_blocks( (array) $layout['sections'], $names, $old_logo, $new_logo, $name );
+                    }
+                }
+            }
+            if ( (int) ( $options['branding']['logo_id'] ?? 0 ) === $old_logo ) {
+                $options['branding']['logo_id'] = $new_logo;
+            }
+        }
+
+        if ( $names ) {
+            $options = self::brand_swap_texts( $options, $names, $name );
+            $seo     = get_option( Qwoo_Seo::OPTION, [] );
+            if ( is_array( $seo ) && $seo ) {
+                update_option( Qwoo_Seo::OPTION, self::brand_swap_texts( $seo, $names, $name ) );
+            }
+        }
+    }
+
+    /** A list of blocks (or sections) with the template's logo swapped, at any depth. */
+    private static function brand_swap_blocks( array $blocks, array $names, $old_logo, $new_logo, $name ) {
+        $is_logo = static function ( $b ) use ( $old_logo ) {
+            $type = (string) ( $b['type'] ?? '' );
+            $data = (array) ( $b['data'] ?? [] );
+            if ( $type === 'icon' ) return ( $data['icon'] ?? '' ) === 'custom' && (int) ( $data['custom_icon'] ?? 0 ) === $old_logo;
+            if ( $type === 'image_block' ) {
+                foreach ( (array) ( $data['images'] ?? [] ) as $img ) {
+                    if ( (int) ( $img['image'] ?? 0 ) === $old_logo ) return true;
+                }
+            }
+            return false;
+        };
+        $is_name = static function ( $b ) use ( $names ) {
+            if ( ( $b['type'] ?? '' ) !== 'text_block' ) return false;
+            $text = trim( html_entity_decode( wp_strip_all_tags( (string) ( $b['data']['text'] ?? '' ) ), ENT_QUOTES ) );
+            foreach ( $names as $n ) {
+                if ( mb_strtolower( $text ) === mb_strtolower( $n ) ) return true;
+            }
+            return false;
+        };
+
+        $has_logo = false;
+        $has_name = false;
+        foreach ( $blocks as $b ) {
+            if ( ! is_array( $b ) ) continue;
+            $has_logo = $has_logo || $is_logo( $b );
+            $has_name = $has_name || $is_name( $b );
+        }
+
+        $out = [];
+        foreach ( $blocks as $b ) {
+            if ( ! is_array( $b ) ) continue;
+            if ( isset( $b['blocks'] ) && is_array( $b['blocks'] ) ) {
+                $b['blocks'] = self::brand_swap_blocks( $b['blocks'], $names, $old_logo, $new_logo, $name );
+            }
+            if ( $has_logo && $new_logo > 0 && $is_name( $b ) ) {
+                continue;
+            }
+            if ( $is_logo( $b ) ) {
+                if ( $new_logo <= 0 && $has_name ) continue;
+                $b = self::brand_logo_block( $b, $old_logo, $new_logo, $name );
+            }
+            $out[] = $b;
+        }
+        return $out;
+    }
+
+    /** The block that shows the owner's logo (or name) where the template's logo was. */
+    private static function brand_logo_block( array $b, $old_logo, $new_logo, $name ) {
+        $data = (array) ( $b['data'] ?? [] );
+        $link = (string) ( $data['link_url'] ?? '' );
+        foreach ( (array) ( $data['images'] ?? [] ) as $img ) {
+            if ( (int) ( $img['image'] ?? 0 ) === $old_logo ) $link = (string) ( $img['link_url'] ?? $link );
+        }
+        $link = $link !== '' ? $link : '/';
+        $svg  = $new_logo > 0 && get_post_mime_type( $new_logo ) === 'image/svg+xml';
+
+        if ( $new_logo > 0 && ( $b['type'] ?? '' ) === 'image_block' ) {
+            foreach ( (array) ( $data['images'] ?? [] ) as $i => $img ) {
+                if ( (int) ( $img['image'] ?? 0 ) === $old_logo ) $data['images'][ $i ] = array_merge( $img, [ 'image' => $new_logo, 'alt' => $name ] );
+                if ( (int) ( $img['solid_image'] ?? 0 ) === $old_logo ) $data['images'][ $i ]['solid_image'] = 0;
+            }
+            $b['data'] = $data;
+            return $b;
+        }
+        if ( $new_logo > 0 && $svg ) {
+            // An icon block takes SVGs only; the owner's logo keeps its own colours.
+            $b['data'] = array_merge( $data, [ 'custom_icon' => $new_logo, 'recolor' => false ] );
+            return $b;
+        }
+
+        $new = $new_logo > 0
+            ? [ 'type' => 'image_block', 'data' => [
+                'images'       => [ [ 'image' => $new_logo, 'alt' => $name, 'link_url' => $link ] ],
+                'layout'       => [ 'desktop' => 'row', 'tablet' => '', 'mobile' => '' ],
+                'image_height' => self::brand_logo_height( $data ),
+                'object_fit'   => 'contain',
+                'alignment'    => $data['alignment'] ?? [ 'desktop' => 'default', 'tablet' => '', 'mobile' => '' ],
+            ] ]
+            : [ 'type' => 'text_block', 'data' => [
+                'text'      => '<p><a href="' . esc_url( $link ) . '"><strong>' . esc_html( $name ) . '</strong></a></p>',
+                'font'      => 'headings',
+                'font_size' => [ 'desktop' => '24px', 'tablet' => '', 'mobile' => '20px' ],
+                'alignment' => $data['alignment'] ?? [ 'desktop' => 'default', 'tablet' => '', 'mobile' => '' ],
+            ] ];
+        $new += [ 'id' => self::new_id( 'blk' ), 'label' => '', 'enabled' => true, 'style' => (array) ( $b['style'] ?? [] ) ];
+        $clean = self::instance()->sanitize_blocks( [ $new ] );
+        return $clean ? $clean[0] : $b;
+    }
+
+    /** The height the template's logo had, per screen size (40px when it can't tell). */
+    private static function brand_logo_height( array $data ) {
+        $out = [ 'desktop' => '40px', 'tablet' => '', 'mobile' => '' ];
+        foreach ( [ 'icon_height', 'size', 'image_height' ] as $key ) {
+            $v = $data[ $key ] ?? null;
+            if ( is_array( $v ) && ! empty( $v['desktop'] ) ) {
+                return array_merge( $out, array_intersect_key( $v, $out ) );
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Every text in $value with the template's shop names replaced by the
+     * store's name. Addresses, ids, colours and code are left alone. A Hebrew
+     * name keeps its one-letter prefixes (במרווה → ב + the store's name).
+     */
+    private static function brand_swap_texts( $value, array $names, $name, $key = '' ) {
+        if ( is_array( $value ) ) {
+            foreach ( $value as $k => $v ) {
+                $value[ $k ] = self::brand_swap_texts( $v, $names, $name, is_string( $k ) ? $k : $key );
+            }
+            return $value;
+        }
+        if ( ! is_string( $value ) || $value === '' ) return $value;
+        if ( preg_match( '/(^|_)(id|ids|url|link|href|slug|path|svg|code|icon|color|bg|font|class|type|key|src)$/', (string) $key ) ) return $value;
+        if ( preg_match( '#^(https?:|/|global:|\#|pg_|sec_|blk_|lay_|lt_|pp_|menu_|mi_)#i', $value ) ) return $value;
+
+        $html = strpos( $value, '<' ) !== false || strpos( $value, '&' ) !== false;
+        foreach ( $names as $n ) {
+            $pattern = '/(?<![\p{L}\p{N}])(' . ( preg_match( '/\p{Hebrew}/u', $n ) ? '[בהוכלמש]?' : '' ) . ')' . preg_quote( $n, '/' ) . '(?![\p{L}\p{N}])/u';
+            $to      = $html ? esc_html( $name ) : $name;
+            $swapped = preg_replace_callback( $pattern, static fn( $m ) => $m[1] . $to, $value );
+            if ( is_string( $swapped ) ) $value = $swapped;
+        }
+        return $value;
     }
 
     /* ---------------- images in the template ---------------- */

@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   package_status                  { export, import, run }
  *   package_export_start { parts }  package_export_step  package_chunk { index }  package_export_discard
  *   package_upload { index, total, size, data }   package_inspect
- *   package_import_start { parts, mode: add | replace }   package_import_cancel   package_import_discard
+ *   package_import_start { parts, mode: add | replace, template }   package_import_cancel   package_import_discard
  */
 trait Qwoo_Platform_Package {
 
@@ -130,6 +130,8 @@ trait Qwoo_Platform_Package {
             'status'       => 'running',
             'what'         => $what,
             'package_mode' => $mode,
+            // A store copy template the platform brings in while setting up a new store.
+            'package_template' => ! empty( $params['template'] ),
             'phase'        => 0,
             'cursor'       => 0,
             'counts'       => [],
@@ -237,6 +239,10 @@ trait Qwoo_Platform_Package {
             $seo['home_description'] = mb_substr( sanitize_text_field( (string) ( $q['seo']['home_description'] ?? '' ) ), 0, Qwoo_Seo::MAX_DESCRIPTION );
             $seo['image_id']         = ! empty( $q['seo']['image'] ) ? self::mig_image( $q['seo']['image'] ) : 0;
             update_option( Qwoo_Seo::OPTION, $seo );
+        }
+        // A template at setup: the store keeps the language its owner chose.
+        if ( ! empty( self::$mig['package_template'] ) ) {
+            return;
         }
         $main = (string) ( $q['language'] ?? '' );
         if ( isset( Qwoo_Store_Language::LANGS[ $main ] ) && $main !== Qwoo_Store_Language::get() ) {
