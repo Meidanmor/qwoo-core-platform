@@ -17,6 +17,10 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * The storefront reads it per product: Store API `extensions.qwoo.zero_price`
  * { action, button, link, url } (null for priced products), and the price
  * HTML carries the own text.
+ *
+ * Default (never saved): replace, to the product's page, so a 0 price never shows Add to
+ * cart by accident (user, 2026-10-30). A product on sale for 0 whose regular price is above 0
+ * is a free promotion, not a price-0 product: it's always sold as usual.
  */
 class Qwoo_Zero_Price {
 
@@ -45,7 +49,7 @@ class Qwoo_Zero_Price {
         $link = in_array( $v['link'] ?? '', self::LINKS, true ) ? $v['link'] : 'product';
         $url  = self::clean_url( (string) ( $v['url'] ?? '' ) );
         return [
-            'mode'  => in_array( $v['mode'] ?? '', self::MODES, true ) ? $v['mode'] : 'buy',
+            'mode'  => in_array( $v['mode'] ?? '', self::MODES, true ) ? $v['mode'] : 'replace',
             'link'  => $link === 'url' && $url === '' ? 'product' : $link,
             'url'   => $url,
             'texts' => $texts,
@@ -90,16 +94,19 @@ class Qwoo_Zero_Price {
         return true;
     }
 
-    /** No price, or 0 (a product with options: every option). */
+    /** No price, or 0 (a product with options: every option), unless it's on sale from a real price. */
     public static function is_zero( $product ): bool {
         if ( ! $product instanceof WC_Product ) return false;
         if ( $product->is_type( 'variable' ) ) {
-            $prices = $product->get_variation_prices( true );
-            $list   = array_map( 'floatval', array_values( $prices['price'] ?? [] ) );
-            return ! $list || max( $list ) <= 0;
+            $prices  = $product->get_variation_prices( true );
+            $list    = array_map( 'floatval', array_values( $prices['price'] ?? [] ) );
+            $regular = array_map( 'floatval', array_values( $prices['regular_price'] ?? [] ) );
+            return ! $list || ( max( $list ) <= 0 && ( ! $regular || max( $regular ) <= 0 ) );
         }
         if ( $product->is_type( 'grouped' ) || $product->is_type( 'external' ) ) return false;
-        return (float) $product->get_price() <= 0;
+        if ( (float) $product->get_price() > 0 ) return false;
+        // On sale for 0 from a real price: a free promotion.
+        return ! ( $product->is_on_sale() && (float) $product->get_regular_price() > 0 );
     }
 
     /** The text of this language (the page's, else the store's). */

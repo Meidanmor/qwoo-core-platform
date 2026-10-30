@@ -92,6 +92,9 @@ abstract class Shop_Builder_Constants {
      */
     const ALIGN_OPTIONS = [ 'default' => 'Default', 'left' => 'Left', 'center' => 'Center', 'right' => 'Right' ];
 
+    // Shown under cart buttons' text: what products with no price get is a store setting, not the block's.
+    const ZERO_PRICE_LINK = [ 'href' => '#/settings/general', 'label' => 'Products with no price: choose what they show instead (Settings → General)' ];
+
     const FLEX_DIRECTION_OPTIONS = [
             'column'         => 'Vertical (stacked)',
             'row'            => 'Horizontal (side by side)',
@@ -792,6 +795,7 @@ abstract class Shop_Builder_Constants {
                                             'alt'      => [ 'type' => 'text', 'label' => 'Alt Text', 'help' => 'Describe the image for screen readers and SEO.' ],
                                             'caption'  => [ 'type' => 'text', 'label' => 'Caption (optional)' ],
                                             'link_url' => [ 'type' => 'url', 'label' => 'Link URL (optional)', 'placeholder' => '/products or https://...' ],
+                                            'aria_label' => [ 'type' => 'text', 'label' => 'Screen Reader Label (optional)', 'placeholder' => 'e.g. Shop necklaces', 'help' => 'What screen readers say for this link. Empty: its own text.' ],
                                             'new_tab'  => [ 'type' => 'toggle', 'label' => 'Open link in a new tab' ],
                                             'hover_image' => [ 'type' => 'image', 'label' => 'Second image (optional)',
                                                     'help' => 'Shown on hover when the Hover Effect is "Show the second image".' ],
@@ -852,6 +856,7 @@ abstract class Shop_Builder_Constants {
                                     'hide_if' => [ 'product_current' => true ],
                                     'help' => 'A product with options (sizes, colours) opens its page instead.' ],
                             'url'       => [ 'type' => 'url', 'label' => 'Link', 'tab' => 'content', 'placeholder' => '/products, #section-id or https://...', 'show_if' => [ 'click_action' => 'link' ] ],
+                            'aria_label' => [ 'type' => 'text', 'label' => 'Screen Reader Label', 'tab' => 'advanced', 'group' => 'Accessibility', 'placeholder' => 'e.g. Shop necklaces', 'help' => 'What screen readers say for this link or button. Empty: its own text. In a Loop Template, {name} becomes the item\'s name.' ],
                             'new_tab'   => [ 'type' => 'toggle', 'label' => 'Open in a new tab', 'tab' => 'content', 'show_if' => [ 'click_action' => 'link' ] ],
                             'alignment' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS + [ 'stretch' => 'Full width' ], 'default' => 'default' ],
@@ -1031,21 +1036,25 @@ abstract class Shop_Builder_Constants {
             'lp_cart' => [
                     'label' => 'Add to Cart Button', 'category' => 'dynamic', 'pages' => [ 'loop_product' ], 'icon' => 'cart',
                     'fields' => [
-                            'text' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => 'Add to cart' ],
+                            'text' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => 'Add to cart', 'settings_link' => self::ZERO_PRICE_LINK ],
                             'action' => [ 'type' => 'select', 'label' => 'When Clicked', 'tab' => 'content', 'default' => 'add',
                                     'options' => [ 'add' => 'Add to the cart', 'buy_now' => 'Add and go to checkout ("Buy now")' ] ],
                             'options_text' => [ 'type' => 'text', 'label' => 'Text for products with options', 'tab' => 'content', 'default' => 'Choose options',
                                     'help' => 'Products with sizes or colours open their page instead.' ],
+                            'aria_label' => [ 'type' => 'text', 'label' => 'Screen Reader Label', 'tab' => 'advanced', 'group' => 'Accessibility', 'placeholder' => 'e.g. Shop necklaces', 'help' => 'What screen readers say for this link or button. Empty: its own text. In a Loop Template, {name} becomes the item\'s name.' ],
                             'button_style' => [ 'type' => 'select', 'label' => 'Style', 'tab' => 'style', 'group' => 'Button', 'default' => 'primary',
                                     'options' => [ 'primary' => 'Filled (main colour)', 'secondary' => 'Filled (second colour)', 'outline' => 'Outline', 'link' => 'Text link' ] ],
                             'icon' => [ 'type' => 'select', 'label' => 'Icon', 'tab' => 'content', 'default' => 'none',
                                     'options' => [ 'none' => 'No icon', 'add' => 'Plus', 'bag' => 'Bag', 'cart' => 'Cart' ] ],
                             'icon_only' => [ 'type' => 'toggle', 'label' => 'Icon only (round button)', 'tab' => 'content', 'hide_if' => [ 'icon' => 'none' ],
                                     'help' => 'The text is kept for screen readers.' ],
+                            'icon_position' => [ 'type' => 'select', 'label' => 'Icon Position', 'tab' => 'content', 'default' => 'start', 'hide_if' => [ 'icon' => 'none' ],
+                                    'options' => [ 'start' => 'Before the text', 'end' => 'After the text' ] ],
                             'full_width' => [ 'type' => 'toggle', 'label' => 'Full width', 'tab' => 'style', 'group' => 'Button' ],
                             'radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Button', 'placeholder' => 'e.g. 4px' ],
                             'round_size' => [ 'type' => 'length', 'label' => 'Round Button Size', 'tab' => 'style', 'group' => 'Button', 'placeholder' => '44px', 'show_if' => [ 'icon_only' => true ] ],
                             'icon_size' => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'group' => 'Button', 'placeholder' => '20px', 'hide_if' => [ 'icon' => 'none' ] ],
+                            'icon_gap' => [ 'type' => 'length', 'label' => 'Space Between Icon and Text', 'tab' => 'style', 'group' => 'Button', 'responsive' => true, 'placeholder' => '8px', 'hide_if' => [ 'icon' => 'none' ] ],
                             'btn_bg' => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'group' => 'Button', 'help' => 'Empty: the style\'s colour.' ],
                             'btn_bg2' => [ 'type' => 'color', 'label' => 'Second Button Color', 'tab' => 'style', 'group' => 'Button',
                                     'help' => 'Set it for a gradient from the first colour to this one.' ],
@@ -1391,7 +1400,13 @@ abstract class Shop_Builder_Constants {
                             'choice_color'        => [ 'type' => 'color', 'label' => 'Chosen Option Color', 'tab' => 'style', 'default' => '', 'hide_if' => [ 'choice_style' => 'select' ] ],
                             'choice_radius'       => [ 'type' => 'length', 'label' => 'Option Corner Radius', 'tab' => 'style', 'placeholder' => '12px', 'hide_if' => [ 'choice_style' => 'select' ] ],
                             'show_quantity'       => [ 'type' => 'toggle', 'label' => 'Show the quantity', 'tab' => 'content', 'default' => true ],
-                            'button_label'        => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Add to Cart' ],
+                            'button_label'        => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Add to Cart', 'settings_link' => self::ZERO_PRICE_LINK ],
+                            'icon'                => [ 'type' => 'select', 'label' => 'Icon', 'tab' => 'content', 'default' => 'none',
+                                    'options' => [ 'none' => 'No icon', 'add' => 'Plus', 'bag' => 'Bag', 'cart' => 'Cart' ] ],
+                            'icon_position'       => [ 'type' => 'select', 'label' => 'Icon Position', 'tab' => 'content', 'default' => 'start', 'hide_if' => [ 'icon' => 'none' ],
+                                    'options' => [ 'start' => 'Before the text', 'end' => 'After the text' ] ],
+                            'icon_size'           => [ 'type' => 'length', 'label' => 'Icon Size', 'tab' => 'style', 'placeholder' => '20px', 'hide_if' => [ 'icon' => 'none' ] ],
+                            'icon_gap'            => [ 'type' => 'length', 'label' => 'Space Between Icon and Text', 'tab' => 'style', 'responsive' => true, 'placeholder' => '12px', 'hide_if' => [ 'icon' => 'none' ] ],
                             'show_quick_checkout' => [ 'type' => 'toggle', 'label' => 'Show a "Quick Checkout" button', 'tab' => 'content', 'default' => true ],
                             'quick_label'         => [ 'type' => 'text', 'label' => 'Quick Checkout Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Quick Checkout',
                                     'show_if' => [ 'show_quick_checkout' => true ] ],
@@ -2114,6 +2129,7 @@ abstract class Shop_Builder_Constants {
                                             'custom_icon' => [ 'type' => 'image', 'label' => 'Custom Icon', 'show_if' => [ 'icon' => 'custom' ] ],
                                             'text'        => [ 'type' => 'text', 'label' => 'Text (optional)' ],
                                             'link_url'    => [ 'type' => 'url', 'label' => 'Link (optional)', 'placeholder' => '/shipping or https://…' ],
+                                            'aria_label' => [ 'type' => 'text', 'label' => 'Screen Reader Label (optional)', 'placeholder' => 'e.g. Shop necklaces', 'help' => 'What screen readers say for this link. Empty: its own text.' ],
                                             'label'       => [ 'type' => 'text', 'label' => 'Name for screen readers',
                                                     'help' => 'For an icon without text, e.g. "Instagram".' ],
                                     ],
@@ -2143,6 +2159,7 @@ abstract class Shop_Builder_Constants {
                                     'fields' => [
                                             'text'     => [ 'type' => 'text', 'label' => 'Text' ],
                                             'link_url' => [ 'type' => 'url', 'label' => 'Link (optional)', 'placeholder' => '/products or https://…' ],
+                                            'aria_label' => [ 'type' => 'text', 'label' => 'Screen Reader Label (optional)', 'placeholder' => 'e.g. Shop necklaces', 'help' => 'What screen readers say for this link. Empty: its own text.' ],
                                     ],
                             ],
                             'direction' => [ 'type' => 'select', 'label' => 'Movement', 'tab' => 'content', 'default' => 'left',
@@ -2338,6 +2355,7 @@ abstract class Shop_Builder_Constants {
                             'show_view_all' => [ 'type' => 'toggle', 'label' => 'Show a "View all" button', 'tab' => 'content' ],
                             'view_all_text' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => 'View all', 'show_if' => [ 'show_view_all' => true ] ],
                             'view_all_url'  => [ 'type' => 'url', 'label' => 'Button Link', 'tab' => 'content', 'default' => '/products', 'show_if' => [ 'show_view_all' => true ] ],
+                            'aria_label' => [ 'type' => 'text', 'label' => 'Screen Reader Label', 'tab' => 'advanced', 'group' => 'Accessibility', 'placeholder' => 'e.g. Shop necklaces', 'help' => 'What screen readers say for this link or button. Empty: its own text. In a Loop Template, {name} becomes the item\'s name.' ],
 
                             'gap' => [ 'type' => 'length', 'label' => 'Gap Between Products', 'tab' => 'style', 'group' => 'Layout', 'responsive' => true, 'placeholder' => '16px' ],
                     ],
@@ -2361,6 +2379,7 @@ abstract class Shop_Builder_Constants {
                                             'text'            => [ 'type' => 'textarea', 'label' => 'Text' ],
                                             'button_text'     => [ 'type' => 'text', 'label' => 'Button Text' ],
                                             'button_url'      => [ 'type' => 'url', 'label' => 'Button Link', 'placeholder' => '/products' ],
+                                            'aria_label' => [ 'type' => 'text', 'label' => 'Screen Reader Label (optional)', 'placeholder' => 'e.g. Shop necklaces', 'help' => 'What screen readers say for this link. Empty: its own text.' ],
                                             'content_align'   => [ 'type' => 'select', 'label' => 'Text Position', 'default' => 'center',
                                                     'options' => [ 'left' => 'Left', 'center' => 'Center', 'right' => 'Right' ] ],
                                             'text_color'      => [ 'type' => 'color', 'label' => 'Text Color', 'default' => '#ffffff' ],
@@ -2377,6 +2396,7 @@ abstract class Shop_Builder_Constants {
                                             'image'    => [ 'type' => 'image', 'label' => 'Image' ],
                                             'alt'      => [ 'type' => 'text', 'label' => 'Alt Text / Brand Name' ],
                                             'link_url' => [ 'type' => 'url', 'label' => 'Link (optional)' ],
+                                            'aria_label' => [ 'type' => 'text', 'label' => 'Screen Reader Label (optional)', 'placeholder' => 'e.g. Shop necklaces', 'help' => 'What screen readers say for this link. Empty: its own text.' ],
                                             'new_tab'  => [ 'type' => 'toggle', 'label' => 'Open link in a new tab' ],
                                     ],
                             ],
