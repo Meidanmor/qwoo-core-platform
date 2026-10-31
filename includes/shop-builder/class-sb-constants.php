@@ -699,7 +699,7 @@ abstract class Shop_Builder_Constants {
     const CHECKOUT_CARD_FIELDS = [
         'show_title' => [ 'type' => 'toggle', 'label' => 'Show the title', 'tab' => 'content', 'default' => true ],
         'card'       => [ 'type' => 'toggle', 'label' => 'In a card', 'tab' => 'style', 'default' => true,
-                'help' => 'Off: no frame or padding of its own, so the Style tab\'s box does it.' ],
+                'help' => 'On: a thin border, padding and rounded corners, which the Style tab\'s Box, Border and Margin change. Off: none of them.' ],
         'ts:title'   => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
     ];
     /** The look of the checkout's input fields (contact, addresses, coupon). */
