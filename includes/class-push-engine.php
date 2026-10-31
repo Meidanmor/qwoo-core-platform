@@ -534,6 +534,8 @@ class Qwoo_Push_Engine {
 
     /** Sends what's due, for up to $budget seconds. */
     public static function tick( int $budget = 20 ) {
+        // A suspended store sends nothing to shoppers (what's due waits until it's lifted).
+        if ( class_exists( 'Qwoo_Store_Suspension' ) && Qwoo_Store_Suspension::suspended() ) return;
         if ( ! self::lock() ) return;
         $start = microtime( true );
         try {

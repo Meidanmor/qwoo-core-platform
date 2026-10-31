@@ -117,6 +117,7 @@ require_once QWOO_PATH . 'includes/class-blog-authors.php';
 require_once QWOO_PATH . 'includes/class-checkout-extras.php';
 require_once QWOO_PATH . 'includes/class-account-signup.php';
 require_once QWOO_PATH . 'includes/class-store-visibility.php';
+require_once QWOO_PATH . 'includes/class-store-suspension.php';
 require_once QWOO_PATH . 'includes/class-custom-code.php';
 require_once QWOO_PATH . 'includes/class-account-deletion.php';
 require_once QWOO_PATH . 'includes/class-platform-dashboard.php';

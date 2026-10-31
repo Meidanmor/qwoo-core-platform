@@ -821,9 +821,10 @@ class Qwoo_Seo {
         return preg_replace( '/^[\s|–-]+|[\s|–-]+$/u', '', strtr( $pattern, [ '{title}' => $title, '{store}' => self::store_name() ] ) );
     }
 
-    /** False when WordPress's "Discourage search engines" (Settings → Reading) is on (a private demo store), or the store is hidden. */
+    /** False when WordPress's "Discourage search engines" (Settings → Reading) is on (a private demo store), or the store is hidden or suspended. */
     public static function store_indexable(): bool {
-        return (string) get_option( 'blog_public', '1' ) !== '0' && ! Qwoo_Store_Visibility::hidden();
+        return (string) get_option( 'blog_public', '1' ) !== '0' && ! Qwoo_Store_Visibility::hidden()
+            && ! ( class_exists( 'Qwoo_Store_Suspension' ) && Qwoo_Store_Suspension::suspended() );
     }
 
     private static function robots( bool $index ): string {

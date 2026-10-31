@@ -113,6 +113,8 @@ class Qwoo_Site_Content {
             : [ 'version' => null ];
         $body['mode'] = self::enabled() ? 'local' : 'github';
         $body        += Qwoo_Store_Visibility::site_fields();
+        // Suspended by the platform: the storefront shows "This store is unavailable" to everyone.
+        if ( class_exists( 'Qwoo_Store_Suspension' ) ) $body = Qwoo_Store_Suspension::site_fields() + $body;
         // Tracking & custom code: only a hash of its stamp (the settings come from qwoo/v1/site/code).
         $body        += Qwoo_Custom_Code::site_fields();
         // An import is running: the storefront shows its pages under an "updating" overlay.

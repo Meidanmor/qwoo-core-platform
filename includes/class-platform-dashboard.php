@@ -114,6 +114,7 @@ class Qwoo_Platform_Dashboard {
         'plan_set'        => 'action_plan_set',
         'visibility_get'  => 'action_visibility_get',
         'visibility_save' => 'action_visibility_save',
+        'suspension_set'  => 'action_suspension_set',
         'code_get'        => 'action_code_get',
         'code_save'       => 'action_code_save',
         'push_get'        => 'action_push_get',
@@ -1877,6 +1878,12 @@ class Qwoo_Platform_Dashboard {
             Qwoo_Store_Visibility::new_key();
         }
         return Qwoo_Store_Visibility::dashboard_state();
+    }
+
+    /** { suspended: bool }: only the platform's wp-admin sends it (Qwoo_Store_Suspension). */
+    private static function action_suspension_set( array $params ) {
+        Qwoo_Store_Suspension::set( ! empty( $params['suspended'] ) );
+        return [ 'suspended' => Qwoo_Store_Suspension::suspended(), 'hidden' => Qwoo_Store_Visibility::hidden() ];
     }
 
     /** Tracking & code (Qwoo_Custom_Code). */
