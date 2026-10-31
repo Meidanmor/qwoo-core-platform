@@ -117,6 +117,8 @@ class Qwoo_Platform_Dashboard {
         'suspension_set'  => 'action_suspension_set',
         'code_get'        => 'action_code_get',
         'code_save'       => 'action_code_save',
+        'social_get'      => 'action_social_get',
+        'social_save'     => 'action_social_save',
         'push_get'        => 'action_push_get',
         'push_save'       => 'action_push_save',
         'push_send'       => 'action_push_send',
@@ -1895,6 +1897,17 @@ class Qwoo_Platform_Dashboard {
     private static function action_code_save( array $params ) {
         $out = Qwoo_Custom_Code::save( $params );
         return isset( $out['error'] ) ? new WP_Error( 'qwoo_code', $out['error'], [ 'status' => 400 ] ) : $out;
+    }
+
+    /** Settings → Sign-in (Qwoo_Social_Login). */
+    private static function action_social_get( array $params ) {
+        return Qwoo_Social_Login::dashboard_state();
+    }
+
+    /** { google: { enabled?, client_id?, client_secret?, remove? } }. */
+    private static function action_social_save( array $params ) {
+        $out = Qwoo_Social_Login::save( $params );
+        return isset( $out['error'] ) ? new WP_Error( 'qwoo_social', $out['error'], [ 'status' => 400 ] ) : $out;
     }
 
     /* ---------------- push notifications (Qwoo_Push, Qwoo_Push_Engine) ---------------- */

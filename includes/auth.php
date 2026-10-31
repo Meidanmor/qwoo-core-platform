@@ -296,6 +296,10 @@ function qwoo_handle_google_login(WP_REST_Request $request): WP_REST_Response {
     if (!$token) {
         return new WP_REST_Response(['success' => false, 'message' => 'Missing token'], 400);
     }
+    // Settings → Sign-in switched off (or no keys): no Google sign-in at all.
+    if (!Qwoo_Social_Login::google_on()) {
+        return new WP_REST_Response(['success' => false, 'code' => 'qwoo_google_off', 'message' => "This store doesn't use Google sign-in."], 403);
+    }
 
     // Verify token with Google
     $response = wp_remote_get('https://oauth2.googleapis.com/tokeninfo?id_token=' . rawurlencode($token));
@@ -308,7 +312,8 @@ function qwoo_handle_google_login(WP_REST_Request $request): WP_REST_Response {
         return new WP_REST_Response(['success' => false, 'message' => 'Invalid Google token'], 401);
     }
 
-    if (!hash_equals(Qwoo_Technical_Settings::get_key( 'GOOGLE_CLIENT_ID' ), $data->aud ?? '')) {
+    if (!hash_equals(Qwoo_Social_Login::client_id(), (string) ($data->aud ?? ''))
+        || !in_array($data->iss ?? '', ['accounts.google.com', 'https://accounts.google.com'], true)) {
         return new WP_REST_Response(['success' => false, 'message' => 'Token not issued for this app'], 401);
     }
 
@@ -369,13 +374,17 @@ function qwoo_handle_google_login_redirect(WP_REST_Request $request): WP_REST_Re
     if (!$code) {
         return new WP_REST_Response(['success' => false, 'message' => 'Missing code'], 400);
     }
+    if (!Qwoo_Social_Login::google_on()) {
+        return new WP_REST_Response(['success' => false, 'code' => 'qwoo_google_off', 'message' => "This store doesn't use Google sign-in."], 403);
+    }
 
     $response = wp_remote_post('https://oauth2.googleapis.com/token', [
         'body' => [
             'code'          => $code,
-            'client_id'     => Qwoo_Technical_Settings::get_key( 'GOOGLE_CLIENT_ID' ),
-            'client_secret' => Qwoo_Technical_Settings::get_key( 'GOOGLE_CLIENT_SECRET' ),
-            'redirect_uri'  => Qwoo_Technical_Settings::get_key( 'GOOGLE_REDIRECT_URI' ),
+            'client_id'     => Qwoo_Social_Login::client_id(),
+            'client_secret' => Qwoo_Social_Login::client_secret(),
+            // The address the storefront sent the shopper from (Google checks it matches).
+            'redirect_uri'  => Qwoo_Social_Login::redirect_uri((string) $request->get_param('redirect_uri')),
             'grant_type'    => 'authorization_code',
         ],
         'headers' => ['Content-Type' => 'application/x-www-form-urlencoded'],

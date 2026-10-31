@@ -34,7 +34,8 @@ class Qwoo_Account_Signup {
 
     /** branding.json `account`. */
     public static function published() {
-        $google = class_exists( 'Qwoo_Technical_Settings' ) ? (string) Qwoo_Technical_Settings::get_key( 'GOOGLE_CLIENT_ID' ) : '';
+        // Settings → Sign-in: only while Google sign-in is switched on with both keys.
+        $google = class_exists( 'Qwoo_Social_Login' ) && Qwoo_Social_Login::google_on() ? Qwoo_Social_Login::client_id() : '';
         return [
             'signup' => self::allowed(),
             'google' => preg_match( '/^[\w.-]{10,200}$/', $google ) ? $google : '',

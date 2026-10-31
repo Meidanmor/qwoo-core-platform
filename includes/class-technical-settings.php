@@ -428,6 +428,26 @@ class Qwoo_Technical_Settings {
     }
 
     /**
+     * Saves one key encrypted ('' removes it). false when it can't be
+     * encrypted (no real AUTH_KEY). A wp-config.php constant still wins.
+     */
+    public static function set_key( $constant_name, $value ) {
+        $stored = get_option( self::$api_keys_option, [] );
+        $stored = is_array( $stored ) ? $stored : [];
+        if ( (string) $value === '' ) {
+            unset( $stored[ $constant_name ] );
+        } else {
+            $encrypted = self::encrypt( (string) $value );
+            if ( $encrypted === '' ) {
+                return false;
+            }
+            $stored[ $constant_name ] = $encrypted;
+        }
+        update_option( self::$api_keys_option, $stored );
+        return true;
+    }
+
+    /**
      * Builds the list of Origins allowed by Layer 2 (browser CORS —
      * see class docblock). Consumed only by send_cors_headers() above;
      * Layer 1's proxy-secret check does not use this list at all, since
