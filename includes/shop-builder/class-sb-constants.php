@@ -94,6 +94,7 @@ abstract class Shop_Builder_Constants {
 
     // Shown under cart buttons' text: what products with no price get is a store setting, not the block's.
     const ZERO_PRICE_LINK = [ 'href' => '#/settings/general', 'label' => 'Products with no price: choose what they show instead (Settings → General)' ];
+    const BACK_FORM_LINK  = [ 'href' => '#/notifications/settings', 'label' => 'Turn the form on or off (Notifications → Settings)' ];
 
     const FLEX_DIRECTION_OPTIONS = [
             'column'         => 'Vertical (stacked)',
@@ -1444,6 +1445,36 @@ abstract class Shop_Builder_Constants {
                             'quick_bg2'           => [ 'type' => 'color', 'label' => 'Second Quick Checkout Color', 'tab' => 'style', 'show_if' => [ 'show_quick_checkout' => true ], 'help' => 'Set it for a gradient.' ],
                             'gradient_angle'      => [ 'type' => 'number', 'label' => 'Gradient Angle (°)', 'tab' => 'style', 'min' => 0, 'max' => 360, 'default' => 90 ],
                             'ts:button'           => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'parts' => [ 'font', 'size', 'weight', 'spacing', 'case' ] ],
+                    ],
+            ],
+            // Sold-out products: "Notify me when it's back" (push, else email). Without this block on the
+            // page, Add To Cart shows the same form with its built-in look.
+            'product_back_in_stock' => [
+                    'label' => 'Back In Stock Form', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'bell',
+                    'fields' => [
+                            'title'        => [ 'type' => 'text', 'label' => 'Heading', 'tab' => 'content', 'default' => '', 'placeholder' => 'Sold out for now',
+                                    'help' => 'Shown only when the product is sold out.', 'settings_link' => self::BACK_FORM_LINK ],
+                            'text'         => [ 'type' => 'text', 'label' => 'Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'We\'ll let you know the moment it\'s back.' ],
+                            'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Notify me when it\'s back' ],
+                            'done_text'    => [ 'type' => 'text', 'label' => 'Text After Signing Up', 'tab' => 'content', 'default' => '', 'placeholder' => 'Done! We\'ll let you know when it\'s back.' ],
+                            'email_title'  => [ 'type' => 'text', 'label' => 'Email Option Heading', 'tab' => 'content', 'default' => '', 'placeholder' => 'Or get an email instead',
+                                    'help' => 'Shown only when notifications can\'t work on the shopper\'s device.' ],
+                            'email_button' => [ 'type' => 'text', 'label' => 'Email Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Email me' ],
+                            'align'        => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'responsive' => true, 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'full_width'   => [ 'type' => 'toggle', 'label' => 'Full-width button', 'tab' => 'style', 'default' => true ],
+                            'button_style' => [ 'type' => 'select', 'label' => 'Button Style', 'tab' => 'style', 'default' => 'outline',
+                                    'options' => [ 'filled' => 'Filled', 'outline' => 'Outline' ] ],
+                            'button_bg'    => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
+                            'button_text'  => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '', 'show_if' => [ 'button_style' => 'filled' ] ],
+                            'button_radius' => [ 'type' => 'length', 'label' => 'Button Corner Radius', 'tab' => 'style', 'placeholder' => 'e.g. 999px' ],
+                            'btn_padding'  => [ 'type' => 'sides', 'label' => 'Button Padding', 'tab' => 'style', 'responsive' => true ],
+                            'field_look'   => self::CHECKOUT_FIELD_LOOK['field_look'],
+                            'error_color'  => [ 'type' => 'color', 'label' => 'Message Color', 'tab' => 'style', 'default' => '',
+                                    'help' => 'For "notifications are blocked".' ],
+                            'gap'          => [ 'type' => 'length', 'label' => 'Space Between Parts', 'tab' => 'style', 'responsive' => true, 'placeholder' => '12px' ],
+                            'ts:title'     => [ 'type' => 'text_style', 'label' => 'Heading', 'default_font' => 'headings', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
+                            'ts:text'      => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'line_height', 'color' ] ],
+                            'ts:button'    => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'parts' => [ 'font', 'size', 'weight', 'spacing', 'case' ] ],
                     ],
             ],
             'product_sticky_cart' => [

@@ -350,7 +350,7 @@ function get_wishlist() {
 --------------------------------------------------------------*/
 
 /** Bump when the CREATE TABLE below changes; dbDelta() applies the diff. */
-const QWOO_PUSH_DB_VERSION = '2';
+const QWOO_PUSH_DB_VERSION = '3';
 
 /**
  * Creates the table on the first request after install/update.

@@ -259,5 +259,14 @@ class Qwoo_I18n {
         'My account'                                                                                => 'החשבון שלי',
         'Shop'                                                                                      => 'חנות',
         'Uncategorized'                                                                             => 'ללא קטגוריה',
+        // Back in stock emails (Qwoo_Back_In_Stock).
+        'Good news: {product} is back in stock at {store}. Get it before it\'s gone again.'         => 'חדשות טובות: {product} חזר למלאי ב{store}. כדאי להזמין לפני שייגמר שוב.',
+        'View {product}'                                                                            => 'לצפייה ב{product}',
+        'You asked us to tell you when it\'s back. This is the only email you\'ll get about it.'    => 'ביקשתם שנודיע לכם כשהמוצר יחזור. זה המייל היחיד שתקבלו על כך.',
+        '{product} is back in stock'                                                                => '{product} חזר למלאי',
+        'It\'s back'                                                                                => 'חזר למלאי',
+        'This store doesn\'t take these requests.'                                                  => 'החנות לא מקבלת בקשות כאלה.',
+        'Too many requests. Try again in a few minutes.'                                            => 'יותר מדי בקשות. נסו שוב בעוד כמה דקות.',
+        'Enter a valid email address.'                                                              => 'הזינו כתובת מייל תקינה.',
     ];
 }

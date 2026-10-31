@@ -94,6 +94,7 @@ class Qwoo_Push_Engine {
         UNIQUE KEY sub_product (sub_id, product_id),
         KEY product (product_id)
         ) $charset;" );
+        Qwoo_Back_In_Stock::install_table();
     }
 
     private static function now() {
@@ -546,6 +547,8 @@ class Qwoo_Push_Engine {
                 if ( ! $rows ) break;
                 self::send_rows( $rows );
             }
+            // "Notify me" by email (Qwoo_Back_In_Stock), with what's left of the time.
+            Qwoo_Back_In_Stock::send_due( $start + $budget );
             self::finish_sends();
             self::prune();
         } catch ( Throwable $e ) {
@@ -559,6 +562,8 @@ class Qwoo_Push_Engine {
         foreach ( Qwoo_Push::sends() as $s ) {
             if ( ( $s['status'] ?? '' ) === 'scheduled' && ( ! $next || (int) $s['send_at'] < $next ) ) $next = (int) $s['send_at'];
         }
+        // Emails still due (a long list): the next run goes on right away.
+        if ( Qwoo_Back_In_Stock::has_due() ) $next = time();
         if ( $next ) {
             set_transient( self::NEXT, $next );
             if ( $next <= time() ) self::spawn();

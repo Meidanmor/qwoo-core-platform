@@ -84,6 +84,7 @@ require_once QWOO_PATH . 'includes/woocommerce-headless.php';
 require_once QWOO_PATH . 'includes/push-notifications.php';
 require_once QWOO_PATH . 'includes/class-push.php';
 require_once QWOO_PATH . 'includes/class-push-engine.php';
+require_once QWOO_PATH . 'includes/class-back-in-stock.php';
 require_once QWOO_PATH . 'includes/admin-options.php';
 
 // ── Admin settings ──

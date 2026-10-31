@@ -8,6 +8,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   ask      { when: views | cart | seconds | never, views, seconds, texts: { lang: { title, text, yes, no } } }
  *   quiet    { on, from 'HH:MM', to 'HH:MM' } (store time; marketing waits until `to`)
  *   cap      marketing notifications a device gets a day at most (order updates and back in stock don't count)
+ *   back_form { on }  the "Notify me when it's back" form on sold-out products (push, or email: Qwoo_Back_In_Stock)
  *   automations [ automation ]
  *
  * An automation: { id, builtin, name, on, trigger { type, status, days }, wait (minutes),
@@ -146,6 +147,8 @@ class Qwoo_Push {
                 'to'   => self::clock( $quiet['to'] ?? '' ) ?: '08:00',
             ],
             'cap' => isset( $raw['cap'] ) ? max( 1, min( 10, (int) $raw['cap'] ) ) : 2,
+            // The "Notify me when it's back" form on sold-out product pages (on unless turned off).
+            'back_form' => [ 'on' => ! isset( $raw['back_form']['on'] ) || ! empty( $raw['back_form']['on'] ) ],
         ];
 
         $saved = [];
@@ -272,6 +275,9 @@ class Qwoo_Push {
         }
         if ( isset( $p['cap'] ) ) {
             $now['cap'] = max( 1, min( 10, (int) $p['cap'] ) );
+        }
+        if ( isset( $p['back_form'] ) && is_array( $p['back_form'] ) ) {
+            $now['back_form'] = [ 'on' => ! empty( $p['back_form']['on'] ) ];
         }
         if ( isset( $p['sender'] ) ) {
             $email = sanitize_email( (string) $p['sender'] );
@@ -581,7 +587,8 @@ class Qwoo_Push {
             }
         }
         return [
-            'settings' => [ 'ask' => $s['ask'], 'quiet' => $s['quiet'], 'cap' => $s['cap'], 'sender' => (string) ( is_array( $tech ) ? ( $tech['push_email'] ?? '' ) : '' ) ],
+            'settings' => [ 'ask' => $s['ask'], 'quiet' => $s['quiet'], 'cap' => $s['cap'], 'back_form' => $s['back_form'], 'sender' => (string) ( is_array( $tech ) ? ( $tech['push_email'] ?? '' ) : '' ) ],
+            'back_emails' => Qwoo_Back_In_Stock::waiting_count(),
             'automations' => $s['automations'],
             'sends' => $sends,
             'stats' => Qwoo_Push_Engine::overview(),
@@ -631,14 +638,19 @@ class Qwoo_Push {
         $lang = class_exists( 'Qwoo_Store_Language' ) ? ( Qwoo_Store_Language::request_lang() ?: self::main_lang() ) : 'en';
         $defaults = self::default_ask_texts();
         $texts = array_merge( $defaults[ $lang ] ?? $defaults['en'], (array) ( $s['ask']['texts'][ $lang ] ?? [] ) );
-        $notify = false;
+        $push = false;
         foreach ( $s['automations'] as $a ) {
-            if ( $a['builtin'] === 'back_in_stock' ) $notify = $a['on'];
+            if ( $a['builtin'] === 'back_in_stock' ) $push = $a['on'];
         }
+        $key = Qwoo_Push_Engine::keys_ready() ? (string) Qwoo_Technical_Settings::get_key( 'VAPID_API_PUBLIC_KEY' ) : '';
         return [
-            'key'       => Qwoo_Push_Engine::keys_ready() ? (string) Qwoo_Technical_Settings::get_key( 'VAPID_API_PUBLIC_KEY' ) : '',
+            'key'       => $key,
             'ask'       => [ 'when' => $s['ask']['when'], 'views' => $s['ask']['views'], 'seconds' => $s['ask']['seconds'], 'texts' => $texts ],
-            'notify_me' => $notify,
+            // Older storefronts: the push-only "Notify me" button.
+            'notify_me' => $push && $s['back_form']['on'],
+            // The form: shown at all, and whether it can offer push (else email only).
+            'back_form' => $s['back_form']['on'],
+            'back_push' => $push && $key !== '',
         ];
     }
 }
