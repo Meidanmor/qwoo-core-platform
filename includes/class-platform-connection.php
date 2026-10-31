@@ -197,6 +197,12 @@ class Qwoo_Platform_Connection {
         return self::$token = $token;
     }
 
+    /** POSTs to this store's platform API when connected (e.g. owner-alert); the answer, or null. */
+    public static function post( $action, array $body = [], $timeout = 20 ) {
+        $c = self::get();
+        return $c ? self::call( $c, $action, $body, $timeout ) : null;
+    }
+
     /** POSTs to this store's platform API; the decoded JSON answer, or null. */
     private static function call( array $c, $action, array $body = [], $timeout = 20 ) {
         $url = rtrim( $c['platform_url'], '/' ) . '/wp-json/qwoo-platform/v1/stores/' . (int) $c['store_id'] . '/' . $action;

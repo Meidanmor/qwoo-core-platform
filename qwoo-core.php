@@ -104,6 +104,7 @@ require_once QWOO_PATH . 'includes/class-product-extras.php';
 require_once QWOO_PATH . 'includes/class-zero-price.php';
 require_once QWOO_PATH . 'includes/trait-platform-customers.php';
 require_once QWOO_PATH . 'includes/trait-platform-reviews.php';
+require_once QWOO_PATH . 'includes/class-owner-alerts.php';
 require_once QWOO_PATH . 'includes/class-reviews.php';
 require_once QWOO_PATH . 'includes/trait-platform-blog.php';
 require_once QWOO_PATH . 'includes/class-migration.php';

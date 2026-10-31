@@ -286,6 +286,8 @@ class Qwoo_Reviews {
         if ( $title !== '' ) {
             add_comment_meta( $id, self::TITLE_META, $title, true );
         }
+        // The owner's phone (the dashboard app's alerts have their own switch).
+        Qwoo_Owner_Alerts::review( $product, $rating );
         if ( self::settings()['notify'] ) {
             $product_name = $product->get_name();
             self::after_response( static function () use ( $product_name, $rating, $title, $text, $name ) {

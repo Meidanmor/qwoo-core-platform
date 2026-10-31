@@ -404,6 +404,7 @@ trait Qwoo_Platform_Migration {
      */
     private static function mig_quiet() {
         add_filter( 'pre_wp_mail', '__return_false', 999 );
+        Qwoo_Owner_Alerts::mute();
         foreach ( WC()->mailer()->get_emails() as $email ) {
             add_filter( 'woocommerce_email_enabled_' . $email->id, '__return_false', 999 );
         }
