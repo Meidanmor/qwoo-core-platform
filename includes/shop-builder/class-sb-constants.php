@@ -702,6 +702,10 @@ abstract class Shop_Builder_Constants {
                 'help' => 'On: a thin border, padding and rounded corners, which the Style tab\'s Box, Border and Margin change. Off: none of them.' ],
         'ts:title'   => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
     ];
+    /** The cart page's Items and Totals: the same card, no title. */
+    const CART_CARD_FIELD = [
+        'card' => self::CHECKOUT_CARD_FIELDS['card'],
+    ];
     /** The look of the checkout's input fields (contact, addresses, coupon). */
     const CHECKOUT_FIELD_LOOK = [
         'field_look' => [ 'type' => 'select', 'label' => 'Fields', 'tab' => 'style', 'default' => 'filled',
@@ -1804,7 +1808,7 @@ abstract class Shop_Builder_Constants {
                             'empty_text' => [ 'type' => 'text', 'label' => 'Text when the cart is empty', 'tab' => 'content', 'default' => '', 'placeholder' => 'Your cart is empty.' ],
                             'link_text'  => [ 'type' => 'text', 'label' => 'Link to the shop', 'tab' => 'content', 'default' => '', 'placeholder' => 'Go to shop' ],
                             'border_color' => [ 'type' => 'color', 'label' => 'Frame Color', 'tab' => 'style', 'default' => '' ],
-                    ],
+                    ] + self::CART_CARD_FIELD,
             ],
             'cart_totals' => [
                     'label' => 'Cart Totals', 'category' => 'dynamic', 'pages' => [ 'cart' ], 'icon' => 'products',
@@ -1814,7 +1818,7 @@ abstract class Shop_Builder_Constants {
                             'button_label'  => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Checkout' ],
                             'button_bg'     => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
                             'button_text'   => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
-                    ],
+                    ] + self::CART_CARD_FIELD,
             ],
 
             'checkout_title' => [
