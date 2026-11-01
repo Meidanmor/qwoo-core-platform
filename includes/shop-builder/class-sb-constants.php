@@ -2016,6 +2016,8 @@ abstract class Shop_Builder_Constants {
                             + self::CHECKOUT_CARD_FIELDS + self::ACCOUNT_PART_FIELD + self::CHECKOUT_FIELD_LOOK + [
                             'show_delete' => [ 'type' => 'toggle', 'label' => 'Let customers delete their account', 'tab' => 'content', 'default' => true,
                                     'help' => 'They confirm it by email. Privacy laws usually require offering it.' ],
+                            'show_addresses' => [ 'type' => 'toggle', 'label' => 'Show saved addresses', 'tab' => 'content', 'default' => true,
+                                    'help' => 'Customers add, change and delete the addresses they pick from at checkout.' ],
                             'button_bg'   => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
                             'button_text' => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
                     ],

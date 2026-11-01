@@ -123,6 +123,7 @@ require_once QWOO_PATH . 'includes/class-store-visibility.php';
 require_once QWOO_PATH . 'includes/class-store-suspension.php';
 require_once QWOO_PATH . 'includes/class-custom-code.php';
 require_once QWOO_PATH . 'includes/class-account-deletion.php';
+require_once QWOO_PATH . 'includes/class-saved-addresses.php';
 require_once QWOO_PATH . 'includes/class-platform-dashboard.php';
 require_once QWOO_PATH . 'includes/class-platform-hardening.php';
 require_once QWOO_PATH . 'includes/class-shop-settings.php';

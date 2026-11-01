@@ -330,7 +330,6 @@ function qwoo_handle_google_login(WP_REST_Request $request): WP_REST_Response {
         $username   = username_exists($base_name)
             ? $base_name . wp_generate_password(4, false)
             : $base_name;
-        $first_name = ucfirst($base_name);
 
         $user_id = function_exists('wc_create_new_customer')
             ? wc_create_new_customer($email, $username, wp_generate_password())
@@ -340,18 +339,14 @@ function qwoo_handle_google_login(WP_REST_Request $request): WP_REST_Response {
             return new WP_REST_Response(['success' => false, 'message' => 'User creation failed'], 500);
         }
 
-        wp_update_user([
-            'ID'           => $user_id,
-            'first_name'   => $first_name,
-            'display_name' => $first_name,
-        ]);
-
         if (!function_exists('wc_create_new_customer')) {
             wp_new_user_notification($user_id, null, 'user');
         }
 
         $user = get_userdata($user_id);
     }
+
+    qwoo_google_fill_name($user, $data);
 
     // Log the user in via WP session cookie — same as regular login
     wp_set_current_user($user->ID);
@@ -364,6 +359,46 @@ function qwoo_handle_google_login(WP_REST_Request $request): WP_REST_Response {
         ],
         200
     );
+}
+
+/**
+ * The name from Google's answer (given_name / family_name, with the profile
+ * scope) goes into the account and WooCommerce's billing name, only where they
+ * are still empty: a name the customer typed is never replaced. No name from
+ * Google leaves it empty (My account then asks for it).
+ */
+function qwoo_google_fill_name(WP_User $user, $data): void {
+    $clean = static function ($v) {
+        return trim(mb_substr(sanitize_text_field((string) $v), 0, 60));
+    };
+    $first = $clean($data->given_name ?? '');
+    $last  = $clean($data->family_name ?? '');
+    if ($first === '' && $last === '' && !empty($data->name)) {
+        $parts = preg_split('/\s+/u', $clean($data->name), 2);
+        $first = $parts[0] ?? '';
+        $last  = $parts[1] ?? '';
+    }
+    if ($first === '' && $last === '') return;
+
+    // The old Google sign-in put the email's first part in as the name: that counts as empty.
+    $login_base = ucfirst(sanitize_user(current(explode('@', $user->user_email)), true));
+    $old_first  = trim((string) $user->first_name);
+    if ($old_first === $login_base) $old_first = '';
+
+    $updates = ['ID' => $user->ID];
+    if ($first !== '' && $old_first === '') $updates['first_name'] = $first;
+    if ($last !== '' && trim((string) $user->last_name) === '') $updates['last_name'] = $last;
+    if (count($updates) > 1) {
+        if (trim((string) $user->display_name) === '' || $user->display_name === $user->user_login || $user->display_name === $login_base) {
+            $updates['display_name'] = trim(($updates['first_name'] ?? $user->first_name) . ' ' . ($updates['last_name'] ?? $user->last_name));
+        }
+        wp_update_user($updates);
+    }
+    foreach (['billing_first_name' => $first, 'billing_last_name' => $last] as $key => $value) {
+        if ($value !== '' && trim((string) get_user_meta($user->ID, $key, true)) === '') {
+            update_user_meta($user->ID, $key, $value);
+        }
+    }
 }
 
 // ─── Google Login Redirect (OAuth code exchange) ──────────────────────────────
