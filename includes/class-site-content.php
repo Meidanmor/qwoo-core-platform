@@ -115,6 +115,8 @@ class Qwoo_Site_Content {
         $body        += Qwoo_Store_Visibility::site_fields();
         // Suspended by the platform: the storefront shows "This store is unavailable" to everyone.
         if ( class_exists( 'Qwoo_Store_Suspension' ) ) $body = Qwoo_Store_Suspension::site_fields() + $body;
+        // The Free plan: the storefront shows "Made with YallaFlow" (a plan change rewrites this file, no publish needed).
+        if ( class_exists( 'Qwoo_Platform_Dashboard' ) && Qwoo_Platform_Dashboard::is_free_plan() ) $body['free'] = true;
         // Tracking & custom code: only a hash of its stamp (the settings come from qwoo/v1/site/code).
         $body        += Qwoo_Custom_Code::site_fields();
         // An import is running: the storefront shows its pages under an "updating" overlay.

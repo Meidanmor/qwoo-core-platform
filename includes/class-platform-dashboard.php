@@ -112,6 +112,7 @@ class Qwoo_Platform_Dashboard {
         'languages_get'   => 'action_languages_get',
         'languages_save'  => 'action_languages_save',
         'plan_set'        => 'action_plan_set',
+        'activity'        => 'action_activity',
         'visibility_get'  => 'action_visibility_get',
         'visibility_save' => 'action_visibility_save',
         'suspension_set'  => 'action_suspension_set',
@@ -1954,6 +1955,23 @@ class Qwoo_Platform_Dashboard {
     public static function has_feature( $feature ) {
         $plan = get_option( 'qwoo_plan', [] );
         return is_array( $plan ) && in_array( $feature, (array) ( $plan['features'] ?? [] ), true );
+    }
+
+    /**
+     * The Free plan: "Made with YallaFlow" on the storefront, no push notifications to
+     * shoppers. Only when the platform said so (a store it never told keeps everything).
+     */
+    public static function is_free_plan(): bool {
+        $plan = get_option( 'qwoo_plan', [] );
+        return is_array( $plan ) && ( $plan['plan'] ?? '' ) === 'free';
+    }
+
+    /** { last_order }: the newest order's time (unix, 0 for none). The platform pauses Free stores nobody uses. */
+    private static function action_activity( array $params ) {
+        $ids = function_exists( 'wc_get_orders' ) ? wc_get_orders( [ 'limit' => 1, 'orderby' => 'date', 'order' => 'DESC', 'return' => 'ids', 'type' => 'shop_order' ] ) : [];
+        $order = $ids ? wc_get_order( (int) $ids[0] ) : null;
+        $date = $order ? $order->get_date_created() : null;
+        return [ 'last_order' => $date ? (int) $date->getTimestamp() : 0 ];
     }
 
     /** { section: general | store | checkout | taxes, values }. */

@@ -460,6 +460,7 @@ class Qwoo_Push {
      * dry: only how many devices it would reach. Returns [ 'error' ] or the send.
      */
     public static function create_send( array $p ) {
+        if ( ! Qwoo_Push_Engine::allowed() ) return [ 'error' => Qwoo_Push_Engine::LOCKED ];
         $langs = self::langs();
         $texts = self::clean_texts( $p['texts'] ?? [], $langs );
         if ( empty( $texts[ $langs[0] ]['title'] ) ) return [ 'error' => 'Write a title in the store\'s main language.' ];
@@ -587,6 +588,8 @@ class Qwoo_Push {
             }
         }
         return [
+            // The Free plan: the dashboard shows an upgrade card (the sold-out form's email part still works).
+            'locked' => ! Qwoo_Push_Engine::allowed(),
             'settings' => [ 'ask' => $s['ask'], 'quiet' => $s['quiet'], 'cap' => $s['cap'], 'back_form' => $s['back_form'], 'sender' => (string) ( is_array( $tech ) ? ( $tech['push_email'] ?? '' ) : '' ) ],
             'back_emails' => Qwoo_Back_In_Stock::waiting_count(),
             'automations' => $s['automations'],
@@ -642,8 +645,13 @@ class Qwoo_Push {
         foreach ( $s['automations'] as $a ) {
             if ( $a['builtin'] === 'back_in_stock' ) $push = $a['on'];
         }
-        $key = Qwoo_Push_Engine::keys_ready() ? (string) Qwoo_Technical_Settings::get_key( 'VAPID_API_PUBLIC_KEY' ) : '';
+        // The Free plan has no push to shoppers: no key, no asking, the sold-out form takes emails only.
+        $allowed = Qwoo_Push_Engine::allowed();
+        $key = $allowed && Qwoo_Push_Engine::keys_ready() ? (string) Qwoo_Technical_Settings::get_key( 'VAPID_API_PUBLIC_KEY' ) : '';
+        $push = $push && $allowed;
         return [
+            // false: the storefront doesn't fall back to the push key it was built with.
+            'push'      => $allowed,
             'key'       => $key,
             'ask'       => [ 'when' => $s['ask']['when'], 'views' => $s['ask']['views'], 'seconds' => $s['ask']['seconds'], 'texts' => $texts ],
             // Older storefronts: the push-only "Notify me" button.

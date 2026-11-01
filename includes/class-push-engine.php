@@ -177,6 +177,7 @@ class Qwoo_Push_Engine {
         $device = sanitize_text_field( (string) ( $p['device_id'] ?? '' ) );
         $product = absint( $p['product_id'] ?? 0 );
         if ( $device === '' || ! $product ) return new WP_REST_Response( [ 'success' => false ], 400 );
+        if ( ! self::allowed() ) return new WP_REST_Response( [ 'success' => false, 'message' => 'no_push' ], 403 );
         if ( ! qwoo_rate_limit_check( 'pwa_notify_me', 30, 5 * MINUTE_IN_SECONDS, $device ) ) {
             return new WP_REST_Response( [ 'success' => false ], 429 );
         }
@@ -337,6 +338,7 @@ class Qwoo_Push_Engine {
      * (null: every device the automation's audience takes, for sales).
      */
     public static function event( string $type, array $ctx, ?array $subs ) {
+        if ( ! self::allowed() ) return;
         $due = [];
         foreach ( Qwoo_Push::settings()['automations'] as $a ) {
             if ( ! $a['on'] || $a['trigger']['type'] !== $type ) continue;
@@ -877,6 +879,13 @@ class Qwoo_Push_Engine {
 
     /* ---------------- delivery ---------------- */
 
+    const LOCKED = 'Push notifications are on the Basic plan and up.';
+
+    /** Whether the store may send push notifications to shoppers (not on the Free plan). */
+    public static function allowed(): bool {
+        return ! ( class_exists( 'Qwoo_Platform_Dashboard' ) && Qwoo_Platform_Dashboard::is_free_plan() );
+    }
+
     public static function keys_ready(): bool {
         return class_exists( 'Qwoo_Technical_Settings' )
             && Qwoo_Technical_Settings::get_key( 'VAPID_API_PUBLIC_KEY' ) !== ''
@@ -890,6 +899,11 @@ class Qwoo_Push_Engine {
     public static function deliver( array $items ): array {
         $results = [];
         if ( ! $items ) return $results;
+        // Queued before the store went to the Free plan: not sent.
+        if ( ! self::allowed() ) {
+            foreach ( $items as $it ) $results[ $it['row'] ] = 'free plan';
+            return $results;
+        }
         $front = class_exists( 'Qwoo_Technical_Settings' ) ? Qwoo_Technical_Settings::get_primary_frontend_domain() : '';
         $web = [];
         foreach ( $items as $it ) {
@@ -993,6 +1007,7 @@ class Qwoo_Push_Engine {
      * $p: { automation } or { texts, link, image }. The example item is the newest product / order.
      */
     public static function send_test( array $p ) {
+        if ( ! self::allowed() ) return [ 'error' => self::LOCKED ];
         global $wpdb;
         $owners = (array) $wpdb->get_results( 'SELECT * FROM ' . self::subs_table() . ' WHERE owner = 1 ORDER BY id DESC LIMIT 5', ARRAY_A );
         if ( ! $owners ) return [ 'error' => 'Connect your phone first: open your test link on it and turn on notifications.' ];
