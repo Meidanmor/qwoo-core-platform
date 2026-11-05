@@ -575,13 +575,18 @@ class Qwoo_Platform_Dashboard {
                         $products[ $id ] = [ 'id' => $id, 'name' => $product ? $product->get_name() : $item->get_name(), 'units' => 0, 'sales' => 0.0 ];
                     }
                     $products[ $id ]['units'] += max( 0, (int) $item->get_quantity() );
-                    $products[ $id ]['sales'] += max( 0, (float) $item->get_total() - (float) $item->get_total_refunded() );
+                    // Refund totals belong to the parent order; WC_Order exposes
+                    // the per-line amount by item ID (line items have no
+                    // get_total_refunded() method of their own).
+                    $refunded = (float) $order->get_total_refunded_for_item( $item->get_id() );
+                    $products[ $id ]['sales'] += max( 0, (float) $item->get_total() - $refunded );
                 }
             } elseif ( isset( $daily[ $day ] ) ) {
                 // Include non-paid orders in the volume chart so the sales funnel is visible.
                 $daily[ $day ]['orders']++;
             }
         }
+        $single_order_buyers = count( array_filter( $buyers, static fn( $orders_count ) => $orders_count === 1 ) );
         usort( $products, static fn( $a, $b ) => $b['sales'] <=> $a['sales'] );
         arsort( $status );
         arsort( $payment );
@@ -598,7 +603,7 @@ class Qwoo_Platform_Dashboard {
             'statuses' => $status,
             'payments' => $payment,
             'top_products' => array_slice( array_values( $products ), 0, 10 ),
-            'buyers' => [ 'unique' => count( $buyers ), 'single_order' => $new_buyer_orders, 'repeat_order' => max( 0, count( $buyers ) - $new_buyer_orders ) ],
+            'buyers' => [ 'unique' => count( $buyers ), 'single_order' => $single_order_buyers, 'repeat_order' => max( 0, count( $buyers ) - $single_order_buyers ) ],
             'limited' => count( $orders ) >= 5000,
         ];
     }
