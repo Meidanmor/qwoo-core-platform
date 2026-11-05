@@ -102,7 +102,7 @@ class Qwoo_Site_Content {
 
     /** What qwoo/v1/site answers (public through the storefront's CDN: no secrets in it). */
     public static function pointer_body(): array {
-        $current = get_option( self::CURRENT );
+        $current = self::live();
         $body    = is_array( $current ) && ! empty( $current['version'] )
             ? [
                 'version'  => (string) $current['version'],
@@ -198,6 +198,7 @@ class Qwoo_Site_Content {
     private static function store_file( $content, $sha, $ext ) {
         $file = self::dir( 'files/' ) . $sha . '.' . $ext;
         if ( file_exists( $file ) && filesize( $file ) === strlen( $content ) ) {
+            @touch( $file ); // in use again: cleanup leaves recent files alone
             return true;
         }
         $tmp = $file . '.' . wp_generate_password( 8, false ) . '.tmp';
@@ -217,8 +218,32 @@ class Qwoo_Site_Content {
         return is_array( $data ) && isset( $data['files'] ) ? $data : null;
     }
 
+    /**
+     * An option as the database has it now. get_option() answers with what this request
+     * loaded when it started, and a background data refresh runs for many seconds: a design
+     * published meanwhile would be missing from what it builds on.
+     */
+    private static function fresh( string $name, $default = null ) {
+        global $wpdb;
+        $raw = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", $name ) );
+        return $raw === null ? $default : maybe_unserialize( $raw );
+    }
+
+    /** update_option() skips the write when its cached copy already says the same. */
+    private static function put_fresh( string $name, $value, bool $autoload ): void {
+        wp_cache_delete( 'alloptions', 'options' );
+        wp_cache_delete( $name, 'options' );
+        wp_cache_delete( 'notoptions', 'options' );
+        update_option( $name, $value, $autoload );
+    }
+
+    /** The live version's [ version, time ], right now. */
+    public static function live() {
+        return self::fresh( self::CURRENT );
+    }
+
     private static function current_manifest() {
-        $current = get_option( self::CURRENT );
+        $current = self::live();
         return is_array( $current ) ? self::manifest( (string) ( $current['version'] ?? '' ) ) : null;
     }
 
@@ -323,7 +348,7 @@ class Qwoo_Site_Content {
         ksort( $json );
         $version = substr( sha1( wp_json_encode( $files ) ), 0, 24 );
 
-        $current = get_option( self::CURRENT );
+        $current = self::live();
         if ( is_array( $current ) && ( $current['version'] ?? '' ) === $version ) {
             return 'no_changes';
         }
@@ -339,13 +364,13 @@ class Qwoo_Site_Content {
             return false;
         }
 
-        update_option( self::CURRENT, [ 'version' => $version, 'time' => $time ], true );
+        self::put_fresh( self::CURRENT, [ 'version' => $version, 'time' => $time ], true );
 
-        $versions = get_option( self::VERSIONS, [] );
+        $versions = self::fresh( self::VERSIONS, [] );
         $versions = is_array( $versions ) ? $versions : [];
         $versions = array_values( array_filter( $versions, static fn( $v ) => ( $v['version'] ?? '' ) !== $version ) );
         array_unshift( $versions, [ 'version' => $version, 'time' => $time ] );
-        update_option( self::VERSIONS, array_slice( $versions, 0, self::KEEP ), false );
+        self::put_fresh( self::VERSIONS, array_slice( $versions, 0, self::KEEP ), false );
 
         self::cleanup();
         return true;
@@ -353,7 +378,7 @@ class Qwoo_Site_Content {
 
     /** Removes versions past the last KEEP, and files no kept version uses. */
     private static function cleanup() {
-        $versions = (array) get_option( self::VERSIONS, [] );
+        $versions = (array) self::fresh( self::VERSIONS, [] );
         $keep     = [];
         $used     = [];
         foreach ( $versions as $v ) {
@@ -377,19 +402,26 @@ class Qwoo_Site_Content {
                 if ( filemtime( $file ) < time() - HOUR_IN_SECONDS ) @unlink( $file );
                 continue;
             }
-            if ( ! isset( $used[ $name ] ) ) @unlink( $file );
+            // A recent file may belong to a publish still on its way: no version lists it yet.
+            if ( ! isset( $used[ $name ] ) && filemtime( $file ) < time() - HOUR_IN_SECONDS ) @unlink( $file );
         }
     }
 
-    /** One batch at a time finishes (a lock older than a minute is a crashed one). */
+    /**
+     * One batch at a time finishes (a lock older than a minute is a crashed one).
+     * The database decides who gets it: add_option() can say yes to two requests at once.
+     */
     private static function lock() {
+        global $wpdb;
         for ( $i = 0; $i < 20; $i++ ) {
-            if ( add_option( self::LOCK, time(), '', false ) ) {
+            $now = (string) time();
+            if ( $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::LOCK, $now ) ) ) {
                 return true;
             }
-            $since = (int) get_option( self::LOCK );
+            $since = (int) self::fresh( self::LOCK, 0 );
             if ( $since && $since < time() - 60 ) {
-                delete_option( self::LOCK );
+                // Only the lock that was seen: never one someone took just now.
+                $wpdb->delete( $wpdb->options, [ 'option_name' => self::LOCK, 'option_value' => (string) $since ] );
                 continue;
             }
             usleep( 250000 );
@@ -398,7 +430,8 @@ class Qwoo_Site_Content {
     }
 
     private static function unlock() {
-        delete_option( self::LOCK );
+        global $wpdb;
+        $wpdb->delete( $wpdb->options, [ 'option_name' => self::LOCK ] );
     }
 
     /* ---------------- switching over from GitHub ---------------- */

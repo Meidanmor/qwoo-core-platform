@@ -182,7 +182,7 @@ class Qwoo_Social_Login {
         if ( ! class_exists( 'Qwoo_Site_Content' ) || ! Qwoo_Site_Content::enabled() ) {
             return;
         }
-        $current  = get_option( Qwoo_Site_Content::CURRENT );
+        $current  = Qwoo_Site_Content::live();
         $manifest = is_array( $current ) ? Qwoo_Site_Content::manifest( (string) ( $current['version'] ?? '' ) ) : null;
         if ( ! $manifest ) {
             return;
