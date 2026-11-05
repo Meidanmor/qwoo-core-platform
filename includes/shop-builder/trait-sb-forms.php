@@ -212,6 +212,8 @@ trait SB_Forms {
                             [ 'key' => '_qwoo_form_email', 'value' => strtolower( $reply_to ) ],
                     ],
             ] );
+            // The Form block's own wording (its button or message) is the record of what they signed up for.
+            Qwoo_Email_Marketing::subscribe( strtolower( $reply_to ), '', 'form', 'Signed up with the newsletter form', Qwoo_Push_Engine::request_lang() );
             if ( $existing ) {
                 return rest_ensure_response( [ 'success' => true, 'message' => $success_message ] );
             }

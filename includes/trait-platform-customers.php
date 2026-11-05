@@ -190,6 +190,12 @@ trait Qwoo_Platform_Customers {
                 return 'open_orders';
             }
         }
+        // Off the mailing list and out of the automations too: the addresses come from before the orders are cleaned.
+        $addresses = array_filter( array_merge( [ (string) ( $customer['email'] ?? '' ) ], array_map( static fn( $o ) => (string) $o->get_billing_email(), $orders ) ) );
+        foreach ( array_unique( array_map( 'strtolower', $addresses ) ) as $address ) {
+            Qwoo_Email_Marketing::erase_email( $address );
+            Qwoo_Automations::erase_email( $address );
+        }
         if ( ! class_exists( 'WC_Privacy_Erasers', false ) ) {
             include_once WC_ABSPATH . 'includes/class-wc-privacy-erasers.php';
         }

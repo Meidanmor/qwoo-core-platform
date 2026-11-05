@@ -43,6 +43,7 @@ class Qwoo_Platform_Dashboard {
     use Qwoo_Platform_Migration;
     use Qwoo_Platform_Package;
     use Qwoo_Platform_Attributes;
+    use Qwoo_Platform_Growth;
 
     const KEY_OPTION   = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
@@ -55,6 +56,7 @@ class Qwoo_Platform_Dashboard {
     const ACTIONS = [
         'overview'        => 'action_overview',
         'analytics'       => 'action_analytics',
+        'growth'          => 'action_growth',
         'legal_reviewed'  => 'action_legal_reviewed',
         'products_list'   => 'action_products_list',
         'product_get'     => 'action_product_get',
@@ -501,111 +503,8 @@ class Qwoo_Platform_Dashboard {
      * order objects so HPOS and the legacy order store are both supported.
      * Results are bounded to 5,000 orders to keep dashboard requests predictable.
      */
-    private static function action_analytics( array $params, array $claims ) {
-        $range = (int) ( $params['range'] ?? 30 );
-        if ( ! in_array( $range, [ 7, 30, 90, 365 ], true ) ) $range = 30;
-
-        $tz        = wp_timezone();
-        $today     = new DateTimeImmutable( 'today', $tz );
-        $end       = $today->modify( '+1 day' );
-        $start     = $today->modify( '-' . ( $range - 1 ) . ' days' );
-        $previous  = $start->modify( '-' . $range . ' days' );
-        $paid      = wc_get_is_paid_statuses();
-        $daily     = [];
-        for ( $i = $range - 1; $i >= 0; $i-- ) {
-            $daily[ $today->modify( "-{$i} days" )->format( 'Y-m-d' ) ] = [ 'sales' => 0.0, 'orders' => 0 ];
-        }
-        $orders = wc_get_orders( [
-            'type'         => 'shop_order',
-            'status'       => array_map( static fn( $s ) => substr( $s, 3 ), array_keys( wc_get_order_statuses() ) ),
-            'date_created' => $previous->getTimestamp() . '...' . ( $end->getTimestamp() - 1 ),
-            'limit'        => 5000,
-            'orderby'      => 'date',
-            'order'        => 'DESC',
-        ] );
-
-        $current = [ 'sales' => 0.0, 'orders' => 0, 'items' => 0, 'tax' => 0.0, 'shipping' => 0.0, 'discounts' => 0.0, 'refunds' => 0.0 ];
-        $prior   = [ 'sales' => 0.0, 'orders' => 0 ];
-        $status  = [];
-        $payment = [];
-        $products = [];
-        $buyers  = [];
-        $now_min = $start->getTimestamp();
-        $now_max = $end->getTimestamp();
-        foreach ( $orders as $order ) {
-            $created = $order->get_date_created();
-            if ( ! $created ) continue;
-            $stamp = $created->getTimestamp();
-            $s = $order->get_status();
-            if ( $stamp < $now_min ) {
-                if ( in_array( $s, $paid, true ) ) {
-                    $prior['sales'] += (float) $order->get_total() - (float) $order->get_total_refunded();
-                    $prior['orders']++;
-                }
-                continue;
-            }
-            if ( $stamp >= $now_max ) continue;
-            $status[ $s ] = ( $status[ $s ] ?? 0 ) + 1;
-            $day = wp_date( 'Y-m-d', $stamp, $tz );
-            $net = max( 0, (float) $order->get_total() - (float) $order->get_total_refunded() );
-            if ( $s === 'refunded' ) {
-                $current['refunds'] += (float) $order->get_total_refunded();
-            }
-            if ( in_array( $s, $paid, true ) ) {
-                $current['sales'] += $net;
-                $current['orders']++;
-                if ( isset( $daily[ $day ] ) ) {
-                    $daily[ $day ]['sales'] += $net;
-                    $daily[ $day ]['orders']++;
-                }
-                $current['items'] += (int) $order->get_item_count();
-                $current['tax'] += (float) $order->get_total_tax();
-                $current['shipping'] += (float) $order->get_shipping_total();
-                $current['discounts'] += (float) $order->get_discount_total();
-                $current['refunds'] += (float) $order->get_total_refunded();
-                $method = $order->get_payment_method_title() ?: __( 'Other', 'woocommerce' );
-                $payment[ $method ] = ( $payment[ $method ] ?? 0 ) + 1;
-                $email = strtolower( trim( (string) $order->get_billing_email() ) );
-                if ( $email !== '' ) $buyers[ $email ] = ( $buyers[ $email ] ?? 0 ) + 1;
-                foreach ( $order->get_items( 'line_item' ) as $item ) {
-                    $id = (int) $item->get_product_id();
-                    if ( ! $id ) continue;
-                    if ( ! isset( $products[ $id ] ) ) {
-                        $product = wc_get_product( $id );
-                        $products[ $id ] = [ 'id' => $id, 'name' => $product ? $product->get_name() : $item->get_name(), 'units' => 0, 'sales' => 0.0 ];
-                    }
-                    $products[ $id ]['units'] += max( 0, (int) $item->get_quantity() );
-                    // Refund totals belong to the parent order; WC_Order exposes
-                    // the per-line amount by item ID (line items have no
-                    // get_total_refunded() method of their own).
-                    $refunded = (float) $order->get_total_refunded_for_item( $item->get_id() );
-                    $products[ $id ]['sales'] += max( 0, (float) $item->get_total() - $refunded );
-                }
-            } elseif ( isset( $daily[ $day ] ) ) {
-                // Include non-paid orders in the volume chart so the sales funnel is visible.
-                $daily[ $day ]['orders']++;
-            }
-        }
-        $single_order_buyers = count( array_filter( $buyers, static fn( $orders_count ) => $orders_count === 1 ) );
-        usort( $products, static fn( $a, $b ) => $b['sales'] <=> $a['sales'] );
-        arsort( $status );
-        arsort( $payment );
-        foreach ( $daily as &$values ) $values['sales'] = round( $values['sales'], 2 );
-        unset( $values );
-
-        return [
-            'range' => $range,
-            'currency' => get_woocommerce_currency(),
-            'timezone' => wp_timezone_string(),
-            'current' => array_map( static fn( $v ) => is_float( $v ) ? round( $v, 2 ) : $v, $current ),
-            'previous' => [ 'sales' => round( $prior['sales'], 2 ), 'orders' => $prior['orders'] ],
-            'daily' => $daily,
-            'statuses' => $status,
-            'payments' => $payment,
-            'top_products' => array_slice( array_values( $products ), 0, 10 ),
-            'buyers' => [ 'unique' => count( $buyers ), 'single_order' => $single_order_buyers, 'repeat_order' => max( 0, count( $buyers ) - $single_order_buyers ) ],
-            'limited' => count( $orders ) >= 5000,
-        ];
+    private static function action_analytics( array $params ) {
+        return Qwoo_Analytics::report( $params );
     }
 
     /** The owner read the generated legal pages: the Overview stops asking. */

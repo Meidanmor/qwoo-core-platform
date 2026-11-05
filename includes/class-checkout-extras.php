@@ -50,6 +50,11 @@ class Qwoo_Checkout_Extras {
                     'context'     => [ 'view', 'edit' ],
                     'optional'    => true,
                 ],
+                // Where the shopper came from, and the "send me offers" box.
+                'source'    => [ 'description' => 'Traffic source.', 'type' => [ 'string', 'null' ], 'context' => [ 'view', 'edit' ], 'optional' => true ],
+                'medium'    => [ 'description' => 'Traffic medium.', 'type' => [ 'string', 'null' ], 'context' => [ 'view', 'edit' ], 'optional' => true ],
+                'campaign'  => [ 'description' => 'Campaign.', 'type' => [ 'string', 'null' ], 'context' => [ 'view', 'edit' ], 'optional' => true ],
+                'marketing' => [ 'description' => 'The customer asked for marketing emails.', 'type' => [ 'boolean', 'null' ], 'context' => [ 'view', 'edit' ], 'optional' => true ],
             ],
         ] );
     }
@@ -76,6 +81,21 @@ class Qwoo_Checkout_Extras {
         if ( $agreed ) {
             $order->update_meta_data( self::TERMS_META, gmdate( 'c' ) );
         }
+        $ext = (array) ( $request['extensions']['qwoo'] ?? [] );
+        foreach ( [ 'source' => 60, 'medium' => 60, 'campaign' => 100 ] as $key => $max ) {
+            $value = mb_substr( sanitize_text_field( (string) ( $ext[ $key ] ?? '' ) ), 0, $max );
+            if ( $value !== '' ) $order->update_meta_data( '_qwoo_' . $key, $value );
+        }
+        // Asked at checkout: the box is never ticked for them, and its wording is kept as the record.
+        if ( ! empty( $ext['marketing'] ) && Qwoo_Email_Marketing::checkout_optin()['on'] ) {
+            $order->update_meta_data( '_qwoo_marketing_optin', 1 );
+            add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'subscribe_from_order' ], 40 );
+        }
+    }
+
+    public static function subscribe_from_order( $order ) {
+        if ( ! $order || ! $order->get_meta( '_qwoo_marketing_optin' ) ) return;
+        Qwoo_Email_Marketing::subscribe( (string) $order->get_billing_email(), trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ), 'checkout', Qwoo_Email_Marketing::checkout_optin()['text'] );
     }
 
     /** WooCommerce's own switches for creating an account at checkout. */

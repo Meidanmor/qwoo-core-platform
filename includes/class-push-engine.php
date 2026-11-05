@@ -61,6 +61,10 @@ class Qwoo_Push_Engine {
     /** Called by qwoo_maybe_install_push_table() (rest-api.php) when the push tables' version changes. */
     public static function install_tables() {
         global $wpdb;
+        Qwoo_Analytics::install_tables();
+        Qwoo_Webhooks::install_tables();
+        Qwoo_Email_Marketing::install_tables();
+        Qwoo_Automations::install_tables();
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
         $charset = $wpdb->get_charset_collate();
         $log = self::log_table();
@@ -551,6 +555,8 @@ class Qwoo_Push_Engine {
             }
             // "Notify me" by email (Qwoo_Back_In_Stock), with what's left of the time.
             Qwoo_Back_In_Stock::send_due( $start + $budget );
+            // Webhooks, marketing emails and automations, with what's left of the time.
+            do_action( 'qwoo_push_tick', $start + $budget );
             self::finish_sends();
             self::prune();
         } catch ( Throwable $e ) {
@@ -566,6 +572,8 @@ class Qwoo_Push_Engine {
         }
         // Emails still due (a long list): the next run goes on right away.
         if ( Qwoo_Back_In_Stock::has_due() ) $next = time();
+        $other = (int) apply_filters( 'qwoo_push_next_due', 0 );
+        if ( $other && ( ! $next || $other < $next ) ) $next = $other;
         if ( $next ) {
             set_transient( self::NEXT, $next );
             if ( $next <= time() ) self::spawn();

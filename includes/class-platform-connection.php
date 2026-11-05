@@ -204,6 +204,15 @@ class Qwoo_Platform_Connection {
     }
 
     /** POSTs to this store's platform API; the decoded JSON answer, or null. */
+    /**
+     * A batch of marketing emails, through the platform (QP_Marketing_Mail). Returns its
+     * answer: { sent } or { limit: true } or { error }; null when it can't be reached.
+     */
+    public static function marketing_send( array $body ) {
+        $c = self::get();
+        return $c ? self::call( $c, 'marketing-mail', $body, 40 ) : null;
+    }
+
     private static function call( array $c, $action, array $body = [], $timeout = 20 ) {
         $url = rtrim( $c['platform_url'], '/' ) . '/wp-json/qwoo-platform/v1/stores/' . (int) $c['store_id'] . '/' . $action;
 

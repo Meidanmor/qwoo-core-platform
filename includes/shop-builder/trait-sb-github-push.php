@@ -439,6 +439,7 @@ trait SB_Github_Push {
                 // The terms and privacy pages the checkbox links to (only published ones).
                 $page_data += [ 'require_terms' => true, 'allow_signup' => true ];
                 $page_data['legal'] = self::legal_page_paths( $options );
+                $page_data['marketing_optin'] = Qwoo_Email_Marketing::checkout_optin();
             }
 
             $content = aps_normalize_json( json_encode( $page_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );

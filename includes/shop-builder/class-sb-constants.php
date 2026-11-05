@@ -384,12 +384,25 @@ abstract class Shop_Builder_Constants {
      */
     const POSITION_FIELDS = [
             'position' => [ 'type' => 'select', 'label' => 'Position', 'tab' => 'advanced', 'group' => 'Position', 'responsive' => true, 'default' => 'static',
-                    'options' => [ 'static' => 'Normal', 'sticky' => 'Sticky (stays in view while scrolling)' ],
-                    'help' => 'Per screen size: e.g. sticky on phones only. A sticky item stays in view only while its parent section is on screen. To keep it for a whole list, put it in the same section (or column) as the list.' ],
+                    'options' => [ 'static' => 'Normal', 'sticky' => 'Sticky (stays in view while scrolling)', 'absolute' => 'Absolute (placed freely inside its parent section)' ],
+                    // A top-level section has no parent section to be placed in (NodeRow leaves the choice out; aura's rule is on .sb-block only).
+                    'nested_only_options' => [ 'absolute' ],
+                    'help' => 'Per screen size: e.g. sticky on phones only. A sticky item stays in view only while its parent section is on screen. To keep it for a whole list, put it in the same section (or column) as the list. An absolute item leaves the normal flow and sits over its parent section, at the distances below.' ],
             'sticky_top' => [ 'type' => 'length', 'label' => 'Distance From the Top', 'tab' => 'advanced', 'group' => 'Position', 'responsive' => true,
                     'placeholder' => '0px', 'show_if' => [ 'position' => 'sticky' ] ],
             'sticky_below_header' => [ 'type' => 'toggle', 'label' => 'Stay below the header', 'tab' => 'advanced', 'group' => 'Position', 'default' => true,
                     'show_if' => [ 'position' => 'sticky' ], 'help' => 'Adds the height of a header that stays on screen, so it never hides under it.' ],
+            // Absolute: start / end, not left / right, so a design flips with the language (setAbsoluteVars() in aura).
+            'pos_top' => [ 'type' => 'length', 'label' => 'From the Top', 'tab' => 'advanced', 'group' => 'Position', 'responsive' => true, 'allow_negative' => true,
+                    'placeholder' => 'e.g. 20px or 10%', 'show_if' => [ 'position' => 'absolute' ], 'help' => 'Leave a side empty if the item isn\'t placed from it. A negative value moves it outside the section.' ],
+            'pos_bottom' => [ 'type' => 'length', 'label' => 'From the Bottom', 'tab' => 'advanced', 'group' => 'Position', 'responsive' => true, 'allow_negative' => true,
+                    'placeholder' => 'e.g. 20px or 10%', 'show_if' => [ 'position' => 'absolute' ] ],
+            'pos_start' => [ 'type' => 'length', 'label' => 'From the Start', 'tab' => 'advanced', 'group' => 'Position', 'responsive' => true, 'allow_negative' => true,
+                    'placeholder' => 'e.g. 20px or 10%', 'show_if' => [ 'position' => 'absolute' ], 'help' => 'The start is the left side in English and the right side in Hebrew.' ],
+            'pos_end' => [ 'type' => 'length', 'label' => 'From the End', 'tab' => 'advanced', 'group' => 'Position', 'responsive' => true, 'allow_negative' => true,
+                    'placeholder' => 'e.g. 20px or 10%', 'show_if' => [ 'position' => 'absolute' ] ],
+            'pos_z' => [ 'type' => 'number', 'label' => 'Layer', 'tab' => 'advanced', 'group' => 'Position', 'min' => 0, 'max' => 100, 'default' => 5,
+                    'show_if' => [ 'position' => 'absolute' ], 'help' => 'A higher number sits on top of a lower one.' ],
     ];
 
     /**
@@ -476,6 +489,9 @@ abstract class Shop_Builder_Constants {
     ] + self::POSITION_FIELDS + self::ORDER_FIELDS + [
 
             // --- Advanced tab ---
+            'overflow' => [ 'type' => 'select', 'label' => 'Overflow', 'tab' => 'advanced', 'group' => 'Position', 'responsive' => true, 'default' => 'visible',
+                    'options' => [ 'visible' => 'Show everything', 'hidden' => 'Cut off what sticks out' ],
+                    'help' => 'For items placed partly outside the section. Sticky items inside it keep working.' ],
             'hide_on' => [ 'type' => 'devices', 'label' => 'Hide On', 'tab' => 'advanced' ],
     ] + self::AUDIENCE_FIELDS + [
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced',
@@ -2572,6 +2588,46 @@ abstract class Shop_Builder_Constants {
             ],
 
             /* ---- Trust & social ---- */
+
+            // The owner's own posts as a grid: no approval from any network, nothing loads from them.
+            'social_feed' => [
+                    'label'    => 'Social Gallery',
+                    'category' => 'trust',
+                    'fields'   => [
+                            'handle'       => [ 'type' => 'text', 'label' => 'Your Name There', 'tab' => 'content', 'placeholder' => '@yourshop' ],
+                            'profile_url'  => [ 'type' => 'url', 'label' => 'Profile Link', 'tab' => 'content', 'placeholder' => 'https://instagram.com/yourshop' ],
+                            'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'placeholder' => 'Follow us' ],
+                            'images' => [ 'type' => 'repeater', 'label' => 'Posts', 'tab' => 'content', 'max_items' => 12,
+                                    'require' => 'image', 'title_field' => 'alt', 'item_label' => 'Post', 'add_label' => '+ Add Post',
+                                    'fields' => [
+                                            'image'    => [ 'type' => 'image', 'label' => 'Image' ],
+                                            'alt'      => [ 'type' => 'text', 'label' => 'Alt Text', 'help' => 'Describe the image for screen readers and SEO.' ],
+                                            'link_url' => [ 'type' => 'url', 'label' => 'Link to the Post or a Product', 'placeholder' => 'https://instagram.com/p/… or /product/…' ],
+                                            'new_tab'  => [ 'type' => 'toggle', 'label' => 'Open link in a new tab' ],
+                                            'tags'     => self::PRODUCT_TAGS_FIELD + [ 'image_field' => 'image' ],
+                                    ],
+                            ],
+                            'columns' => [ 'type' => 'number', 'label' => 'Columns', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6, 'default' => [ 'desktop' => 4, 'tablet' => 3, 'mobile' => 2 ] ],
+                            'gap'     => [ 'type' => 'length', 'label' => 'Gap Between Posts', 'tab' => 'content', 'responsive' => true, 'placeholder' => '8px' ],
+                    ],
+            ],
+
+            // Real posts by their address. Their code loads only after a tap (SocialEmbedBlock.vue).
+            'social_embed' => [
+                    'label'    => 'Instagram / TikTok Posts',
+                    'category' => 'trust',
+                    'fields'   => [
+                            'items' => [ 'type' => 'repeater', 'label' => 'Posts', 'tab' => 'content', 'max_items' => 9,
+                                    'require' => 'url', 'title_field' => 'url', 'item_label' => 'Post', 'add_label' => '+ Add Post',
+                                    'fields' => [
+                                            'url'   => [ 'type' => 'url', 'label' => 'Address of the Post', 'placeholder' => 'https://www.instagram.com/p/… or https://www.tiktok.com/@you/video/…' ],
+                                            'cover' => [ 'type' => 'image', 'label' => 'Cover Image (optional)', 'help' => 'Shown until the visitor taps. It keeps the page fast.' ],
+                                    ],
+                            ],
+                            'columns' => [ 'type' => 'number', 'label' => 'Columns', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 4, 'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
+                            'gap'     => [ 'type' => 'length', 'label' => 'Gap Between Posts', 'tab' => 'content', 'responsive' => true, 'placeholder' => '16px' ],
+                    ],
+            ],
 
             'social_links' => [
                     'label'    => 'Social Links',
