@@ -190,9 +190,6 @@ trait Qwoo_Platform_Product_Tools {
                 $p->save();
                 return '';
             case 'publish':
-                if ( (string) $p->get_price( 'edit' ) === '' ) {
-                    return 'It has no price yet.';
-                }
                 $p->set_status( 'publish' );
                 $p->save();
                 return '';

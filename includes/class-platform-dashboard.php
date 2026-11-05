@@ -793,9 +793,6 @@ class Qwoo_Platform_Dashboard {
             if ( is_wp_error( $stock ) ) {
                 return $stock;
             }
-            if ( $common['status'] === 'publish' && $stock['regular'] === '' ) {
-                return self::bad( 'Add a price before publishing the product.' );
-            }
             if ( $scheduled && $stock['sale'] === '' ) {
                 return self::bad( 'Add a sale price to schedule the sale.' );
             }
@@ -1177,9 +1174,6 @@ class Qwoo_Platform_Dashboard {
                 return $stock;
             }
             $enabled = ! array_key_exists( 'enabled', $v ) || ! empty( $v['enabled'] );
-            if ( $enabled && $status === 'publish' && $stock['regular'] === '' ) {
-                return self::bad( "Add a price to \"$label\", or turn it off." );
-            }
             $sold += $enabled ? 1 : 0;
             $sku   = wc_clean( (string) ( $v['sku'] ?? '' ) );
             if ( mb_strlen( $sku ) > 100 ) {

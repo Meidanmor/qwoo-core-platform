@@ -109,6 +109,14 @@ class Qwoo_Zero_Price {
         return ! ( $product->is_on_sale() && (float) $product->get_regular_price() > 0 );
     }
 
+    /** No price at all, as opposed to 0 (a product with options: no option has a price). */
+    private static function has_no_price( WC_Product $product ): bool {
+        if ( $product->is_type( 'variable' ) ) {
+            return ! array_filter( (array) ( $product->get_variation_prices( true )['price'] ?? [] ), static fn( $price ) => (string) $price !== '' );
+        }
+        return (string) $product->get_price() === '';
+    }
+
     /** The text of this language (the page's, else the store's). */
     private static function text( string $key ): string {
         $s    = self::settings();
@@ -134,7 +142,8 @@ class Qwoo_Zero_Price {
         if ( ! self::is_zero( $product ) ) return null;
         $s = self::settings();
         return [
-            'action' => $s['mode'],
+            // "Sold like any product" can't sell a product with no price at all: no button rather than one that fails.
+            'action' => $s['mode'] === 'buy' && self::has_no_price( $product ) ? 'hide' : $s['mode'],
             'button' => self::text( 'button' ),
             'link'   => $s['link'],
             'url'    => $s['link'] === 'url' ? $s['url'] : '',

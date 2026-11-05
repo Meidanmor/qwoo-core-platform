@@ -2488,7 +2488,7 @@ abstract class Shop_Builder_Constants {
                                     'show_if' => [ 'autoplay' => true ] ],
                             'loop'   => [ 'type' => 'toggle', 'label' => 'Loop back to the start', 'tab' => 'content', 'default' => true ],
                             'arrows' => [ 'type' => 'toggle', 'label' => 'Show arrows', 'tab' => 'content', 'default' => true ],
-                            'arrows_show' => [ 'type' => 'select', 'label' => 'Arrows to Show', 'tab' => 'content', 'default' => 'both',
+                            'arrows_show' => [ 'type' => 'select', 'label' => 'Arrows to Show', 'tab' => 'content', 'responsive' => true, 'default' => 'both',
                                     'options' => [ 'both' => 'Both arrows', 'next' => 'Only the "next" arrow', 'prev' => 'Only the "previous" arrow' ],
                                     'show_if' => [ 'arrows' => true ] ],
                             'arrows_mobile' => [ 'type' => 'toggle', 'label' => 'Show arrows on phones', 'tab' => 'content', 'default' => true,
