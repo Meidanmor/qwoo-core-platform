@@ -72,7 +72,33 @@ trait Qwoo_Platform_Growth {
                 Qwoo_Email_Marketing::cancel( $id );
                 return [ 'ok' => true ];
 
+            /* The store's automatic emails */
+            case 'store_emails':
+                return Qwoo_Store_Emails::overview();
+            case 'store_email_get':
+                return Qwoo_Store_Emails::get( (string) ( $p['id'] ?? '' ) );
+            case 'store_email_save':
+                return Qwoo_Store_Emails::save_settings( $p );
+            case 'store_email_design':
+                return Qwoo_Store_Emails::save_design( $p );
+            case 'store_email_reset':
+                return Qwoo_Store_Emails::reset_design( (string) ( $p['id'] ?? '' ) );
+            case 'store_email_test':
+                return Qwoo_Store_Emails::test( $p );
+            case 'store_email_style':
+                return [ 'style' => Qwoo_Store_Emails::save_style( $p ) ];
+            case 'email_saved':
+                return [ 'blocks' => Qwoo_Store_Emails::saved_blocks() ];
+            case 'email_saved_add':
+                return Qwoo_Store_Emails::save_block( $p );
+            case 'email_saved_del':
+                return Qwoo_Store_Emails::delete_block( sanitize_key( (string) ( $p['id'] ?? '' ) ) );
+            case 'store_email_sender':
+                return Qwoo_Store_Emails::save_sender( $p );
+
             /* Automations */
+            case 'flow_test':
+                return Qwoo_Automations::test( sanitize_key( (string) ( $p['id'] ?? '' ) ), (string) ( $p['to'] ?? '' ) );
             case 'flows':
                 return [ 'flows' => Qwoo_Automations::overview(), 'allowed' => Qwoo_Automations::allowed(), 'statuses' => array_keys( wc_get_order_statuses() ) ];
             case 'flow_save':
@@ -87,6 +113,8 @@ trait Qwoo_Platform_Growth {
                 return Qwoo_Webhooks::save( $p );
             case 'webhook_delete':
                 return Qwoo_Webhooks::remove( sanitize_key( (string) ( $p['id'] ?? '' ) ) );
+            case 'webhook_secret':
+                return Qwoo_Webhooks::new_secret( sanitize_key( (string) ( $p['id'] ?? '' ) ) );
             case 'webhook_test':
                 return Qwoo_Webhooks::test( sanitize_key( (string) ( $p['id'] ?? '' ) ) );
 

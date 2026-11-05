@@ -86,6 +86,8 @@ require_once QWOO_PATH . 'includes/class-push.php';
 require_once QWOO_PATH . 'includes/class-push-engine.php';
 require_once QWOO_PATH . 'includes/class-analytics.php';
 require_once QWOO_PATH . 'includes/class-webhooks.php';
+require_once QWOO_PATH . 'includes/class-email-render.php';
+require_once QWOO_PATH . 'includes/class-store-emails.php';
 require_once QWOO_PATH . 'includes/class-email-marketing.php';
 require_once QWOO_PATH . 'includes/class-automations.php';
 require_once QWOO_PATH . 'includes/class-product-feed.php';

@@ -2041,6 +2041,7 @@ class Qwoo_Platform_Dashboard {
                 if ( is_wp_error( $saved ) ) {
                     return $saved;
                 }
+                if ( class_exists( 'Qwoo_Store_Emails' ) && is_email( (string) $email ) ) Qwoo_Store_Emails::primary_changed( (string) $email );
                 if ( $name !== null ) {
                     update_option( 'blogname', $name );
                 }

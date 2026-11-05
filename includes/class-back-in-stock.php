@@ -149,6 +149,9 @@ class Qwoo_Back_In_Stock {
         $url   = rtrim( $front, '/' ) . Qwoo_Push_Engine::link_url( [ 'type' => 'item' ], $lang, null, $product );
 
         Qwoo_I18n::in_language( $lang, static function () use ( $row, $name, $store, $url ) {
+            // The owner's design; only if it can't be made, the plain email below.
+            $done = Qwoo_Store_Emails::send_own( 'back_in_stock', (string) $row['email'], Qwoo_I18n::t( '{product} is back in stock', [ 'product' => $name ] ), [ 'product_name' => $name, 'product_url' => $url ] );
+            if ( $done !== null ) return;
             $html  = '<p>' . esc_html( Qwoo_I18n::t( 'Hi,' ) ) . '</p>';
             $html .= '<p>' . esc_html( Qwoo_I18n::t( 'Good news: {product} is back in stock at {store}. Get it before it\'s gone again.', [ 'product' => $name, 'store' => $store ] ) ) . '</p>';
             $html .= '<p><a href="' . esc_url( $url ) . '" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#1d1b2e;color:#ffffff;text-decoration:none;font-weight:bold;">'

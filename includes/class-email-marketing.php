@@ -15,8 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * the platform checks the plan's monthly allowance), in the push engine's run
  * (no cron on shared hosting).
  *
- * A design is { settings: { bg, content_bg, color, link, button_bg, button_color }, blocks: [ { id, type, data } ] }.
- * render() turns it into table-based HTML that email apps can show.
+ * Designs and their HTML: Qwoo_Email_Render, shared with the store's automatic emails.
  */
 class Qwoo_Email_Marketing {
 
@@ -25,7 +24,6 @@ class Qwoo_Email_Marketing {
     const MAX_SUBS_IMPORT = 2000;
     const NS        = 'qwoo/v1';
     const SEGMENTS  = [ 'all', 'buyers', 'no_orders', 'inactive' ];
-    const BLOCKS    = [ 'heading', 'text', 'image', 'button', 'divider', 'spacer', 'products', 'coupon', 'social' ];
     const KEEP_SENDS_DAYS = 365;
 
     public static function init() {
@@ -234,172 +232,41 @@ class Qwoo_Email_Marketing {
     /* ---------------- designs ---------------- */
 
     public static function clean_design( $raw ): array {
-        $raw      = is_array( $raw ) ? $raw : [];
-        $settings = is_array( $raw['settings'] ?? null ) ? $raw['settings'] : [];
-        $color    = static fn( $v, $fallback ) => sanitize_hex_color( (string) $v ) ?: $fallback;
-        $out = [
-            'settings' => [
-                'bg'           => $color( $settings['bg'] ?? '', '#f4f4f7' ),
-                'content_bg'   => $color( $settings['content_bg'] ?? '', '#ffffff' ),
-                'color'        => $color( $settings['color'] ?? '', '#1d1b2e' ),
-                'link'         => $color( $settings['link'] ?? '', '#5b4cf5' ),
-                'button_bg'    => $color( $settings['button_bg'] ?? '', '#1d1b2e' ),
-                'button_color' => $color( $settings['button_color'] ?? '', '#ffffff' ),
-            ],
-            'blocks'   => [],
-        ];
-        foreach ( array_slice( (array) ( $raw['blocks'] ?? [] ), 0, 60 ) as $block ) {
-            $type = (string) ( $block['type'] ?? '' );
-            if ( ! in_array( $type, self::BLOCKS, true ) ) continue;
-            $d = is_array( $block['data'] ?? null ) ? $block['data'] : [];
-            $align = in_array( $d['align'] ?? '', [ 'start', 'center', 'end' ], true ) ? $d['align'] : 'start';
-            switch ( $type ) {
-                case 'heading':
-                    $data = [ 'text' => mb_substr( sanitize_text_field( (string) ( $d['text'] ?? '' ) ), 0, 200 ), 'size' => min( 40, max( 16, (int) ( $d['size'] ?? 26 ) ) ), 'align' => $align ];
-                    break;
-                case 'text':
-                    $html = wp_kses( (string) ( $d['html'] ?? '' ), [ 'a' => [ 'href' => true ], 'b' => [], 'strong' => [], 'em' => [], 'i' => [], 'u' => [], 'br' => [], 'p' => [], 'ul' => [], 'ol' => [], 'li' => [] ], [ 'http', 'https', 'mailto' ] );
-                    // wp_kses leaves "alert(1)" of a javascript: link: what isn't a full address stops being a link.
-                    $html = preg_replace( '/<a\s+href="(?!https?:|mailto:)[^"]*"\s*>/i', '<a>', (string) $html );
-                    $data = [ 'html' => (string) $html, 'align' => $align ];
-                    break;
-                case 'image':
-                    $data = [ 'url' => esc_url_raw( (string) ( $d['url'] ?? '' ), [ 'http', 'https' ] ), 'alt' => mb_substr( sanitize_text_field( (string) ( $d['alt'] ?? '' ) ), 0, 200 ), 'link' => esc_url_raw( (string) ( $d['link'] ?? '' ) ), 'width' => min( 100, max( 10, (int) ( $d['width'] ?? 100 ) ) ), 'align' => $align ];
-                    break;
-                case 'button':
-                    $data = [ 'label' => mb_substr( sanitize_text_field( (string) ( $d['label'] ?? '' ) ), 0, 80 ), 'link' => esc_url_raw( (string) ( $d['link'] ?? '' ) ), 'align' => $align ];
-                    break;
-                case 'spacer':
-                    $data = [ 'height' => min( 80, max( 4, (int) ( $d['height'] ?? 24 ) ) ) ];
-                    break;
-                case 'products':
-                    $data = [ 'ids' => array_slice( array_values( array_filter( array_map( 'intval', (array) ( $d['ids'] ?? [] ) ) ) ), 0, 6 ), 'button' => mb_substr( sanitize_text_field( (string) ( $d['button'] ?? '' ) ), 0, 40 ) ];
-                    break;
-                case 'coupon':
-                    $data = [ 'code' => mb_substr( sanitize_text_field( (string) ( $d['code'] ?? '' ) ), 0, 40 ), 'text' => mb_substr( sanitize_text_field( (string) ( $d['text'] ?? '' ) ), 0, 200 ) ];
-                    break;
-                case 'social':
-                    $links = [];
-                    foreach ( array_slice( (array) ( $d['links'] ?? [] ), 0, 8 ) as $link ) {
-                        $url = esc_url_raw( (string) ( $link['url'] ?? '' ), [ 'http', 'https' ] );
-                        if ( $url !== '' ) $links[] = [ 'label' => mb_substr( sanitize_text_field( (string) ( $link['label'] ?? '' ) ), 0, 30 ), 'url' => $url ];
-                    }
-                    $data = [ 'links' => $links ];
-                    break;
-                default:
-                    $data = [];
-            }
-            $out['blocks'][] = [ 'id' => sanitize_key( (string) ( $block['id'] ?? '' ) ) ?: 'b' . bin2hex( random_bytes( 4 ) ), 'type' => $type, 'data' => $data ];
-        }
-        return $out;
+        return Qwoo_Email_Render::clean( $raw );
     }
 
     /** A new email: the store's logo, a title, a text and a button. */
     public static function starter_design(): array {
         $front = class_exists( 'Qwoo_Technical_Settings' ) ? rtrim( Qwoo_Technical_Settings::get_primary_frontend_domain(), '/' ) : '';
         $shop  = class_exists( 'Qwoo_Push' ) && Qwoo_Push::main_lang() === 'he' ? 'לחנות' : 'Shop now';
-        return self::clean_design( [ 'blocks' => [
-            [ 'id' => 'b1', 'type' => 'heading', 'data' => [ 'text' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), 'size' => 28, 'align' => 'center' ] ],
-            [ 'id' => 'b2', 'type' => 'text', 'data' => [ 'html' => '<p>{first_name},</p><p></p>', 'align' => 'start' ] ],
-            [ 'id' => 'b3', 'type' => 'button', 'data' => [ 'label' => $shop, 'link' => $front . '/', 'align' => 'center' ] ],
-        ] ] );
+        $style = class_exists( 'Qwoo_Store_Emails' ) ? Qwoo_Store_Emails::style() : [];
+        return self::clean_design( [
+            'settings' => [ 'bg' => $style['bg'] ?? '', 'color' => '#1d1b2e', 'link' => $style['button'] ?? '', 'button_bg' => $style['button'] ?? '', 'button_color' => '#ffffff', 'font' => $style['font'] ?? '' ],
+            'rows'     => [
+                [ 'layout' => '1', 'cols' => [ [ [ 'type' => 'logo', 'data' => [ 'width' => 150, 'align' => 'center', 'padV' => 22 ] ] ] ] ],
+                [ 'layout' => '1', 'cols' => [ [ [ 'type' => 'heading', 'data' => [ 'text' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), 'size' => 28, 'align' => 'center', 'color' => $style['title'] ?? '' ] ] ] ] ],
+                [ 'layout' => '1', 'cols' => [ [ [ 'type' => 'text', 'data' => [ 'html' => '<p>{first_name},</p><p></p>', 'size' => 16, 'align' => 'start' ] ] ] ] ],
+                [ 'layout' => '1', 'cols' => [ [ [ 'type' => 'button', 'data' => [ 'label' => $shop, 'link' => $front . '/', 'align' => 'center', 'padV' => 14 ] ] ] ] ],
+            ],
+        ] );
     }
 
-    /**
-     * The email's HTML. $link wraps every link (click tracking); $footer is
-     * the required part. Tables and inline styles: email apps ignore the rest.
-     */
-    public static function render( array $design, string $preheader, callable $link, string $footer, string $first_name = '' ): string {
-        $s    = $design['settings'];
-        $main = class_exists( 'Qwoo_Push' ) ? Qwoo_Push::main_lang() : 'en';
-        $rtl  = in_array( $main, [ 'he', 'ar' ], true );
-        $dir  = $rtl ? 'rtl' : 'ltr';
-        $start = $rtl ? 'right' : 'left';
-        $end   = $rtl ? 'left' : 'right';
-        $font  = "-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif";
-        $al    = static fn( $a ) => $a === 'center' ? 'center' : ( $a === 'end' ? $end : $start );
-        $body  = '';
-        foreach ( (array) $design['blocks'] as $block ) {
-            $d = $block['data'];
-            $cell = '';
-            switch ( $block['type'] ) {
-                case 'heading':
-                    $cell = '<h1 style="margin:0;font-family:' . $font . ';font-size:' . (int) $d['size'] . 'px;line-height:1.25;color:' . esc_attr( $s['color'] ) . ';text-align:' . $al( $d['align'] ) . ';">' . esc_html( $d['text'] ) . '</h1>';
-                    break;
-                case 'text':
-                    $html = preg_replace_callback( '/href="([^"]*)"/', static fn( $m ) => 'href="' . esc_attr( $link( html_entity_decode( $m[1] ) ) ) . '" style="color:' . esc_attr( $s['link'] ) . ';"', (string) $d['html'] );
-                    $html = str_replace( '<p>', '<p style="margin:0 0 12px;">', (string) $html );
-                    $cell = '<div style="font-family:' . $font . ';font-size:16px;line-height:1.6;color:' . esc_attr( $s['color'] ) . ';text-align:' . $al( $d['align'] ) . ';">' . $html . '</div>';
-                    break;
-                case 'image':
-                    if ( $d['url'] === '' ) break;
-                    $w   = (int) round( 552 * $d['width'] / 100 );
-                    $img = '<img src="' . esc_url( $d['url'] ) . '" alt="' . esc_attr( $d['alt'] ) . '" width="' . $w . '" style="display:inline-block;width:' . (int) $d['width'] . '%;max-width:' . $w . 'px;height:auto;border:0;border-radius:8px;">';
-                    $cell = '<div style="text-align:' . $al( $d['align'] ) . ';">' . ( $d['link'] !== '' ? '<a href="' . esc_url( $link( $d['link'] ) ) . '">' . $img . '</a>' : $img ) . '</div>';
-                    break;
-                case 'button':
-                    if ( $d['link'] === '' ) break;
-                    $cell = '<div style="text-align:' . $al( $d['align'] ) . ';"><a href="' . esc_url( $link( $d['link'] ) ) . '" style="display:inline-block;padding:13px 26px;border-radius:8px;background:' . esc_attr( $s['button_bg'] ) . ';color:' . esc_attr( $s['button_color'] ) . ';font-family:' . $font . ';font-size:16px;font-weight:bold;text-decoration:none;">' . esc_html( $d['label'] ) . '</a></div>';
-                    break;
-                case 'divider':
-                    $cell = '<div style="border-top:1px solid #e5e5ea;font-size:0;line-height:0;">&nbsp;</div>';
-                    break;
-                case 'spacer':
-                    $cell = '<div style="height:' . (int) $d['height'] . 'px;font-size:0;line-height:0;">&nbsp;</div>';
-                    break;
-                case 'products':
-                    $cell = self::products_html( $d, $s, $link, $font );
-                    break;
-                case 'coupon':
-                    if ( $d['code'] === '' ) break;
-                    $cell = '<div style="padding:18px;border:2px dashed ' . esc_attr( $s['button_bg'] ) . ';border-radius:10px;text-align:center;font-family:' . $font . ';color:' . esc_attr( $s['color'] ) . ';">'
-                        . ( $d['text'] !== '' ? '<div style="font-size:15px;margin-bottom:6px;">' . esc_html( $d['text'] ) . '</div>' : '' )
-                        . '<div style="font-size:24px;font-weight:bold;letter-spacing:2px;" dir="ltr">' . esc_html( $d['code'] ) . '</div></div>';
-                    break;
-                case 'social':
-                    $parts = [];
-                    foreach ( (array) $d['links'] as $l ) {
-                        $parts[] = '<a href="' . esc_url( $link( $l['url'] ) ) . '" style="color:' . esc_attr( $s['link'] ) . ';text-decoration:none;font-family:' . $font . ';font-size:14px;margin:0 8px;">' . esc_html( $l['label'] ) . '</a>';
-                    }
-                    $cell = '<div style="text-align:center;">' . implode( '', $parts ) . '</div>';
-                    break;
-            }
-            if ( $cell !== '' ) $body .= '<tr><td style="padding:10px 24px;">' . $cell . '</td></tr>';
+    /** The email's HTML. $link wraps every link (click tracking); $footer is the required part. */
+    public static function render( array $design, string $preheader, callable $link, string $footer, string $first_name = '', string $email = '' ): string {
+        $ctx = [
+            'preheader' => $preheader,
+            'link'      => $link,
+            'footer'    => $footer,
+            'logo'      => class_exists( 'Qwoo_Store_Emails' ) ? Qwoo_Store_Emails::style()['logo'] : '',
+            'tokens'    => [ '{first_name}' => $first_name ],
+        ];
+        if ( $email !== '' ) {
+            $ctx['is_buyer'] = static function () use ( $email ) {
+                global $wpdb;
+                return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . Qwoo_Analytics::orders_table() . ' WHERE paid = 1 AND email = %s', $email ) ) > 0;
+            };
         }
-        $body = str_replace( '{first_name}', esc_html( $first_name ), $body );
-        $body = str_replace( '{store_name}', esc_html( html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ) ), $body );
-
-        return '<!doctype html><html dir="' . $dir . '" lang="' . esc_attr( $main ) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
-            . '<body style="margin:0;padding:0;background:' . esc_attr( $s['bg'] ) . ';">'
-            . '<div style="display:none;max-height:0;overflow:hidden;">' . esc_html( $preheader ) . '</div>'
-            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:' . esc_attr( $s['bg'] ) . ';"><tr><td align="center" style="padding:24px 12px;">'
-            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:' . esc_attr( $s['content_bg'] ) . ';border-radius:12px;">'
-            . '<tr><td style="height:14px;font-size:0;">&nbsp;</td></tr>' . $body . '<tr><td style="height:14px;font-size:0;">&nbsp;</td></tr></table>'
-            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;"><tr><td style="padding:16px 24px;font-family:' . $font . ';font-size:12px;line-height:1.6;color:#77748b;text-align:center;">' . $footer . '</td></tr></table>'
-            . '</td></tr></table></body></html>';
-    }
-
-    private static function products_html( array $d, array $s, callable $link, string $font ): string {
-        $front = class_exists( 'Qwoo_Technical_Settings' ) ? rtrim( Qwoo_Technical_Settings::get_primary_frontend_domain(), '/' ) : '';
-        $cells = '';
-        $i     = 0;
-        foreach ( (array) $d['ids'] as $id ) {
-            $product = wc_get_product( (int) $id );
-            if ( ! $product || $product->get_status() !== 'publish' ) continue;
-            $url   = $link( $front . '/product/' . $product->get_slug() );
-            $img   = wp_get_attachment_image_url( $product->get_image_id(), 'medium' );
-            $price = wp_strip_all_tags( wc_price( (float) $product->get_price() ) );
-            if ( $i && $i % 2 === 0 ) $cells .= '</tr><tr>';
-            $cells .= '<td width="50%" valign="top" style="padding:6px;font-family:' . $font . ';text-align:center;color:' . esc_attr( $s['color'] ) . ';">'
-                . ( $img ? '<a href="' . esc_url( $url ) . '"><img src="' . esc_url( $img ) . '" alt="" width="250" style="width:100%;max-width:250px;height:auto;border:0;border-radius:8px;"></a>' : '' )
-                . '<div style="font-size:15px;font-weight:bold;margin:8px 0 2px;">' . esc_html( html_entity_decode( $product->get_name(), ENT_QUOTES ) ) . '</div>'
-                . ( (float) $product->get_price() > 0 ? '<div style="font-size:14px;margin-bottom:8px;">' . esc_html( html_entity_decode( $price, ENT_QUOTES ) ) . '</div>' : '' )
-                . ( $d['button'] !== '' ? '<a href="' . esc_url( $url ) . '" style="color:' . esc_attr( $s['link'] ) . ';font-size:14px;">' . esc_html( $d['button'] ) . '</a>' : '' )
-                . '</td>';
-            $i++;
-        }
-        if ( $i % 2 === 1 ) $cells .= '<td width="50%"></td>';
-        return $cells === '' ? '' : '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' . $cells . '</tr></table>';
+        return Qwoo_Email_Render::html( $design, $ctx );
     }
 
     /** Store details and the unsubscribe link: on every email, not editable. */
@@ -419,7 +286,8 @@ class Qwoo_Email_Marketing {
         global $wpdb;
         $row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::campaigns_table() . ' WHERE id = %d', $id ), ARRAY_A );
         if ( ! $row ) return null;
-        $row['design'] = json_decode( (string) $row['design'], true ) ?: self::starter_design();
+        $saved = json_decode( (string) $row['design'], true );
+        $row['design'] = $saved ? self::clean_design( $saved ) : self::starter_design();
         return $row;
     }
 
@@ -506,8 +374,8 @@ class Qwoo_Email_Marketing {
     public static function send_problems( array $row ): array {
         $problems = [];
         if ( trim( (string) $row['subject'] ) === '' ) $problems[] = 'Add a subject.';
-        if ( ! array_filter( (array) ( $row['design']['blocks'] ?? [] ), static fn( $b ) => ! in_array( $b['type'], [ 'divider', 'spacer' ], true ) ) ) $problems[] = 'The email is empty.';
-        if ( trim( (string) get_option( 'woocommerce_store_address' ) ) === '' ) $problems[] = 'Add your business address in Settings → General: it has to appear on marketing emails.';
+        if ( ! Qwoo_Email_Render::has_content( (array) $row['design'] ) ) $problems[] = 'The email is empty.';
+        if ( trim( (string) get_option( 'woocommerce_store_address' ) ) === '' ) $problems[] = 'Add your business address in Settings → Business details: it has to appear on marketing emails.';
         if ( Qwoo_Platform_Dashboard::is_free_plan() ) $problems[] = 'Email marketing is on the Basic plan and up.';
         return $problems;
     }
@@ -571,7 +439,7 @@ class Qwoo_Email_Marketing {
         $first    = trim( explode( ' ', trim( $name ) )[0] ?? '' );
         $link     = static fn( string $url ) => self::click_url( $send_id, self::tagged( $url, (int) $campaign['id'] ) );
         $unsub    = self::unsubscribe_url( $sub_id, $email );
-        $html     = self::render( (array) $campaign['design'], (string) $campaign['preheader'], $link, self::footer( $unsub ), $first );
+        $html     = self::render( (array) $campaign['design'], (string) $campaign['preheader'], $link, self::footer( $unsub ), $first, $email );
         $pixel    = '<img src="' . esc_url( self::base_url() . 'o?' . http_build_query( [ 'i' => $send_id, 'k' => self::sign( 'o' . $send_id ) ] ) ) . '" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;">';
         $html     = str_replace( '</body>', $pixel . '</body>', $html );
         $subject  = str_replace( [ '{first_name}', '{store_name}' ], [ $first, (string) $settings['from_name'] ], (string) $campaign['subject'] );

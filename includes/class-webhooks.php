@@ -82,7 +82,7 @@ class Qwoo_Webhooks {
             $out[] = $hook;
         }
         $log = [];
-        foreach ( (array) $wpdb->get_results( 'SELECT id, hook_id, event, status, attempts, code, created FROM ' . self::table() . ' ORDER BY id DESC LIMIT 30', ARRAY_A ) as $row ) {
+        foreach ( (array) $wpdb->get_results( 'SELECT id, hook_id, event, status, attempts, code, created FROM ' . self::table() . ' ORDER BY id DESC LIMIT 100', ARRAY_A ) as $row ) {
             $log[] = [ 'id' => (int) $row['id'], 'hook' => $row['hook_id'], 'event' => $row['event'], 'status' => $row['status'], 'attempts' => (int) $row['attempts'], 'code' => (int) $row['code'], 'created' => $row['created'] ];
         }
         return [ 'hooks' => $out, 'log' => $log, 'events' => self::EVENTS, 'allowed' => self::allowed() ];
@@ -167,12 +167,32 @@ class Qwoo_Webhooks {
         return self::public_list();
     }
 
+    /** A new signing key: the old one stops working. Shown once. */
+    public static function new_secret( string $id ) {
+        $hooks = self::hooks();
+        $fresh = '';
+        foreach ( $hooks as &$hook ) {
+            if ( $hook['id'] !== $id ) continue;
+            $fresh          = 'whsec_' . bin2hex( random_bytes( 24 ) );
+            $hook['secret'] = $fresh;
+        }
+        unset( $hook );
+        if ( $fresh === '' ) return new WP_Error( 'missing', 'That webhook doesn\'t exist any more.' );
+        update_option( self::OPTION, $hooks, false );
+        return [ 'secret' => $fresh ] + self::public_list();
+    }
+
     /** A sample delivery, sent right now; the answer is shown in the dashboard. */
     public static function test( string $id ): array {
         foreach ( self::hooks() as $hook ) {
             if ( $hook['id'] !== $id ) continue;
             $body = wp_json_encode( [ 'id' => 'test_' . bin2hex( random_bytes( 6 ) ), 'event' => 'test', 'created' => time(), 'data' => [ 'message' => 'A test from your store.' ] ] );
-            return [ 'code' => self::post( $hook, 'test', 'test', $body ) ];
+            $code = self::post( $hook, 'test', 'test', $body );
+            // In the log like any other message; tests never retry.
+            global $wpdb;
+            $now = gmdate( 'Y-m-d H:i:s' );
+            $wpdb->insert( self::table(), [ 'hook_id' => $id, 'event' => 'test', 'body' => '', 'status' => $code >= 200 && $code < 300 ? 'sent' : 'failed', 'attempts' => 1, 'code' => $code, 'next_at' => $now, 'created' => $now ] );
+            return [ 'code' => $code ] + self::public_list();
         }
         return [ 'code' => 0 ];
     }

@@ -85,10 +85,13 @@ class Qwoo_Automations {
             $c = $counts[ $flow['id'] ] ?? [];
             $flow['counts'] = [ 'waiting' => $c['wait'] ?? 0, 'done' => $c['done'] ?? 0, 'stopped' => $c['stopped'] ?? 0 ];
             $sent = [ 'sent' => 0, 'opened' => 0, 'clicked' => 0, 'orders' => 0, 'sales' => 0.0 ];
-            foreach ( $flow['steps'] as $step ) {
+            foreach ( $flow['steps'] as $i => $step ) {
                 if ( $step['type'] !== 'email' || empty( $step['campaign_id'] ) ) continue;
                 $stats = Qwoo_Email_Marketing::campaign_stats( (int) $step['campaign_id'] );
                 foreach ( $sent as $k => $v ) $sent[ $k ] = $v + $stats[ $k ];
+                // For the editor's step title; save() doesn't keep it.
+                $row = Qwoo_Email_Marketing::campaign_row( (int) $step['campaign_id'] );
+                $flow['steps'][ $i ]['subject'] = $row ? (string) $row['subject'] : '';
             }
             $flow['results'] = $sent;
             $out[] = $flow;
@@ -161,6 +164,22 @@ class Qwoo_Automations {
         }
         update_option( self::OPTION, $flows, false );
         return [ 'id' => $id, 'flows' => self::overview() ];
+    }
+
+    /** Sends the flow's emails to the owner right away, without the waits or the rules. Not counted. */
+    public static function test( string $id, string $to ) {
+        if ( ! is_email( $to ) ) return new WP_Error( 'email', 'Enter a valid email address.' );
+        foreach ( self::flows() as $flow ) {
+            if ( $flow['id'] !== $id ) continue;
+            $sent = 0;
+            foreach ( (array) $flow['steps'] as $step ) {
+                if ( $step['type'] !== 'email' || empty( $step['campaign_id'] ) ) continue;
+                $row = Qwoo_Email_Marketing::campaign_row( (int) $step['campaign_id'] );
+                if ( $row && ! is_wp_error( Qwoo_Email_Marketing::send_test( $row, $to ) ) ) $sent++;
+            }
+            return [ 'sent' => $sent ];
+        }
+        return new WP_Error( 'missing', 'Save the automation first.' );
     }
 
     public static function remove( string $id ): array {

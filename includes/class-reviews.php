@@ -447,6 +447,9 @@ class Qwoo_Reviews {
         }
 
         $store = html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES );
+        // The owner's design; only if it can't be made, the plain email below.
+        $done  = Qwoo_Store_Emails::send_own( 'review_request', $email, Qwoo_I18n::t( 'How was your order from {store}?', [ 'store' => $store ] ), [ 'review_links' => array_map( static fn( $link ) => [ 'label' => Qwoo_I18n::t( 'Review {name}', [ 'name' => $link['name'] ] ), 'url' => $link['url'] ], array_values( $links ) ) ], $order );
+        if ( $done !== null ) return $done;
         $first = $order->get_billing_first_name();
         $html  = '<p>' . esc_html( $first !== '' ? Qwoo_I18n::t( 'Hi {name},', [ 'name' => $first ] ) : Qwoo_I18n::t( 'Hi,' ) ) . '</p>';
         $html .= '<p>' . esc_html( Qwoo_I18n::t( 'Thank you for your order from {store}. We\'d love to hear what you think. It only takes a minute:', [ 'store' => $store ] ) ) . '</p>';
