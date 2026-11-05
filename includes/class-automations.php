@@ -5,12 +5,16 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * Automations (dashboard → Marketing → Automations): when something happens,
  * go through a short list of steps.
  *
- *   flow = { id, name, on, trigger: { type, status?, days?, minutes? }, steps: [ step ] }
+ *   flow = { id, name, on, trigger: { type, status?, days?, minutes? }, rules: [ rule ], steps: [ step ] }
+ *   rule = { check: first_order | order_over | not_ordered_since, amount? }
+ *          checked before every send; when one fails the person leaves the flow
  *   step = { type: wait, minutes }
- *        | { type: condition, check: first_order | order_over | not_ordered_since, amount? }
  *        | { type: email, campaign_id }       a design kept as a "flow" campaign
  *        | { type: push, title, body, link }  the shopper's own devices (signed-in shoppers)
  *        | { type: webhook, url }             Make, n8n and the like
+ *
+ * Flows saved before rules existed may still hold { type: condition } steps:
+ * they keep working until the flow is next saved, which turns them into rules.
  *
  * Each person going through a flow is a row in qwoo_flow_runs, with `uniq` so
  * the same event can't start it twice. Rows run in the push engine's run (no
@@ -98,9 +102,6 @@ class Qwoo_Automations {
         switch ( $type ) {
             case 'wait':
                 return [ 'type' => 'wait', 'minutes' => min( 90 * 24 * 60, max( 5, (int) ( $step['minutes'] ?? 60 ) ) ) ];
-            case 'condition':
-                $check = in_array( $step['check'] ?? '', [ 'first_order', 'order_over', 'not_ordered_since' ], true ) ? $step['check'] : 'not_ordered_since';
-                return [ 'type' => 'condition', 'check' => $check, 'amount' => max( 0, (float) ( $step['amount'] ?? 0 ) ) ];
             case 'email':
                 return [ 'type' => 'email', 'campaign_id' => (int) ( $step['campaign_id'] ?? 0 ) ];
             case 'push':
@@ -112,6 +113,13 @@ class Qwoo_Automations {
         return null;
     }
 
+    /** One rule per kind of check. */
+    private static function add_rule( array &$rules, array $raw ) {
+        $check = (string) ( $raw['check'] ?? '' );
+        if ( ! in_array( $check, [ 'first_order', 'order_over', 'not_ordered_since' ], true ) || isset( $rules[ $check ] ) ) return;
+        $rules[ $check ] = [ 'check' => $check, 'amount' => max( 0, (float) ( $raw['amount'] ?? 0 ) ) ];
+    }
+
     public static function save( array $in ) {
         if ( ! self::allowed() ) return new WP_Error( 'plan', 'Automations are on the Basic plan and up.' );
         $type = (string) ( $in['trigger']['type'] ?? '' );
@@ -120,8 +128,14 @@ class Qwoo_Automations {
         if ( $type === 'order_status' ) $trigger['status'] = sanitize_key( preg_replace( '/^wc-/', '', (string) ( $in['trigger']['status'] ?? 'completed' ) ) );
         if ( $type === 'no_order' ) $trigger['days'] = min( 730, max( 7, (int) ( $in['trigger']['days'] ?? 60 ) ) );
         if ( $type === 'cart_left' ) $trigger['minutes'] = min( 7 * 24 * 60, max( 30, (int) ( $in['trigger']['minutes'] ?? 60 ) ) );
+        $rules = [];
+        foreach ( (array) ( $in['rules'] ?? [] ) as $raw ) self::add_rule( $rules, (array) $raw );
         $steps = [];
         foreach ( array_slice( (array) ( $in['steps'] ?? [] ), 0, self::MAX_STEPS ) as $raw ) {
+            if ( ( $raw['type'] ?? '' ) === 'condition' ) {
+                self::add_rule( $rules, (array) $raw );
+                continue;
+            }
             $step = self::clean_step( $raw );
             if ( $step === null ) return new WP_Error( 'step', 'A webhook step needs a public https address.' );
             $steps[] = $step;
@@ -131,7 +145,7 @@ class Qwoo_Automations {
         }
         $flows = self::flows();
         $id    = sanitize_key( (string) ( $in['id'] ?? '' ) );
-        $data  = [ 'name' => mb_substr( sanitize_text_field( (string) ( $in['name'] ?? '' ) ), 0, 120 ), 'on' => ! empty( $in['on'] ), 'trigger' => $trigger, 'steps' => $steps ];
+        $data  = [ 'name' => mb_substr( sanitize_text_field( (string) ( $in['name'] ?? '' ) ), 0, 120 ), 'on' => ! empty( $in['on'] ), 'trigger' => $trigger, 'rules' => array_values( $rules ), 'steps' => $steps ];
         $found = false;
         foreach ( $flows as &$flow ) {
             if ( $flow['id'] === $id ) {
@@ -268,6 +282,13 @@ class Qwoo_Automations {
             if ( $step['type'] === 'condition' && ! self::passes( $step, $row ) ) {
                 $wpdb->update( $t, [ 'step' => $i, 'status' => 'stopped' ], [ 'id' => $row['id'] ] );
                 return;
+            }
+            if ( in_array( $step['type'], [ 'email', 'push', 'webhook' ], true ) ) {
+                foreach ( (array) ( $flow['rules'] ?? [] ) as $rule ) {
+                    if ( self::passes( $rule, $row ) ) continue;
+                    $wpdb->update( $t, [ 'step' => $i, 'status' => 'stopped' ], [ 'id' => $row['id'] ] );
+                    return;
+                }
             }
             self::act( $step, $flow, $row );
         }

@@ -94,12 +94,54 @@ trait Qwoo_Platform_Growth {
             case 'feed':
                 return [ 'url' => isset( $p['on'] ) ? Qwoo_Product_Feed::set( ! empty( $p['on'] ) ) : Qwoo_Product_Feed::url() ];
 
+            /* Tracked links */
+            case 'tracked_links':
+                return [ 'links' => self::tracked_links() ];
+            case 'tracked_links_add':
+                return self::tracked_links_add( (array) ( $p['links'] ?? [] ) );
+            case 'tracked_link_delete':
+                $gone = sanitize_key( (string) ( $p['id'] ?? '' ) );
+                $list = array_values( array_filter( self::tracked_links(), static fn( $l ) => $l['id'] !== $gone ) );
+                update_option( 'qwoo_tracked_links', $list, false );
+                return [ 'links' => $list ];
+
             /* Reads the API keeps to itself. */
             case 'subscriber_api_add':
                 if ( empty( $p['consent'] ) ) return new WP_Error( 'consent', '"consent": true is required: the person must have agreed.' );
                 return [ 'result' => Qwoo_Email_Marketing::subscribe( (string) ( $p['email'] ?? '' ), sanitize_text_field( (string) ( $p['name'] ?? '' ) ), 'api', mb_substr( sanitize_text_field( (string) ( $p['consent_text'] ?? 'Sent through the API' ) ), 0, 200 ), '', false ) ];
         }
         return new WP_Error( 'unknown', 'Unknown action.' );
+    }
+
+    private static function tracked_links(): array {
+        $list = get_option( 'qwoo_tracked_links', [] );
+        return is_array( $list ) ? array_values( $list ) : [];
+    }
+
+    /** One row per platform, newest first. The same address isn't kept twice. */
+    private static function tracked_links_add( array $rows ) {
+        $list = self::tracked_links();
+        $seen = array_column( $list, 'url' );
+        $new  = [];
+        foreach ( array_slice( $rows, 0, 20 ) as $row ) {
+            $url    = esc_url_raw( trim( (string) ( $row['url'] ?? '' ) ), [ 'https', 'http' ] );
+            $source = mb_substr( sanitize_text_field( (string) ( $row['source'] ?? '' ) ), 0, 60 );
+            $medium = mb_substr( sanitize_text_field( (string) ( $row['medium'] ?? '' ) ), 0, 60 );
+            if ( $url === '' || $source === '' || $medium === '' || in_array( $url, $seen, true ) ) continue;
+            $seen[] = $url;
+            $new[]  = [
+                'id'       => 'tl' . bin2hex( random_bytes( 5 ) ),
+                'url'      => $url,
+                'source'   => $source,
+                'medium'   => $medium,
+                'campaign' => mb_substr( sanitize_text_field( (string) ( $row['campaign'] ?? '' ) ), 0, 120 ),
+                'created'  => gmdate( 'Y-m-d H:i:s' ),
+            ];
+        }
+        if ( count( $list ) + count( $new ) > 200 ) return new WP_Error( 'max', 'A store can keep up to 200 tracked links. Delete some first.' );
+        $list = array_merge( $new, $list );
+        update_option( 'qwoo_tracked_links', $list, false );
+        return [ 'links' => $list ];
     }
 
     private static function growth_overview( array $p ): array {

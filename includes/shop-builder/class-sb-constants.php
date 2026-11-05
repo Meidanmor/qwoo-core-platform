@@ -2606,14 +2606,14 @@ abstract class Shop_Builder_Constants {
 
             // The owner's own posts as a grid: no approval from any network, nothing loads from them.
             'social_feed' => [
-                    'label'    => 'Social Gallery',
+                    'label'    => 'Photo Gallery with Product Tags',
                     'category' => 'trust',
                     'fields'   => [
                             'handle'       => [ 'type' => 'text', 'label' => 'Your Name There', 'tab' => 'content', 'placeholder' => '@yourshop' ],
                             'profile_url'  => [ 'type' => 'url', 'label' => 'Profile Link', 'tab' => 'content', 'placeholder' => 'https://instagram.com/yourshop' ],
                             'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'placeholder' => 'Follow us' ],
-                            'images' => [ 'type' => 'repeater', 'label' => 'Posts', 'tab' => 'content', 'max_items' => 12,
-                                    'require' => 'image', 'title_field' => 'alt', 'item_label' => 'Post', 'add_label' => '+ Add Post',
+                            'images' => [ 'type' => 'repeater', 'label' => 'Photos', 'tab' => 'content', 'max_items' => 12,
+                                    'require' => 'image', 'title_field' => 'alt', 'item_label' => 'Photo', 'add_label' => '+ Add Photo',
                                     'fields' => [
                                             'image'    => [ 'type' => 'image', 'label' => 'Image' ],
                                             'alt'      => [ 'type' => 'text', 'label' => 'Alt Text', 'help' => 'Describe the image for screen readers and SEO.' ],
@@ -2623,7 +2623,7 @@ abstract class Shop_Builder_Constants {
                                     ],
                             ],
                             'columns' => [ 'type' => 'number', 'label' => 'Columns', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6, 'default' => [ 'desktop' => 4, 'tablet' => 3, 'mobile' => 2 ] ],
-                            'gap'     => [ 'type' => 'length', 'label' => 'Gap Between Posts', 'tab' => 'content', 'responsive' => true, 'placeholder' => '8px' ],
+                            'gap'     => [ 'type' => 'length', 'label' => 'Gap Between Photos', 'tab' => 'content', 'responsive' => true, 'placeholder' => '8px' ],
                     ],
             ],
 
@@ -2641,6 +2641,16 @@ abstract class Shop_Builder_Constants {
                             ],
                             'columns' => [ 'type' => 'number', 'label' => 'Columns', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 4, 'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 1 ] ],
                             'gap'     => [ 'type' => 'length', 'label' => 'Gap Between Posts', 'tab' => 'content', 'responsive' => true, 'placeholder' => '16px' ],
+                    ],
+            ],
+
+            // TikTok's own profile embed (SocialProfileBlock.vue).
+            'social_profile' => [
+                    'label'    => 'TikTok Profile',
+                    'category' => 'trust',
+                    'fields'   => [
+                            'handle'      => [ 'type' => 'text', 'label' => 'TikTok Username', 'tab' => 'content', 'placeholder' => '@yourshop', 'help' => 'A public account. TikTok decides how it looks and which videos it shows.' ],
+                            'tap_to_load' => [ 'type' => 'toggle', 'label' => 'Load only after a tap', 'tab' => 'content', 'help' => 'Nothing from TikTok loads, and it sets no cookies, until the visitor taps.' ],
                     ],
             ],
 
