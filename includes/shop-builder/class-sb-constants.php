@@ -496,6 +496,12 @@ abstract class Shop_Builder_Constants {
     ] + self::AUDIENCE_FIELDS + [
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced',
                     'help' => 'Lets a button link to this section with #your-id.' ],
+            // Entrance animation of the whole section (blocks have their own: BLOCK_COMMON_FIELDS).
+            'animation' => [ 'type' => 'select', 'label' => 'Entrance Animation', 'tab' => 'advanced', 'group' => 'Animation', 'default' => 'none',
+                    'options' => [ 'none' => 'None', 'fade_up' => 'Fade in and rise', 'fade' => 'Fade in', 'zoom_in' => 'Grow in', 'reveal' => 'Reveal from the bottom' ],
+                    'help' => 'Plays once when the section scrolls into view. Not for the page\'s first section, and never for visitors who turned animations off.' ],
+            'animation_delay' => [ 'type' => 'number', 'label' => 'Delay (milliseconds)', 'tab' => 'advanced', 'group' => 'Animation', 'min' => 0, 'max' => 1500, 'default' => 0,
+                    'show_if' => [ 'animation' => [ 'fade_up', 'fade', 'zoom_in', 'reveal' ] ] ],
     ];
 
     /**
@@ -518,7 +524,7 @@ abstract class Shop_Builder_Constants {
             'hide_on' => [ 'type' => 'devices', 'label' => 'Hide On', 'tab' => 'advanced', 'group' => 'Visibility' ],
     ] + self::AUDIENCE_FIELDS + [
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced', 'group' => 'Visibility' ],
-            // Entrance animation: this block only (never whole sections), once, when it scrolls into view.
+            // Entrance animation: this block, once, when it scrolls into view (sections: SECTION_STYLE_FIELDS).
             'animation' => [ 'type' => 'select', 'label' => 'Entrance Animation', 'tab' => 'advanced', 'group' => 'Animation', 'default' => 'none',
                     'options' => [ 'none' => 'None', 'fade_up' => 'Fade in and rise', 'fade' => 'Fade in', 'zoom_in' => 'Grow in', 'reveal' => 'Reveal from the bottom' ],
                     'help' => 'Plays once when the block scrolls into view. Not in the page\'s first section, and never for visitors who turned animations off.' ],
