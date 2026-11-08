@@ -670,6 +670,15 @@ abstract class Shop_Builder_Constants {
     /** Whether a header widget's drawer opens by swiping in from an edge of the screen (phones). */
     const SWIPE_OPTIONS = [ 'auto' => 'Automatic', 'none' => 'No', 'left' => 'From the left edge', 'right' => 'From the right edge' ];
 
+    /**
+     * A header widget's drawer (Menu, Mini Cart, Mini Wishlist): the standard one, or
+     * sections the owner builds from blocks, kept in the widget's own `blocks`.
+     */
+    const DRAWER_CONTENT_OPTIONS = [ 'standard' => 'Standard', 'blocks' => 'Built from blocks' ];
+
+    /** The most tabs a Tabs block with blocks holds, and the most sections in a drawer. */
+    const MAX_HELD_SECTIONS = 10;
+
     /** Social Links networks — mirrored in the frontend's src/utils/builder-icons.js. */
     const SOCIAL_NETWORKS = [
             'facebook'  => 'Facebook',
@@ -698,6 +707,9 @@ abstract class Shop_Builder_Constants {
             'category'     => 'From categories',
             'tag'          => 'With tags',
             'manual'       => 'Hand-picked products',
+            // The cart's products' cross-sells (WooCommerce → product → Linked products), read
+            // from the shopper's cart: for the cart drawer and the cart page.
+            'cart'         => 'Suggestions for the cart',
     ];
 
     /** Field types a custom form can ask for (form block, form_type = custom). */
@@ -875,7 +887,9 @@ abstract class Shop_Builder_Constants {
                     'fields' => [
                             'text'      => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content' ],
                             'click_action' => [ 'type' => 'select', 'label' => 'When Clicked', 'tab' => 'content', 'default' => 'link',
-                                    'options' => [ 'link' => 'Open the link', 'add_to_cart' => 'Add a product to the cart', 'buy_now' => 'Add a product and go to checkout' ] ],
+                                    'options' => [ 'link' => 'Open the link', 'add_to_cart' => 'Add a product to the cart', 'buy_now' => 'Add a product and go to checkout',
+                                            'wishlist_to_cart' => 'Add the whole wishlist to the cart', 'close_drawer' => 'Close the drawer it\'s in' ],
+                                    'help' => '"Add the whole wishlist": hidden while the wishlist is empty. "Close the drawer": for a button inside a drawer, e.g. "Continue shopping".' ],
                             'product_current' => [ 'type' => 'toggle', 'label' => 'Use this page\'s product', 'tab' => 'content', 'default' => false, 'pages' => [ 'product' ],
                                     'show_if' => [ 'click_action' => [ 'add_to_cart', 'buy_now' ] ],
                                     'help' => 'On the product page: the product being viewed, with the options the shopper chose.' ],
@@ -1856,7 +1870,7 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
             'cart_items' => [
-                    'label' => 'Cart Items', 'category' => 'dynamic', 'pages' => [ 'cart' ], 'icon' => 'cart',
+                    'label' => 'Cart Items', 'category' => 'dynamic', 'pages' => [ 'cart', 'drawer_cart' ], 'icon' => 'cart',
                     'fields' => [
                             'empty_text' => [ 'type' => 'text', 'label' => 'Text when the cart is empty', 'tab' => 'content', 'default' => '', 'placeholder' => 'Your cart is empty.' ],
                             'link_text'  => [ 'type' => 'text', 'label' => 'Link to the shop', 'tab' => 'content', 'default' => '', 'placeholder' => 'Go to shop' ],
@@ -1864,14 +1878,52 @@ abstract class Shop_Builder_Constants {
                     ] + self::CART_CARD_FIELD,
             ],
             'cart_totals' => [
-                    'label' => 'Cart Totals', 'category' => 'dynamic', 'pages' => [ 'cart' ], 'icon' => 'products',
+                    'label' => 'Cart Totals', 'category' => 'dynamic', 'pages' => [ 'cart', 'drawer_cart' ], 'icon' => 'products',
                     'fields' => [
                             'show_coupon'   => [ 'type' => 'toggle', 'label' => 'Coupon box', 'tab' => 'content', 'default' => true ],
                             'show_shipping' => [ 'type' => 'toggle', 'label' => 'Shipping choice', 'tab' => 'content', 'default' => true ],
                             'button_label'  => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Checkout' ],
+                            'view_cart'     => [ 'type' => 'toggle', 'label' => 'A "View cart" button too', 'tab' => 'content', 'default' => false,
+                                    'help' => 'Next to Checkout. Handy in the cart drawer.' ],
                             'button_bg'     => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
                             'button_text'   => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
                     ] + self::CART_CARD_FIELD,
+            ],
+
+            // How far the shopper's cart is from free shipping. Works on any page (the cart
+            // drawer, the cart page, a product page…). The automatic amount comes with the
+            // cart from the store (Qwoo_Cart_Extras: the free shipping minimum of the
+            // shopper's shipping zone).
+            'free_shipping_bar' => [
+                    'label' => 'Free Shipping Bar', 'category' => 'shop', 'icon' => 'shipping',
+                    'fields' => [
+                            'amount'      => [ 'type' => 'text', 'label' => 'Free Shipping From', 'tab' => 'content', 'default' => '', 'placeholder' => 'Automatic',
+                                    'help' => 'Empty: the minimum in your free shipping settings (Settings → Shipping). Type an amount (e.g. 200) to use another one.' ],
+                            'text_before' => [ 'type' => 'text', 'label' => 'Text Before Free Shipping', 'tab' => 'content', 'default' => 'Add {amount} more for free shipping',
+                                    'help' => '{amount} becomes what is still missing.' ],
+                            'text_done'   => [ 'type' => 'text', 'label' => 'Text Once Reached', 'tab' => 'content', 'default' => 'You get free shipping!' ],
+                            'hide_when_empty' => [ 'type' => 'toggle', 'label' => 'Hide while the cart is empty', 'tab' => 'content', 'default' => true ],
+                            'align'       => [ 'type' => 'select', 'label' => 'Text Alignment', 'tab' => 'style', 'group' => 'Text', 'default' => 'default', 'options' => self::ALIGN_OPTIONS ],
+                            'bar_color'   => [ 'type' => 'color', 'label' => 'Bar Color', 'tab' => 'style', 'group' => 'Bar', 'default' => 'global:secondary' ],
+                            'track_color' => [ 'type' => 'color', 'label' => 'Track Color', 'tab' => 'style', 'group' => 'Bar', 'help' => 'The empty part of the bar. Empty: a light grey.' ],
+                            'bar_height'  => [ 'type' => 'length', 'label' => 'Bar Height', 'tab' => 'style', 'group' => 'Bar', 'placeholder' => '6px' ],
+                            'bar_radius'  => [ 'type' => 'length', 'label' => 'Bar Corner Radius', 'tab' => 'style', 'group' => 'Bar', 'placeholder' => '99px' ],
+                            'ts:text'     => [ 'type' => 'text_style', 'label' => 'Text' ],
+                    ],
+            ],
+
+            // The shopper's wishlist (saved in the browser): for the wishlist drawer, or any page.
+            'wishlist_items' => [
+                    'label' => 'Wishlist Items', 'category' => 'shop', 'icon' => 'heart',
+                    'fields' => [
+                            'empty_text'  => [ 'type' => 'text', 'label' => 'Text when the wishlist is empty', 'tab' => 'content', 'default' => '', 'placeholder' => 'Your wishlist is empty.' ],
+                            'show_add'    => [ 'type' => 'toggle', 'label' => 'An "Add to cart" button on each item', 'tab' => 'content', 'default' => true ],
+                            'add_label'   => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Add to Cart', 'show_if' => [ 'show_add' => true ] ],
+                            'show_price'  => [ 'type' => 'toggle', 'label' => 'Show the price', 'tab' => 'content', 'default' => true ],
+                            'image_size'  => [ 'type' => 'length', 'label' => 'Image Size', 'tab' => 'style', 'group' => 'Items', 'placeholder' => '70px' ],
+                            'divider_color' => [ 'type' => 'color', 'label' => 'Line Between Items', 'tab' => 'style', 'group' => 'Items', 'help' => 'Empty: no line.' ],
+                            'ts:name'     => [ 'type' => 'text_style', 'label' => 'Product Names' ],
+                    ],
             ],
 
             'checkout_title' => [
@@ -2375,11 +2427,17 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
 
+            // `holds` 'tabs': with "Blocks" content, each tab is an inner section in the
+            // block's own `blocks` (its label is the tab's title). See holds_blocks().
             'tabs' => [
                     'label'    => 'Tabs',
                     'category' => 'interactive',
+                    'holds'    => 'tabs',
                     'fields'   => [
-                            'items' => [ 'type' => 'repeater', 'label' => 'Tabs', 'tab' => 'content', 'max_items' => 10,
+                            'content_type' => [ 'type' => 'select', 'label' => 'Tab Content', 'tab' => 'content', 'default' => 'text',
+                                    'options' => [ 'text' => 'Text', 'blocks' => 'Blocks (build each tab from blocks)' ],
+                                    'help' => 'Blocks: each tab holds any blocks, e.g. a menu, products or images.' ],
+                            'items' => [ 'type' => 'repeater', 'label' => 'Tabs', 'tab' => 'content', 'max_items' => 10, 'show_if' => [ 'content_type' => 'text' ],
                                     'require' => 'title', 'title_field' => 'title', 'item_label' => 'Tab', 'add_label' => '+ Add Tab',
                                     'fields' => [
                                             'title'   => [ 'type' => 'text', 'label' => 'Tab Title' ],
@@ -2436,11 +2494,12 @@ abstract class Shop_Builder_Constants {
                             'query_type'   => [ 'type' => 'select', 'label' => 'Show', 'tab' => 'content', 'default' => 'newest', 'options' => self::PRODUCT_QUERY_TYPES ],
                             'category_ids' => [ 'type' => 'categories', 'label' => 'Categories', 'tab' => 'content', 'show_if' => [ 'query_type' => 'category' ] ],
                             'tag_ids'      => [ 'type' => 'tags', 'label' => 'Tags', 'tab' => 'content', 'show_if' => [ 'query_type' => 'tag' ] ],
-                            'product_ids'  => [ 'type' => 'products', 'label' => 'Products', 'tab' => 'content', 'show_if' => [ 'query_type' => 'manual' ] ],
+                            'product_ids'  => [ 'type' => 'products', 'label' => 'Products', 'tab' => 'content', 'show_if' => [ 'query_type' => [ 'manual', 'cart' ] ],
+                                    'help' => 'With "Suggestions for the cart": shown when the cart\'s products have no suggestions of their own (Products → Linked products).' ],
                             'exclude_current' => [ 'type' => 'toggle', 'label' => 'Leave out this page\'s product', 'tab' => 'content', 'default' => true, 'pages' => [ 'product' ],
                                     'help' => 'On the product page: the product being viewed isn\'t shown in this list.' ],
                             'limit'        => [ 'type' => 'number', 'label' => 'Number of Products', 'tab' => 'content', 'min' => 1, 'max' => 24, 'default' => 8,
-                                    'show_if' => [ 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag' ] ] ],
+                                    'show_if' => [ 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag', 'cart' ] ] ],
                             'hide_out_of_stock' => [ 'type' => 'toggle', 'label' => 'Hide out-of-stock products', 'tab' => 'content' ],
                             'columns'      => [ 'type' => 'number', 'label' => 'Columns', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
                                     'default' => [ 'desktop' => 4, 'tablet' => 3, 'mobile' => 2 ] ],
@@ -2503,11 +2562,12 @@ abstract class Shop_Builder_Constants {
                                     'show_if' => [ 'source' => 'categories' ],
                                     'help' => 'Leave empty to show all top-level categories (that have products).' ],
                             'tag_ids'      => [ 'type' => 'tags', 'label' => 'Tags', 'tab' => 'content', 'show_if' => [ 'source' => 'products', 'query_type' => 'tag' ] ],
-                            'product_ids'  => [ 'type' => 'products', 'label' => 'Products', 'tab' => 'content', 'show_if' => [ 'source' => 'products', 'query_type' => 'manual' ] ],
+                            'product_ids'  => [ 'type' => 'products', 'label' => 'Products', 'tab' => 'content', 'show_if' => [ 'source' => 'products', 'query_type' => [ 'manual', 'cart' ] ],
+                                    'help' => 'With "Suggestions for the cart": shown when the cart\'s products have no suggestions of their own (Products → Linked products).' ],
                             'exclude_current' => [ 'type' => 'toggle', 'label' => 'Leave out this page\'s product', 'tab' => 'content', 'default' => true, 'pages' => [ 'product' ], 'show_if' => [ 'source' => 'products' ],
                                     'help' => 'On the product page: the product being viewed isn\'t shown in this list.' ],
                             'limit'        => [ 'type' => 'number', 'label' => 'Number of Products', 'tab' => 'content', 'min' => 1, 'max' => 24, 'default' => 8,
-                                    'show_if' => [ 'source' => 'products', 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag' ] ] ],
+                                    'show_if' => [ 'source' => 'products', 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag', 'cart' ] ] ],
                             'hide_out_of_stock' => [ 'type' => 'toggle', 'label' => 'Hide out-of-stock products', 'tab' => 'content', 'show_if' => [ 'source' => 'products' ] ],
                             'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Loop Template', 'tab' => 'content', 'default' => '',
                                     'show_if' => [ 'source' => 'products' ] ],
@@ -2693,9 +2753,13 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
 
+            // `holds` 'drawer': with "Built from blocks", the drawer's sections are the
+            // block's own `blocks` (Store builder → the widget → Edit the drawer).
             'menu_widget' => [
                     'label'    => 'Menu',
                     'category' => 'basic',
+                    'holds'    => 'drawer',
+                    'drawer'   => 'menu',
                     'fields'   => [
                             'menu_id' => [
                                     'type'    => 'menu',
@@ -2712,8 +2776,10 @@ abstract class Shop_Builder_Constants {
                                     'options'     => [
                                             'horizontal' => 'Horizontal (Navbar)',
                                             'vertical'   => 'Vertical (List)',
+                                            'folding'    => 'Folding list (sub-items open on tap)',
                                     ],
                                     'default'     => 'horizontal',
+                                    'help'        => 'Folding list: like the phone menu, for a drawer or a side column.',
                             ],
                             'alignment' => [
                                     'type'        => 'select',
@@ -2763,11 +2829,16 @@ abstract class Shop_Builder_Constants {
                                     'help' => 'A small square image or SVG. It keeps its own colors.' ],
                             'label'       => [ 'type' => 'text', 'label' => 'Text Next to the Icon', 'tab' => 'content', 'placeholder' => 'e.g. Menu', 'show_if' => [ 'enable_mobile_menu' => true ],
                                     'help' => 'Optional. Leave empty to show only the icon.' ],
+                            'drawer_content' => [ 'type' => 'select', 'label' => 'Drawer Content', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'standard', 'show_if' => [ 'enable_mobile_menu' => true ],
+                                    'options' => self::DRAWER_CONTENT_OPTIONS, 'drawer_edit' => true,
+                                    'help' => 'Built from blocks: tabs, menus, buttons, images… "Edit the drawer" opens it.' ],
                             'drawer_title' => [ 'type' => 'text', 'label' => 'Drawer Title', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'Menu', 'show_if' => [ 'enable_mobile_menu' => true ],
                                     'help' => 'Leave empty for no title.' ],
+                            'drawer_width' => [ 'type' => 'length', 'label' => 'Drawer Width', 'tab' => 'style', 'group' => 'Drawer', 'placeholder' => '300px', 'show_if' => [ 'enable_mobile_menu' => true ],
+                                    'help' => 'Never wider than the screen.' ],
                             'drawer_bg'    => [ 'type' => 'color', 'label' => 'Drawer Background', 'tab' => 'style', 'group' => 'Drawer', 'show_if' => [ 'enable_mobile_menu' => true ] ],
                             'drawer_text_color' => [ 'type' => 'color', 'label' => 'Drawer Text Color', 'tab' => 'style', 'group' => 'Drawer', 'show_if' => [ 'enable_mobile_menu' => true ] ],
-                            'drawer_show_languages' => [ 'type' => 'toggle', 'label' => 'Show the language switcher in the drawer', 'tab' => 'content', 'group' => 'Drawer', 'default' => true, 'show_if' => [ 'enable_mobile_menu' => true ] ],
+                            'drawer_show_languages' => [ 'type' => 'toggle', 'label' => 'Show the language switcher in the drawer', 'tab' => 'content', 'group' => 'Drawer', 'default' => true, 'show_if' => [ 'enable_mobile_menu' => true, 'drawer_content' => 'standard' ] ],
                             'drawer_show_notifications' => [ 'type' => 'toggle', 'label' => 'Offer push notifications in the drawer', 'tab' => 'content', 'group' => 'Drawer', 'default' => true, 'show_if' => [ 'enable_mobile_menu' => true ] ],
                             'swipe'        => [ 'type' => 'select', 'label' => 'Open by Swiping (Phones)', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'auto',
                                     'options' => self::SWIPE_OPTIONS, 'show_if' => [ 'enable_mobile_menu' => true ], 'swipe' => true,
@@ -2817,6 +2888,8 @@ abstract class Shop_Builder_Constants {
         'mini_cart' => [
             'label'    => 'Mini Cart',
             'category' => 'basic',
+            'holds'    => 'drawer',
+            'drawer'   => 'cart',
             'fields'   => [
                             'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'cart', 'default' => 'cart' ],
                             'custom_icon' => [ 'type' => 'image', 'label' => 'Your Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],
@@ -2827,8 +2900,13 @@ abstract class Shop_Builder_Constants {
                             'click_action'    => [ 'type' => 'select', 'label' => 'When Clicked', 'tab' => 'content', 'default' => 'drawer',
                                     'options' => [ 'drawer' => 'Open the cart drawer', 'page' => 'Go to the cart page' ] ],
                             'hide_when_empty' => [ 'type' => 'toggle', 'label' => 'Hide while the cart is empty', 'tab' => 'content' ],
+                            'drawer_content' => [ 'type' => 'select', 'label' => 'Drawer Content', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'standard', 'show_if' => [ 'click_action' => 'drawer' ],
+                                    'options' => self::DRAWER_CONTENT_OPTIONS, 'drawer_edit' => true,
+                                    'help' => 'Built from blocks: the cart items, a free shipping bar, suggestions, totals… "Edit the drawer" opens it.' ],
                             'drawer_title' => [ 'type' => 'text', 'label' => 'Drawer Title', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'Cart', 'show_if' => [ 'click_action' => 'drawer' ],
                                     'help' => 'Leave empty for no title.' ],
+                            'drawer_width' => [ 'type' => 'length', 'label' => 'Drawer Width', 'tab' => 'style', 'group' => 'Drawer', 'placeholder' => '300px', 'show_if' => [ 'click_action' => 'drawer' ],
+                                    'help' => 'Never wider than the screen.' ],
                             'swipe'        => [ 'type' => 'select', 'label' => 'Open by Swiping (Phones)', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'auto',
                                     'options' => self::SWIPE_OPTIONS, 'show_if' => [ 'click_action' => 'drawer' ], 'swipe' => true,
                                     'help' => 'Automatic: the menu from the start side of the screen (left in English, right in Hebrew), the cart and wishlist from the other side. One drawer per edge: the first in the header wins.' ],
@@ -2877,6 +2955,8 @@ abstract class Shop_Builder_Constants {
         'mini_wishlist' => [
             'label'    => 'Mini Wishlist',
             'category' => 'basic',
+            'holds'    => 'drawer',
+            'drawer'   => 'wishlist',
             'fields'   => [
                             'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'wishlist', 'default' => 'heart_outline' ],
                             'custom_icon' => [ 'type' => 'image', 'label' => 'Your Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],
@@ -2884,8 +2964,13 @@ abstract class Shop_Builder_Constants {
                             'label'       => [ 'type' => 'text', 'label' => 'Text Next to the Icon', 'tab' => 'content', 'placeholder' => 'e.g. Wishlist',
                                     'help' => 'Optional. Leave empty to show only the icon.' ],
                             'hide_when_empty' => [ 'type' => 'toggle', 'label' => 'Hide while the wishlist is empty', 'tab' => 'content' ],
+                            'drawer_content' => [ 'type' => 'select', 'label' => 'Drawer Content', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'standard',
+                                    'options' => self::DRAWER_CONTENT_OPTIONS, 'drawer_edit' => true,
+                                    'help' => 'Built from blocks: the wishlist, an "Add all to cart" button, suggestions… "Edit the drawer" opens it.' ],
                             'drawer_title' => [ 'type' => 'text', 'label' => 'Drawer Title', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'Wishlist',
                                     'help' => 'Leave empty for no title.' ],
+                            'drawer_width' => [ 'type' => 'length', 'label' => 'Drawer Width', 'tab' => 'style', 'group' => 'Drawer', 'placeholder' => '300px',
+                                    'help' => 'Never wider than the screen.' ],
                             'swipe'        => [ 'type' => 'select', 'label' => 'Open by Swiping (Phones)', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'none',
                                     'options' => self::SWIPE_OPTIONS, 'swipe' => true,
                                     'help' => 'Automatic: the menu from the start side of the screen (left in English, right in Hebrew), the cart and wishlist from the other side. One drawer per edge: the first in the header wins.' ],
@@ -3188,5 +3273,26 @@ abstract class Shop_Builder_Constants {
     /** Returns the schema entry (label + fields) for a block type, or null. */
     public static function get_type_schema( $type ) {
         return self::block_schema()[ $type ] ?? null;
+    }
+
+    /**
+     * Whether a block (not a section) keeps inner sections in its own `blocks`:
+     * the Tabs block (one per tab) and the header widgets' drawers. Every walker
+     * that goes into a section's blocks goes into these too.
+     */
+    public static function holds_blocks( $type ) {
+        return $type !== 'section' && ! empty( self::get_type_schema( (string) $type )['holds'] );
+    }
+
+    /**
+     * Whether a holding block's inner sections are in use (published): a Tabs
+     * block with "Blocks" content, a drawer "Built from blocks". They're kept while
+     * off, so switching back loses nothing.
+     */
+    public static function held_blocks_used( $type, array $data ) {
+        $holds = (string) ( self::get_type_schema( (string) $type )['holds'] ?? '' );
+        if ( $holds === 'tabs' ) return ( $data['content_type'] ?? 'text' ) === 'blocks';
+        if ( $holds === 'drawer' ) return ( $data['drawer_content'] ?? 'standard' ) === 'blocks';
+        return false;
     }
 }

@@ -106,6 +106,8 @@ trait SB_Admin_Fields {
             if ( $schema ) self::collect_field_refs( $schema['fields'], $block['data'] ?? [], $refs );
             // Block background image / video / poster.
             self::collect_field_refs( self::BLOCK_COMMON_FIELDS, $block['style'] ?? [], $refs );
+            // Tabs with blocks, a drawer built from blocks.
+            if ( self::holds_blocks( $block['type'] ?? '' ) ) self::collect_block_refs( (array) ( $block['blocks'] ?? [] ), $refs );
         }
     }
 

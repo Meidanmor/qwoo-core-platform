@@ -465,6 +465,12 @@ trait SB_Sanitizers {
             } else {
                 $row['style'] = self::sanitize_fields( self::BLOCK_COMMON_FIELDS, $block['style'] ?? [] );
                 $row['data']  = self::post_sanitize_block_data( $type, self::sanitize_fields( $schema['fields'], $block['data'] ?? [] ) );
+                // Tabs with blocks, a drawer built from blocks: its inner sections, at the level
+                // of an inner section placed next to the block (the dashboard counts them so too).
+                if ( self::holds_blocks( $type ) && is_array( $block['blocks'] ?? null ) ) {
+                    $held = array_values( array_filter( $block['blocks'], static fn( $b ) => is_array( $b ) && ( $b['type'] ?? '' ) === 'section' ) );
+                    $row['blocks'] = $this->sanitize_blocks( array_slice( $held, 0, self::MAX_HELD_SECTIONS ), $depth );
+                }
             }
 
             $clean[] = $row;
@@ -669,8 +675,11 @@ trait SB_Sanitizers {
         }
     }
 
-    /** Recursively converts a blocks list to public shape (disabled blocks dropped). */
-    private static function output_blocks( array $blocks, callable $image_cb ) {
+    /**
+     * Recursively converts a blocks list to public shape (disabled blocks dropped).
+     * $labels: sections keep their name (a Tabs block's tabs: the name is the tab's title).
+     */
+    private static function output_blocks( array $blocks, callable $image_cb, $labels = false ) {
         $out = [];
         foreach ( $blocks as $block ) {
             if ( empty( $block['enabled'] ) ) continue;
@@ -681,6 +690,7 @@ trait SB_Sanitizers {
             $row = [ 'id' => $block['id'], 'type' => $type, 'enabled' => true ];
 
             if ( $type === 'section' ) {
+                if ( $labels ) $row['label'] = (string) ( $block['label'] ?? '' );
                 $row['style']  = self::output_fields( self::SECTION_STYLE_FIELDS, $block['style'] ?? [], $image_cb );
                 $row['blocks'] = self::output_blocks( $block['blocks'] ?? [], $image_cb );
             } else {
@@ -690,6 +700,10 @@ trait SB_Sanitizers {
                 $card = self::published_card( $type, (array) ( $block['data'] ?? [] ) );
                 if ( $card !== null ) $row['data']['card'] = $card;
                 self::add_inline_svgs( $type, (array) ( $block['data'] ?? [] ), $row['data'] );
+                // Tabs with blocks, a drawer built from blocks: its sections (only while in use).
+                if ( self::holds_blocks( $type ) && self::held_blocks_used( $type, (array) ( $block['data'] ?? [] ) ) ) {
+                    $row['blocks'] = self::output_blocks( (array) ( $block['blocks'] ?? [] ), $image_cb, ( $schema['holds'] ?? '' ) === 'tabs' );
+                }
             }
             $out[] = $row;
         }

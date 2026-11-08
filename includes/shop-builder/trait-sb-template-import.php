@@ -616,24 +616,32 @@ trait SB_Template_Import {
             if ( ! is_array( $block ) || empty( $block['id'] ) ) continue;
             $type = $block['type'] ?? '';
             if ( $type === 'section' ) {
-                $out[] = [
+                $row = [
                     'id'      => $block['id'],
                     'type'    => 'section',
                     'enabled' => true,
                     'style'   => self::reverse_fields( self::SECTION_STYLE_FIELDS, $block['style'] ?? [], $map ),
                     'blocks'  => self::reverse_blocks( $block['blocks'] ?? [], $map ),
                 ];
+                // A Tabs block's tab: its name is the tab's title.
+                if ( isset( $block['label'] ) && is_string( $block['label'] ) ) $row['label'] = $block['label'];
+                $out[] = $row;
                 continue;
             }
             $schema = self::get_type_schema( $type );
             if ( ! $schema ) continue;
-            $out[] = [
+            $row = [
                 'id'      => $block['id'],
                 'type'    => $type,
                 'enabled' => true,
                 'style'   => self::reverse_fields( self::BLOCK_COMMON_FIELDS, $block['style'] ?? [], $map ),
                 'data'    => self::reverse_fields( $schema['fields'], $block['data'] ?? [], $map ),
             ];
+            // Tabs with blocks, a drawer built from blocks.
+            if ( self::holds_blocks( $type ) && is_array( $block['blocks'] ?? null ) ) {
+                $row['blocks'] = self::reverse_blocks( $block['blocks'], $map );
+            }
+            $out[] = $row;
         }
         return $out;
     }

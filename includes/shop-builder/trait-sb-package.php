@@ -115,6 +115,10 @@ trait SB_Package {
                 $schema = self::get_type_schema( $block['type'] ?? '' );
                 if ( $schema ) $block['data'] = self::package_walk_fields( $schema['fields'], $block['data'] ?? [], $map );
                 $block['style'] = self::package_walk_fields( self::BLOCK_COMMON_FIELDS, $block['style'] ?? [], $map );
+                // Tabs with blocks, a drawer built from blocks.
+                if ( self::holds_blocks( $block['type'] ?? '' ) && is_array( $block['blocks'] ?? null ) ) {
+                    $block['blocks'] = self::package_walk_blocks( $block['blocks'], $map );
+                }
             }
             $blocks[ $i ] = $block;
         }

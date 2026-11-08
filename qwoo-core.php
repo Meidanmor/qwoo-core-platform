@@ -126,6 +126,7 @@ require_once QWOO_PATH . 'includes/trait-platform-package.php';
 require_once QWOO_PATH . 'includes/class-blog.php';
 require_once QWOO_PATH . 'includes/class-blog-authors.php';
 require_once QWOO_PATH . 'includes/class-checkout-extras.php';
+require_once QWOO_PATH . 'includes/class-cart-extras.php';
 require_once QWOO_PATH . 'includes/class-account-signup.php';
 require_once QWOO_PATH . 'includes/class-social-login.php';
 require_once QWOO_PATH . 'includes/class-store-visibility.php';

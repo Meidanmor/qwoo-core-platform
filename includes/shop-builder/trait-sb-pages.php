@@ -374,6 +374,11 @@ trait SB_Pages {
                     $walk( (array) ( $block['blocks'] ?? [] ) );
                     continue;
                 }
+                // A Tabs block's tabs built from blocks (a drawer isn't the page's text).
+                if ( ( $block['type'] ?? '' ) === 'tabs' && self::held_blocks_used( 'tabs', (array) ( $block['data'] ?? [] ) ) ) {
+                    $walk( (array) ( $block['blocks'] ?? [] ) );
+                    continue;
+                }
                 foreach ( [ 'text', 'description', 'subtitle', 'content' ] as $field ) {
                     if ( ! empty( $block['data'][ $field ] ) && is_string( $block['data'][ $field ] ) ) {
                         $text[] = $block['data'][ $field ];

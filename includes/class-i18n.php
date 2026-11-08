@@ -242,6 +242,9 @@ class Qwoo_I18n {
         'Seconds'                                                                                   => 'שניות',
         'This offer has ended.'                                                                     => 'המבצע הסתיים.',
         'View all'                                                                                  => 'לכל המוצרים',
+        // Free Shipping Bar: its starting texts.
+        'Add {amount} more for free shipping'                                                       => 'עוד {amount} למשלוח חינם',
+        'You get free shipping!'                                                                    => 'קיבלתם משלוח חינם!',
         // Card designs (loop templates): the blocks' starting texts.
         'Add to cart'                                                                               => 'הוספה לעגלה',
         'Choose options'                                                                            => 'בחירת אפשרויות',
