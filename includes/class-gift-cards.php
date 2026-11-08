@@ -63,6 +63,12 @@ class Qwoo_Gift_Cards {
         add_action( 'woocommerce_before_calculate_totals', [ __CLASS__, 'set_prices' ], 20 );
         add_filter( 'woocommerce_get_item_data', [ __CLASS__, 'item_data' ], 10, 2 );
         add_filter( 'woocommerce_store_api_product_quantity_maximum', [ __CLASS__, 'one_each' ], 10, 3 );
+        // A gift card has no category (WooCommerce puts "Uncategorized" back on every save).
+        add_action( 'woocommerce_new_product', [ __CLASS__, 'no_category' ], 20 );
+        add_action( 'woocommerce_update_product', [ __CLASS__, 'no_category' ], 20 );
+        // The owner can keep gift cards out of product lists (shop, grids, search).
+        add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'mark_product_list' ], 10, 3 );
+        add_action( 'pre_get_posts', [ __CLASS__, 'hide_from_lists' ] );
         // Product grids show "Choose options": a gift card is bought on its own page, with its details.
         add_filter( 'woocommerce_product_has_options', static fn( $has, $product = null ) => $has || ( $product instanceof WC_Product && self::is_gift( $product ) ), 10, 2 );
         add_filter( 'woocommerce_coupon_is_valid_for_product', [ __CLASS__, 'coupon_for_product' ], 20, 2 );
@@ -246,6 +252,8 @@ class Qwoo_Gift_Cards {
             'palette'   => self::COLORS,
             'images'    => [],
             'own_photo' => true,
+            'preview'   => 'replace',
+            'in_lists'  => true,
         ];
     }
 
@@ -334,6 +342,9 @@ class Qwoo_Gift_Cards {
             'palette'   => $palette,
             'images'    => array_values( array_unique( $images ) ),
             'own_photo' => ! empty( $in['own_photo'] ),
+            // Where the email's preview shows on computers: in place of the photos, or under them.
+            'preview'   => ( $in['preview'] ?? '' ) === 'below' ? 'below' : 'replace',
+            'in_lists'  => ! array_key_exists( 'in_lists', $in ) || ! empty( $in['in_lists'] ),
         ];
     }
 
@@ -368,6 +379,43 @@ class Qwoo_Gift_Cards {
         $product->set_sale_price( '' );
         $product->save();
         if ( $rules !== null ) update_option( self::RULES, $rules, false );
+        self::remember_hidden();
+    }
+
+    /** Gift card products kept out of product lists, for hide_from_lists(). */
+    private static function remember_hidden(): void {
+        $hidden = [];
+        foreach ( self::gift_products() as $id ) {
+            $s = self::settings( $id );
+            if ( $s && empty( $s['in_lists'] ) ) $hidden[] = (int) $id;
+        }
+        update_option( 'qwoo_gc_hidden', $hidden, true );
+    }
+
+    public static function no_category( $product_id ) {
+        if ( ! self::is_gift( $product_id ) || ! wp_get_object_terms( (int) $product_id, 'product_cat', [ 'fields' => 'ids' ] ) ) return;
+        // WooCommerce puts the default category back whenever a product is left without one.
+        $force = has_action( 'set_object_terms', [ 'WC_Post_Data', 'force_default_term' ] );
+        if ( $force !== false ) remove_action( 'set_object_terms', [ 'WC_Post_Data', 'force_default_term' ], $force );
+        wp_set_object_terms( (int) $product_id, [], 'product_cat' );
+        if ( $force !== false ) add_action( 'set_object_terms', [ 'WC_Post_Data', 'force_default_term' ], $force, 5 );
+        wc_delete_product_transients( (int) $product_id );
+    }
+
+    /** True while the Store API lists products (not one product, not chosen ids). */
+    private static $listing = false;
+
+    public static function mark_product_list( $response, $handler, $request ) {
+        if ( $request instanceof WP_REST_Request && $request->get_route() === '/wc/store/v1/products' && ! $request->get_param( 'include' ) && ! $request->get_param( 'slug' ) ) {
+            self::$listing = true;
+        }
+        return $response;
+    }
+
+    public static function hide_from_lists( $query ) {
+        if ( ! self::$listing || ! $query instanceof WP_Query || ( $query->get( 'post_type' ) !== 'product' && ! in_array( 'product', (array) $query->get( 'post_type' ), true ) ) ) return;
+        $hidden = array_filter( array_map( 'intval', (array) get_option( 'qwoo_gc_hidden', [] ) ) );
+        if ( $hidden ) $query->set( 'post__not_in', array_merge( (array) $query->get( 'post__not_in' ), $hidden ) );
     }
 
     /** For the product editor: the settings, the store-wide rules and the cards sold. */
@@ -427,6 +475,8 @@ class Qwoo_Gift_Cards {
             'images'    => $images,
             'own_photo' => (bool) $s['own_photo'],
             'max_message' => self::MAX_MESSAGE,
+            'preview'   => $s['preview'] === 'below' ? 'below' : 'replace',
+            'timezone'  => wp_timezone_string(),
         ];
     }
 
@@ -446,14 +496,18 @@ class Qwoo_Gift_Cards {
         $from    = mb_substr( sanitize_text_field( (string) ( $in['from'] ?? '' ) ), 0, 80 );
         $message = mb_substr( sanitize_textarea_field( (string) ( $in['message'] ?? '' ) ), 0, self::MAX_MESSAGE );
         $send    = (string) ( $in['send_on'] ?? '' );
+        $time    = (string) ( $in['send_time'] ?? '09:00' );
+        if ( ! preg_match( '/^([01]\d|2[0-3]):(00|30)$/', $time ) ) $time = '09:00';
         if ( $send !== '' ) {
             $date  = DateTime::createFromFormat( '!Y-m-d', $send, wp_timezone() );
             $today = new DateTime( 'today', wp_timezone() );
             if ( ! $date || $date->format( 'Y-m-d' ) !== $send || $date < $today || $date > ( clone $today )->modify( '+1 year' ) ) {
                 return new WP_Error( 'gc', self::l( 'Choose a send date from today to a year from now.', 'צריך לבחור תאריך שליחה מהיום ועד שנה מהיום.' ) );
             }
-            if ( $date->format( 'Y-m-d' ) === $today->format( 'Y-m-d' ) ) $send = '';
+            // A time that already passed today: right away.
+            if ( self::send_moment( $send, $time ) <= time() ) $send = '';
         }
+        if ( $send === '' ) $time = '';
         $designs = array_column( array_filter( (array) $s['designs'], static fn( $d ) => ! empty( $d['on'] ) ), null, 'id' );
         $design  = (string) ( $in['design'] ?? '' );
         if ( ! isset( $designs[ $design ] ) ) $design = (string) array_key_first( $designs );
@@ -475,6 +529,7 @@ class Qwoo_Gift_Cards {
             'from'     => $from,
             'message'  => $message,
             'send_on'  => $send,
+            'send_time' => $time,
             'design'   => $design,
             'color'    => $color,
             'image'    => $image,
@@ -517,10 +572,23 @@ class Qwoo_Gift_Cards {
         return $product instanceof WC_Product && self::is_gift( $product ) ? 1 : $max;
     }
 
-    private static function send_label( string $date ): string {
+    /** When a card dated $date at $time (store time) goes out; 09:00 when no time was chosen. */
+    public static function send_moment( string $date, string $time = '' ): int {
+        $d = DateTime::createFromFormat( 'Y-m-d H:i', $date . ' ' . ( preg_match( '/^\d\d:\d\d$/', $time ) ? $time : '09:00' ), wp_timezone() );
+        return $d ? $d->getTimestamp() : time();
+    }
+
+    private static function send_label( string $date, string $time = '' ): string {
         if ( $date === '' ) return self::l( 'Right after payment', 'מיד אחרי התשלום' );
-        $d = DateTime::createFromFormat( '!Y-m-d', $date, wp_timezone() );
-        return $d ? wp_date( get_option( 'date_format' ), $d->getTimestamp() ) : $date;
+        return wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), self::send_moment( $date, $time ) );
+    }
+
+    private static function design_name( $product_id, string $id ): string {
+        $s = self::settings( (int) $product_id ) ?? self::defaults();
+        foreach ( (array) $s['designs'] as $d ) {
+            if ( $d['id'] === $id ) return (string) $d['name'];
+        }
+        return $id;
     }
 
     public static function item_data( $data, $item ) {
@@ -528,7 +596,8 @@ class Qwoo_Gift_Cards {
         if ( ! is_array( $g ) ) return $data;
         $data[] = [ 'key' => self::l( 'To', 'אל' ), 'value' => $g['to_name'] . ' (' . $g['to_email'] . ')' ];
         if ( $g['from'] !== '' ) $data[] = [ 'key' => self::l( 'From', 'מאת' ), 'value' => $g['from'] ];
-        $data[] = [ 'key' => self::l( 'Sends', 'נשלח' ), 'value' => self::send_label( (string) $g['send_on'] ) ];
+        $data[] = [ 'key' => self::l( 'Sends', 'נשלח' ), 'value' => self::send_label( (string) $g['send_on'], (string) ( $g['send_time'] ?? '' ) ) ];
+        if ( ( $g['message'] ?? '' ) !== '' ) $data[] = [ 'key' => self::l( 'Message', 'הודעה' ), 'value' => $g['message'] ];
         return $data;
     }
 
@@ -536,7 +605,12 @@ class Qwoo_Gift_Cards {
     public static function cart_item_ext( $item ): array {
         $g = is_array( $item ) ? ( $item[ self::ITEM ] ?? null ) : null;
         if ( ! is_array( $g ) ) return [];
-        return [ 'key' => $g['key'], 'to_name' => $g['to_name'], 'to_email' => $g['to_email'], 'from' => $g['from'], 'send_on' => $g['send_on'], 'amount' => (float) $g['amount'] ];
+        return [
+            'key' => $g['key'], 'to_name' => $g['to_name'], 'to_email' => $g['to_email'], 'from' => $g['from'], 'message' => (string) ( $g['message'] ?? '' ),
+            'send_on' => $g['send_on'], 'send_time' => (string) ( $g['send_time'] ?? '' ), 'amount' => (float) $g['amount'],
+            'design' => (string) $g['design'], 'design_name' => self::design_name( $item['product_id'] ?? 0, (string) $g['design'] ),
+            'color' => (string) $g['color'], 'image' => (string) $g['image'], 'image_url' => self::image_url( (string) $g['image'] ),
+        ];
     }
 
     /** The cards paying for the cart: { applied: [ { code, last4, amount, balance } ], total } in minor units. */
@@ -653,7 +727,10 @@ class Qwoo_Gift_Cards {
         if ( ! is_array( $g ) ) return;
         $item->add_meta_data( self::ORDER_ITEM, $g, true );
         $item->add_meta_data( self::l( 'To', 'אל' ), $g['to_name'] . ' (' . $g['to_email'] . ')', true );
-        $item->add_meta_data( self::l( 'Sends', 'נשלח' ), self::send_label( (string) $g['send_on'] ), true );
+        $item->add_meta_data( self::l( 'Sends', 'נשלח' ), self::send_label( (string) $g['send_on'], (string) ( $g['send_time'] ?? '' ) ), true );
+        if ( ( $g['from'] ?? '' ) !== '' ) $item->add_meta_data( self::l( 'From', 'מאת' ), $g['from'], true );
+        if ( ( $g['message'] ?? '' ) !== '' ) $item->add_meta_data( self::l( 'Message', 'הודעה' ), $g['message'], true );
+        $item->add_meta_data( self::l( 'Design', 'עיצוב' ), self::design_name( $values['product_id'] ?? 0, (string) $g['design'] ), true );
     }
 
     public static function hide_item_meta( $meta, $item ) {
@@ -794,8 +871,8 @@ class Qwoo_Gift_Cards {
             $s       = self::settings( $item->get_product_id() ) ?? self::defaults();
             $send_at = self::now();
             if ( ! empty( $g['send_on'] ) ) {
-                $d = DateTime::createFromFormat( 'Y-m-d H:i', $g['send_on'] . ' 09:00', wp_timezone() );
-                if ( $d && $d->getTimestamp() > time() ) $send_at = gmdate( 'Y-m-d H:i:s', $d->getTimestamp() );
+                $at = self::send_moment( (string) $g['send_on'], (string) ( $g['send_time'] ?? '' ) );
+                if ( $at > time() ) $send_at = gmdate( 'Y-m-d H:i:s', $at );
             }
             $id = self::insert( [
                 'amount'       => (float) $g['amount'],
@@ -1310,8 +1387,9 @@ class Qwoo_Gift_Cards {
         $color   = sanitize_hex_color( (string) ( $p['color'] ?? '' ) ) ?: ( $s['palette'][0] ?? self::COLORS[0] );
         $send_at = self::now();
         $send    = (string) ( $p['send_on'] ?? '' );
+        $time    = preg_match( '/^([01]\d|2[0-3]):(00|30)$/', (string) ( $p['send_time'] ?? '' ) ) ? (string) $p['send_time'] : '09:00';
         if ( $send !== '' ) {
-            $d = DateTime::createFromFormat( 'Y-m-d H:i', $send . ' 09:00', wp_timezone() );
+            $d = DateTime::createFromFormat( 'Y-m-d H:i', $send . ' ' . $time, wp_timezone() );
             if ( ! $d || $d->format( 'Y-m-d' ) !== $send ) return new WP_Error( 'gc', 'Pick the send date from the calendar.' );
             if ( $d->getTimestamp() > time() ) $send_at = gmdate( 'Y-m-d H:i:s', $d->getTimestamp() );
         }
@@ -1371,11 +1449,12 @@ class Qwoo_Gift_Cards {
                 break;
             case 'send_on':
                 if ( $c['status'] !== 'scheduled' ) return new WP_Error( 'gc', 'This card was already sent.' );
-                $d = DateTime::createFromFormat( 'Y-m-d H:i', (string) ( $p['send_on'] ?? '' ) . ' 09:00', wp_timezone() );
+                $time = preg_match( '/^([01]\d|2[0-3]):(00|30)$/', (string) ( $p['send_time'] ?? '' ) ) ? (string) $p['send_time'] : '09:00';
+                $d = DateTime::createFromFormat( 'Y-m-d H:i', (string) ( $p['send_on'] ?? '' ) . ' ' . $time, wp_timezone() );
                 if ( ! $d ) return new WP_Error( 'gc', 'Pick the send date from the calendar.' );
                 $at = $d->getTimestamp() > time() ? gmdate( 'Y-m-d H:i:s', $d->getTimestamp() ) : $now;
                 $wpdb->update( $t, [ 'send_at' => $at, 'attempts' => 0, 'updated_at' => $now ], [ 'id' => $id ] );
-                self::log( $id, 'send_changed', null, 0, (string) $p['send_on'], $who );
+                self::log( $id, 'send_changed', null, 0, (string) $p['send_on'] . ' ' . $time, $who );
                 self::wake();
                 break;
             case 'balance':
