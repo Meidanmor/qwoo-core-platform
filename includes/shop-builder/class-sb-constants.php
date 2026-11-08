@@ -1976,6 +1976,13 @@ abstract class Shop_Builder_Constants {
                             'button_text'  => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
                     ],
             ],
+            // The customer's note for the order (WooCommerce's order note): the owner sees it on the order.
+            'checkout_note' => [
+                    'label' => 'Order Note', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'text',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Order Note' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + [
+                            'field_label' => [ 'type' => 'text', 'label' => 'Text in the Field', 'tab' => 'content', 'default' => '', 'placeholder' => 'Notes about your order, e.g. delivery instructions' ],
+                    ],
+            ],
             'checkout_items' => [
                     'label' => 'Cart Items', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'cart',
                     'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Your Cart' ] ] + self::CHECKOUT_CARD_FIELDS + [
