@@ -1034,6 +1034,44 @@ class Qwoo_Gift_Cards {
         register_rest_route( self::NS, '/giftcard/o', [ 'methods' => 'GET', 'callback' => [ __CLASS__, 'rest_open' ], 'permission_callback' => '__return_true' ] );
         register_rest_route( self::NS, '/giftcard/preview', [ 'methods' => 'GET', 'callback' => [ __CLASS__, 'rest_preview' ], 'permission_callback' => '__return_true' ] );
         register_rest_route( self::NS, '/giftcard/photo', [ 'methods' => 'POST', 'callback' => [ __CLASS__, 'rest_photo' ], 'permission_callback' => '__return_true' ] );
+        register_rest_route( self::NS, '/my-giftcards', [ 'methods' => 'GET', 'callback' => [ __CLASS__, 'rest_mine' ], 'permission_callback' => 'qwoo_require_login' ] );
+    }
+
+    /**
+     * My account → Gift cards: cards sent to the shopper's email (sent ones
+     * only) and cards they bought. Codes show only their last 4 characters:
+     * an account's email isn't proven to be theirs, the email with the code is.
+     */
+    public static function rest_mine() {
+        global $wpdb;
+        $user  = wp_get_current_user();
+        $email = strtolower( (string) $user->user_email );
+        $t     = self::cards_table();
+        $date  = static fn( $gmt ) => $gmt ? self::date_label( $gmt ) : '';
+        $money = static fn( $c, $v ) => html_entity_decode( wp_strip_all_tags( wc_price( (float) $v, [ 'currency' => $c['currency'] ?: get_woocommerce_currency() ] ) ), ENT_QUOTES );
+        $got   = $email !== '' ? (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE LOWER(to_email) = %s AND status <> 'scheduled' ORDER BY id DESC LIMIT 50", $email ), ARRAY_A ) : [];
+        $gave  = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE customer_id = %d AND customer_id > 0 ORDER BY id DESC LIMIT 50", (int) $user->ID ), ARRAY_A );
+        $res   = rest_ensure_response( [
+            'received' => array_map( static fn( $c ) => [
+                'last4'   => substr( $c['code'], -4 ),
+                'state'   => self::state( $c ),
+                'balance' => $money( $c, $c['balance'] ),
+                'amount'  => $money( $c, $c['amount'] ),
+                'from'    => (string) $c['from_name'],
+                'expires' => $date( $c['expires_at'] ),
+                'sent'    => $date( $c['sent_at'] ),
+            ], $got ),
+            'bought'   => array_map( static fn( $c ) => [
+                'to_name' => (string) $c['to_name'],
+                'amount'  => $money( $c, $c['amount'] ),
+                'order'   => (int) $c['order_id'],
+                'state'   => self::state( $c ),
+                'email'   => in_array( $c['email_status'], [ 'bounced', 'failed' ], true ) ? 'problem' : ( $c['status'] === 'scheduled' ? 'scheduled' : 'sent' ),
+                'when'    => $date( $c['sent_at'] ?: $c['send_at'] ),
+            ], $gave ),
+        ] );
+        $res->header( 'Cache-Control', 'no-store' );
+        return $res;
     }
 
     public static function rest_open( WP_REST_Request $r ) {
