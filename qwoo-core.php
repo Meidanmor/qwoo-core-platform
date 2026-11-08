@@ -104,6 +104,7 @@ require_once QWOO_PATH . 'includes/class-brand-fonts.php';
 require_once QWOO_PATH . 'includes/trait-platform-growth.php';
 require_once QWOO_PATH . 'includes/trait-platform-payments.php';
 require_once QWOO_PATH . 'includes/class-grow.php';
+require_once QWOO_PATH . 'includes/class-cardcom.php';
 require_once QWOO_PATH . 'includes/trait-platform-coupons.php';
 require_once QWOO_PATH . 'includes/trait-platform-attributes.php';
 require_once QWOO_PATH . 'includes/trait-platform-media.php';

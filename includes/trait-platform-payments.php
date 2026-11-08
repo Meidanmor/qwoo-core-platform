@@ -34,7 +34,18 @@ trait Qwoo_Platform_Payments {
         }
         // Grow (Israeli stores): the dashboard shows it instead of "Coming soon" once the store has it.
         $out['grow'] = Qwoo_Grow::dashboard_state();
+        // Cardcom (Israeli stores), the same way.
+        $out['cardcom'] = Qwoo_Cardcom::dashboard_state();
         return $out;
+    }
+
+    /** Cardcom's settings (Qwoo_Cardcom::save). The platform asks for the owner's password when the details change. */
+    private static function action_cardcom_save( array $params ) {
+        $error = Qwoo_Cardcom::save( $params );
+        if ( $error !== null ) {
+            return self::bad( $error );
+        }
+        return self::action_payments_get();
     }
 
     /** Grow's settings (Qwoo_Grow::save). The platform asks for the owner's password when the identifiers change. */
@@ -273,7 +284,8 @@ trait Qwoo_Platform_Payments {
         $config   = [ 'stripe' => null, 'methods' => [] ];
         $gateways = class_exists( 'WooCommerce' ) && WC()->payment_gateways() ? WC()->payment_gateways()->payment_gateways() : [];
         foreach ( $gateways as $id => $gateway ) {
-            $grow = strpos( (string) $id, 'grow_' ) === 0;
+            // Grow and Cardcom: one WooCommerce method per way to pay, shown only when it can take payments.
+            $grow = strpos( (string) $id, 'grow_' ) === 0 || strpos( (string) $id, 'cardcom_' ) === 0;
             if ( $gateway->enabled !== 'yes' || ( ! $grow && ! in_array( $id, [ 'stripe', 'cod', 'bacs' ], true ) ) ) {
                 continue;
             }
@@ -284,6 +296,12 @@ trait Qwoo_Platform_Payments {
                 'title'       => html_entity_decode( wp_strip_all_tags( (string) $gateway->get_title() ), ENT_QUOTES ),
                 'description' => wp_strip_all_tags( (string) $gateway->get_option( 'description' ) ),
             ];
+        }
+        // Cardcom's card page can open inside the checkout (the owner's choice).
+        foreach ( array_keys( Qwoo_Cardcom::METHODS ) as $key ) {
+            if ( isset( $config['methods'][ 'cardcom_' . $key ] ) ) {
+                $config['methods'][ 'cardcom_' . $key ]['display'] = Qwoo_Cardcom::display( $key );
+            }
         }
         if ( isset( $config['methods']['bacs'] ) ) {
             $config['methods']['bacs']['instructions'] = wp_strip_all_tags( (string) ( $gateways['bacs']->get_option( 'instructions' ) ) );

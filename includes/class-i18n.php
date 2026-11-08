@@ -226,6 +226,7 @@ class Qwoo_I18n {
         'Order #{n}'                                                                                => 'הזמנה {n}',
         'Shipping'                                                                                  => 'משלוח',
         'Item'                                                                                      => 'פריט',
+        'Customer'                                                                                  => 'לקוח',
         'This payment method isn\'t available right now. Choose another one.'                       => 'אמצעי התשלום הזה לא זמין כרגע. אפשר לבחור אמצעי אחר.',
         'Enter your first and last name to pay with {method}.'                                      => 'כדי לשלם ב{method} יש למלא שם פרטי ושם משפחה.',
         'Enter an Israeli mobile number (05…) to pay with {method}.'                                 => 'כדי לשלם ב{method} יש למלא מספר נייד ישראלי (05…).',
