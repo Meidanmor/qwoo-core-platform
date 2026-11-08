@@ -89,6 +89,7 @@ require_once QWOO_PATH . 'includes/class-webhooks.php';
 require_once QWOO_PATH . 'includes/class-email-render.php';
 require_once QWOO_PATH . 'includes/class-store-emails.php';
 require_once QWOO_PATH . 'includes/class-email-marketing.php';
+require_once QWOO_PATH . 'includes/class-gift-cards.php';
 require_once QWOO_PATH . 'includes/class-automations.php';
 require_once QWOO_PATH . 'includes/class-product-feed.php';
 require_once QWOO_PATH . 'includes/class-back-in-stock.php';

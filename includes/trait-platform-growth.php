@@ -39,8 +39,19 @@ trait Qwoo_Platform_Growth {
                 return [ 'ok' => true ];
             case 'email_settings':
                 return ! empty( $p['save'] ) ? Qwoo_Email_Marketing::save_settings( $p ) : Qwoo_Email_Marketing::settings();
-            /* From the platform: a bounce or a complaint. */
+            /* Gift cards (Qwoo_Gift_Cards). */
+            case 'gc_list':
+            case 'gc_get':
+            case 'gc_issue':
+            case 'gc_update':
+            case 'gc_preview':
+                return Qwoo_Gift_Cards::dashboard( $op, $p, 'owner' );
+            /* From the platform: a bounce or a complaint (or a gift card email's delivery: ref gc-<id>). */
             case 'email_event':
+                if ( preg_match( '/^gc-\d+$/', (string) ( $p['ref'] ?? '' ) ) ) {
+                    Qwoo_Gift_Cards::email_event( (string) $p['ref'], (string) ( $p['type'] ?? '' ), (string) ( $p['email'] ?? '' ) );
+                    return [ 'ok' => true ];
+                }
                 $status = [ 'bounced' => 'bounced', 'complained' => 'complained' ][ $p['type'] ?? '' ] ?? '';
                 if ( $status !== '' ) Qwoo_Email_Marketing::suppress( (string) ( $p['email'] ?? '' ), $status );
                 return [ 'ok' => true ];

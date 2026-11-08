@@ -78,6 +78,10 @@ class Qwoo_Platform_Connection {
                 case 'reply-to':
                     $mail['reply_to'] = self::addresses( $value )[0] ?? '';
                     break;
+                // What the email is (gc-<id>: a gift card): Resend tells the platform when it's delivered or bounces.
+                case 'x-qwoo-tag':
+                    if ( preg_match( '/^[a-z0-9_-]{1,40}$/', $value ) ) $mail['tag'] = $value;
+                    break;
             }
         }
         if ( ! $mail['to'] ) {

@@ -65,6 +65,7 @@ class Qwoo_Push_Engine {
         Qwoo_Webhooks::install_tables();
         Qwoo_Email_Marketing::install_tables();
         Qwoo_Automations::install_tables();
+        Qwoo_Gift_Cards::install_tables();
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
         $charset = $wpdb->get_charset_collate();
         $log = self::log_table();

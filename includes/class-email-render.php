@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class Qwoo_Email_Render {
 
-    const TYPES   = [ 'logo', 'heading', 'text', 'image', 'button', 'divider', 'spacer', 'video', 'menu', 'products', 'coupon', 'social', 'footer', 'order_items', 'order_totals', 'order_info', 'addresses', 'order_button', 'downloads', 'review_links' ];
+    const TYPES   = [ 'logo', 'heading', 'text', 'image', 'button', 'divider', 'spacer', 'video', 'menu', 'products', 'coupon', 'social', 'footer', 'order_items', 'order_totals', 'order_info', 'addresses', 'order_button', 'downloads', 'review_links', 'gift_header', 'gift_card', 'gift_message', 'gift_button' ];
     const LAYOUTS = [ '1' => [ 1 ], '1-1' => [ 1, 1 ], '1-2' => [ 1, 2 ], '2-1' => [ 2, 1 ], '1-1-1' => [ 1, 1, 1 ], '1-3' => [ 1, 3 ], '3-1' => [ 3, 1 ], '1-1-1-1' => [ 1, 1, 1, 1 ] ];
     const TARGETS = [ '', 'order', 'account', 'shop', 'pay', 'reset', 'product' ];
     const SHOW_IF = [ '', 'coupon', 'first', 'paid', 'shipping', 'note', 'buyers', 'new' ];
@@ -154,6 +154,28 @@ class Qwoo_Email_Render {
                 break;
             case 'review_links':
                 $data += [ 'bg' => sanitize_hex_color( (string) ( $d['bg'] ?? '' ) ) ?: '', 'color' => sanitize_hex_color( (string) ( $d['color'] ?? '' ) ) ?: '' ];
+                break;
+            case 'gift_header':
+                $data += [ 'size' => (int) self::num( $d['size'] ?? null, 28, 16, 48 ), 'radius' => (int) self::num( $d['radius'] ?? null, 12, 0, 40 ), 'text' => self::hex( $d['text'] ?? '', '#ffffff' ) ];
+                break;
+            case 'gift_card':
+                $data += [ 'radius' => (int) self::num( $d['radius'] ?? null, 14, 0, 40 ), 'text' => self::hex( $d['text'] ?? '', '#ffffff' ), 'label' => self::line( $d['label'] ?? '', 40 ) ];
+                break;
+            case 'gift_message':
+                $data += $text + [ 'size' => (int) self::num( $d['size'] ?? null, 18, 12, 28 ), 'align' => $align ];
+                break;
+            case 'gift_button':
+                $data += [
+                    'label'  => self::line( $d['label'] ?? '', 80 ),
+                    'bg'     => sanitize_hex_color( (string) ( $d['bg'] ?? '' ) ) ?: '',
+                    'color'  => sanitize_hex_color( (string) ( $d['color'] ?? '' ) ) ?: '',
+                    'size'   => (int) self::num( $d['size'] ?? null, 16, 11, 24 ),
+                    'radius' => (int) self::num( $d['radius'] ?? null, 8, 0, 40 ),
+                    'btnV'   => (int) self::num( $d['btnV'] ?? null, 13, 4, 30 ),
+                    'btnH'   => (int) self::num( $d['btnH'] ?? null, 26, 8, 60 ),
+                    'full'   => ! array_key_exists( 'full', $d ) || ! empty( $d['full'] ),
+                    'align'  => $align,
+                ];
                 break;
         }
         return [ 'id' => sanitize_key( (string) ( $block['id'] ?? '' ) ) ?: 'b' . bin2hex( random_bytes( 4 ) ), 'type' => $type, 'data' => $data ];
@@ -403,12 +425,68 @@ class Qwoo_Email_Render {
                     $rows .= '<div style="padding:4px 0;"><a href="' . esc_url( $item['download_url'] ) . '" style="color:' . esc_attr( $s['link'] ) . ';font-weight:600;">' . esc_html( $item['download_name'] ) . '</a></div>';
                 }
                 return '<div style="font-family:' . $font . ';font-size:14px;">' . $rows . '</div>';
+            case 'gift_header':
+            case 'gift_card':
+            case 'gift_message':
+            case 'gift_button':
+                return is_array( $ctx['gift'] ?? null ) ? self::gift( $type, $d, $env, $ctx['gift'] ) : '';
             case 'review_links':
                 $out = '';
                 foreach ( (array) ( $ctx['review_links'] ?? [] ) as $l ) {
                     $out .= '<div style="padding:5px 0;">' . self::button( [ 'label' => $l['label'], 'bg' => $d['bg'] ?? '', 'color' => $d['color'] ?? '', 'align' => 'center', 'size' => 15 ], $env, (string) $l['url'] ) . '</div>';
                 }
                 return $out;
+        }
+        return '';
+    }
+
+    /**
+     * The gift card's blocks. ctx.gift is the card (Qwoo_Gift_Cards::gift_ctx),
+     * or { template: true } for the storefront's preview: then {gc_*} places
+     * stand for the shopper's values, which the page escapes and fills in.
+     */
+    private static function gift( string $type, array $d, array $env, array $g ): string {
+        $tpl   = ! empty( $g['template'] );
+        $font  = $env['font'];
+        $color = $tpl ? '{gc_color}' : esc_attr( (string) ( $g['color'] ?? '#2f4a3a' ) );
+        $he    = class_exists( 'Qwoo_I18n' ) && Qwoo_I18n::default_code() === 'he';
+        $say   = static fn( $en, $hebrew ) => $he ? $hebrew : $en;
+        $val   = static fn( $key, $token ) => $tpl ? $token : esc_html( (string) ( $g[ $key ] ?? '' ) );
+        $r     = (int) ( $d['radius'] ?? 12 );
+        switch ( $type ) {
+            case 'gift_header':
+                $img   = '';
+                $style = 'display:block;width:100%;height:auto;border:0;border-radius:' . $r . 'px ' . $r . 'px 0 0;';
+                if ( $tpl ) {
+                    $img = '<div style="{gc_img_show}"><img src="{gc_img}" alt="" width="' . (int) ( $env['width'] - 48 ) . '" style="' . $style . '"></div>';
+                } elseif ( ( $g['image'] ?? '' ) !== '' ) {
+                    $img = '<img src="' . esc_url( (string) $g['image'] ) . '" alt="" width="' . (int) ( $env['width'] - 48 ) . '" style="' . $style . '">';
+                }
+                $round = $tpl ? '{gc_band_radius}' : ( $img !== '' ? '0 0 ' . $r . 'px ' . $r . 'px' : $r . 'px' );
+                $mark  = $tpl ? '<div style="font-size:34px;line-height:1.3;{gc_mark_show}">{gc_mark}</div>' : ( ( $g['mark'] ?? '' ) !== '' ? '<div style="font-size:34px;line-height:1.3;">' . esc_html( (string) $g['mark'] ) . '</div>' : '' );
+                return $img . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td bgcolor="' . $color . '" style="background:' . $color . ';border-radius:' . $round . ';padding:28px 24px;text-align:center;font-family:' . $font . ';">'
+                    . $mark . '<div style="font-size:' . (int) $d['size'] . 'px;font-weight:700;line-height:1.25;color:' . esc_attr( $d['text'] ) . ';">' . $val( 'title', '{gc_title}' ) . '</div></td></tr></table>';
+            case 'gift_card':
+                $label = (string) $d['label'] !== '' ? esc_html( (string) $d['label'] ) : esc_html( $say( 'Gift card', 'כרטיס מתנה' ) );
+                $txt   = esc_attr( $d['text'] );
+                return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;"><tr><td bgcolor="' . $color . '" style="background:' . $color . ';border-radius:' . $r . 'px;padding:20px 22px;font-family:' . $font . ';color:' . $txt . ';">'
+                    . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:13px;color:' . $txt . ';font-family:' . $font . ';">' . $label . '</td><td style="font-size:13px;color:' . $txt . ';text-align:' . $env['end'] . ';font-family:' . $font . ';">{store_name}</td></tr></table>'
+                    . '<div style="font-size:38px;font-weight:700;line-height:1.1;padding:14px 0 12px;color:' . $txt . ';" dir="ltr">' . $val( 'amount', '{gc_amount}' ) . '</div>'
+                    . '<div dir="ltr" style="display:inline-block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:17px;letter-spacing:2px;color:' . $txt . ';background:rgba(255,255,255,.18);padding:8px 12px;border-radius:8px;">' . $val( 'code', '{gc_code}' ) . '</div>'
+                    . '<div style="font-size:12px;color:' . $txt . ';padding-top:12px;">' . $val( 'expiry', '{gc_expiry}' ) . '</div>'
+                    . '</td></tr></table>';
+            case 'gift_message':
+                $style = self::text_style( $d, $env, 400, 1.5 );
+                $align = self::align( (string) $d['align'], $env );
+                $hi    = $tpl ? str_replace( '%s', '{gc_to}', esc_html( $say( 'Hi %s,', 'היי %s,' ) ) ) : esc_html( sprintf( $say( 'Hi %s,', 'היי %s,' ), (string) ( $g['to'] ?? '' ) ) );
+                $msg   = $tpl ? '<div style="' . $style . '{gc_msg_show}">{gc_message}</div>' : ( trim( (string) ( $g['message'] ?? '' ) ) !== '' ? '<div style="' . $style . '">' . nl2br( esc_html( (string) $g['message'] ) ) . '</div>' : '' );
+                $from_style = 'font-family:' . $font . ';font-size:14px;color:#77748b;padding-top:6px;text-align:' . $align . ';';
+                $from  = $tpl ? '<div style="' . $from_style . '{gc_from_show}">' . str_replace( '%s', '{gc_from}', esc_html( $say( 'From %s', 'מאת %s' ) ) ) . '</div>'
+                    : ( ( $g['from'] ?? '' ) !== '' ? '<div style="' . $from_style . '">' . esc_html( sprintf( $say( 'From %s', 'מאת %s' ), (string) $g['from'] ) ) . '</div>' : '' );
+                return '<div style="font-family:' . $font . ';font-size:15px;color:' . esc_attr( $env['s']['color'] ) . ';padding-bottom:8px;text-align:' . $align . ';">' . $hi . '</div>' . $msg . $from;
+            case 'gift_button':
+                if ( (string) $d['label'] === '' ) return '';
+                return self::button( [ 'bg' => ( $d['bg'] ?? '' ) ?: $color ] + $d, $env, (string) ( $g['shop'] ?? home_url( '/' ) ) );
         }
         return '';
     }

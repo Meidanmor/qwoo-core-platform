@@ -39,6 +39,8 @@ class Qwoo_Store_Emails {
             'customer_reset_password'   => [ 'name' => 'Password reset', 'when' => 'When someone asks for a new password', 'group' => 'customer', 'kind' => 'account', 'wc' => true, 'lock' => true ],
             'back_in_stock'             => [ 'name' => 'Back in stock', 'when' => 'When a product someone asked about returns', 'group' => 'customer', 'kind' => 'stock' ],
             'review_request'            => [ 'name' => 'Review request', 'when' => 'After an order is completed', 'group' => 'customer', 'kind' => 'review' ],
+            'gift_card'                 => [ 'name' => 'Gift card', 'when' => 'On the day a gift card is sent to its recipient', 'group' => 'customer', 'kind' => 'gift', 'lock' => true ],
+            'gift_card_bounced'         => [ 'name' => 'Gift card not delivered', 'when' => 'When a gift card\'s email can\'t be delivered (to the buyer)', 'group' => 'customer', 'kind' => 'gift_notice' ],
             'new_order'                 => [ 'name' => 'New order', 'when' => 'When someone places an order', 'group' => 'team', 'kind' => 'order', 'wc' => true ],
             'cancelled_order'           => [ 'name' => 'Cancelled order', 'when' => 'When an order is cancelled', 'group' => 'team', 'kind' => 'order', 'wc' => true ],
             'failed_order'              => [ 'name' => 'Failed payment', 'when' => 'When a payment fails', 'group' => 'team', 'kind' => 'order', 'wc' => true ],
@@ -177,6 +179,18 @@ class Qwoo_Store_Emails {
             $rows[] = $button( self::l( 'Go to your account', 'לחשבון שלך' ), 'account' );
         } elseif ( $id === 'review_request' ) {
             $rows[] = self::row( self::b( 'review_links', [ 'padV' => 8 ] ) );
+        } elseif ( $id === 'gift_card' ) {
+            // The logo and the card's own header, no title of its own.
+            $rows = [
+                self::row( self::b( 'logo', [ 'width' => 150, 'align' => 'center', 'padV' => 22 ] ) ),
+                self::row( self::b( 'gift_header', [ 'padV' => 4 ] ) ),
+                self::row( self::b( 'gift_card', [ 'padV' => 14 ] ) ),
+                self::row( self::b( 'gift_message', [ 'padV' => 10 ] ) ),
+                self::row( self::b( 'gift_button', [ 'label' => self::l( 'Shop with your gift card', 'לקנייה עם כרטיס המתנה' ), 'padV' => 14 ] ) ),
+                $text( self::l( 'Use the code at checkout. You can spend it over several orders, and the balance stays on the card.', 'משתמשים בקוד בתשלום. אפשר לנצל אותו בכמה הזמנות, והיתרה נשארת בכרטיס.' ) ),
+            ];
+        } elseif ( $id === 'gift_card_bounced' ) {
+            $rows[] = $button( self::l( 'Go to the store', 'לחנות' ), 'shop' );
         } elseif ( $id === 'back_in_stock' ) {
             $rows[] = $button( self::l( 'View {product_name}', 'לצפייה ב{product_name}' ), 'product' );
         } else {
@@ -203,6 +217,8 @@ class Qwoo_Store_Emails {
             case 'customer_reset_password':   return [ 'title' => self::l( 'Reset your password', 'איפוס סיסמה' ), 'text' => self::l( 'Someone asked for a new password for your account at {store_name}.', 'התקבלה בקשה לסיסמה חדשה לחשבון שלך ב{store_name}.' ) ];
             case 'back_in_stock':             return [ 'title' => self::l( 'It\'s back', 'זה חזר למלאי' ), 'text' => self::l( 'Good news: {product_name} is back in stock at {store_name}. Get it before it\'s gone again.', 'חדשות טובות: {product_name} חזר למלאי ב{store_name}. כדאי למהר לפני שייגמר שוב.' ) ];
             case 'review_request':            return [ 'title' => self::l( 'How was your order?', 'איך הייתה ההזמנה?' ), 'text' => self::l( 'Thank you for your order from {store_name}. We\'d love to hear what you think. It only takes a minute:', 'תודה על ההזמנה מ{store_name}. נשמח לשמוע מה דעתך. זה לוקח רק דקה:' ) ];
+            case 'gift_card':                 return [ 'title' => self::l( '{sender_name} sent you a {store_name} gift card', '{sender_name} שלחו לך כרטיס מתנה מ{store_name}' ), 'text' => '' ];
+            case 'gift_card_bounced':         return [ 'title' => self::l( 'We couldn\'t deliver your gift card', 'לא הצלחנו למסור את כרטיס המתנה שלך' ), 'text' => self::l( 'Hi {first_name}, the gift card for {recipient_name} couldn\'t be delivered to {recipient_email}. Reply to this email with the right address and we\'ll send it again.', 'היי {first_name}, לא הצלחנו למסור את כרטיס המתנה של {recipient_name} לכתובת {recipient_email}. אפשר להשיב למייל הזה עם הכתובת הנכונה ונשלח אותו שוב.' ) ];
             case 'new_order':                 return [ 'title' => self::l( 'New order #{order_number}', 'הזמנה חדשה {order_number}' ), 'text' => self::l( 'You have a new order from {first_name} {last_name}.', 'יש לך הזמנה חדשה מ{first_name} {last_name}.' ) ];
             case 'cancelled_order':           return [ 'title' => self::l( 'Order #{order_number} was cancelled', 'הזמנה {order_number} בוטלה' ), 'text' => self::l( 'The order from {first_name} {last_name} was cancelled.', 'ההזמנה של {first_name} {last_name} בוטלה.' ) ];
             case 'failed_order':              return [ 'title' => self::l( 'Payment failed on order #{order_number}', 'התשלום נכשל בהזמנה {order_number}' ), 'text' => self::l( 'The payment from {first_name} {last_name} failed.', 'התשלום של {first_name} {last_name} נכשל.' ) ];
@@ -296,7 +312,12 @@ class Qwoo_Store_Emails {
             '{user_login}'    => (string) ( $args['user_login'] ?? '' ),
             '{product_name}'  => (string) ( $args['product_name'] ?? '' ),
             '{stock}'         => (string) ( $args['stock'] ?? '' ),
+            '{recipient_name}'  => (string) ( $args['recipient_name'] ?? '' ),
+            '{recipient_email}' => (string) ( $args['recipient_email'] ?? '' ),
+            '{sender_name}'     => (string) ( $args['sender_name'] ?? '' ),
+            '{gift_amount}'     => (string) ( $args['gift_amount'] ?? '' ),
         ];
+        if ( ! $order && isset( $args['first_name'] ) ) $out['{first_name}'] = (string) $args['first_name'];
         if ( $order ) {
             $out['{order_number}'] = (string) $order->get_order_number();
             $out['{order_total}']  = html_entity_decode( wp_strip_all_tags( $order->get_formatted_order_total() ), ENT_QUOTES );
@@ -370,6 +391,17 @@ class Qwoo_Store_Emails {
     }
 
     /* ---------------- emails the store sends itself ---------------- */
+
+    /** An email of the store's own (gift cards): its design with these details; $extra goes into the design's ctx (gift). */
+    public static function render_own( string $id, array $args, array $extra = [] ): string {
+        return Qwoo_Email_Render::html( self::design_for( $id ), array_merge( self::context( $id, null, null, $args ), $extra ) );
+    }
+
+    /** The owner's subject for the email, or $default, with the details filled in. */
+    public static function own_subject( string $id, array $args, string $default ): string {
+        $mine = trim( (string) ( self::saved( $id )['subject'] ?? '' ) );
+        return strtr( $mine !== '' ? $mine : $default, self::tokens( null, null, $args ) );
+    }
 
     public static function is_on( string $id ): bool {
         if ( $id === 'review_request' && class_exists( 'Qwoo_Reviews' ) ) return ! empty( Qwoo_Reviews::settings()['request'] );
@@ -475,6 +507,15 @@ class Qwoo_Store_Emails {
             case 'review':
                 $tokens = [ 'first_name', 'last_name', 'store_name' ];
                 $blocks = [ 'review_links' ];
+                break;
+            case 'gift':
+                $tokens = [ 'recipient_name', 'sender_name', 'gift_amount', 'store_name' ];
+                $blocks = [ 'gift_header', 'gift_card', 'gift_message', 'gift_button' ];
+                $targets = [ 'shop' ];
+                break;
+            case 'gift_notice':
+                $tokens = [ 'first_name', 'recipient_name', 'recipient_email', 'store_name' ];
+                $targets = [ 'shop' ];
                 break;
         }
         $saved = self::saved( $id );
@@ -599,9 +640,21 @@ class Qwoo_Store_Emails {
             'review_links'  => [ [ 'label' => self::l( 'Review Example product', 'כתיבת ביקורת' ), 'url' => home_url( '/' ) ] ],
             'product_url'   => home_url( '/' ),
         ];
+        if ( in_array( $def['kind'], [ 'gift', 'gift_notice' ], true ) ) {
+            $args += [ 'recipient_name' => 'Noa', 'recipient_email' => 'noa@example.com', 'sender_name' => self::l( 'Dana and Yoni', 'דנה ויוני' ), 'gift_amount' => html_entity_decode( wp_strip_all_tags( wc_price( 200 ) ), ENT_QUOTES ) ];
+        }
         $ctx = self::context( $id, $order, null, $args );
         $ctx['urls'] += [ 'reset' => home_url( '/' ), 'pay' => home_url( '/' ), 'order' => home_url( '/' ) ];
         if ( ! $order ) $ctx['tokens']['{first_name}'] = 'Dana';
+        if ( $def['kind'] === 'gift' && class_exists( 'Qwoo_Gift_Cards' ) ) {
+            $d = Qwoo_Gift_Cards::default_designs()[0];
+            $ctx['gift'] = [
+                'title' => $d['title'], 'mark' => $d['mark'], 'color' => Qwoo_Gift_Cards::COLORS[0], 'image' => '',
+                'amount' => $args['gift_amount'], 'code' => 'K7QX-9DMP-3RTA-H2WN',
+                'expiry' => sprintf( self::l( 'Valid until %s', 'בתוקף עד %s' ), wp_date( get_option( 'date_format' ), strtotime( '+5 years' ) ) ),
+                'to' => 'Noa', 'from' => $args['sender_name'], 'message' => self::l( 'Happy birthday! Pick something lovely for yourself.', 'יום הולדת שמח! תבחרי לך משהו יפה.' ), 'shop' => home_url( '/' ),
+            ];
+        }
         return Qwoo_Email_Render::html( $design, $ctx );
     }
 
@@ -613,7 +666,7 @@ class Qwoo_Store_Emails {
         $design = is_array( $in['design'] ?? null ) ? Qwoo_Email_Render::clean( $in['design'] ) : self::design_for( $id );
         $list   = array_column( self::overview()['emails'], null, 'id' );
         $row    = $list[ $id ] ?? [];
-        $tokens = [ '{first_name}' => 'Dana', '{last_name}' => 'Levi', '{order_number}' => '1042', '{store_name}' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), '{product_name}' => self::l( 'Example product', 'מוצר לדוגמה' ), '{order_total}' => '', '{order_date}' => '', '{stock}' => '2', '{user_login}' => 'dana', '{customer_note}' => '', '{site_title}' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), '{order_date_short}' => '' ];
+        $tokens = [ '{first_name}' => 'Dana', '{last_name}' => 'Levi', '{order_number}' => '1042', '{store_name}' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), '{product_name}' => self::l( 'Example product', 'מוצר לדוגמה' ), '{order_total}' => '', '{order_date}' => '', '{stock}' => '2', '{user_login}' => 'dana', '{customer_note}' => '', '{site_title}' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), '{order_date_short}' => '', '{recipient_name}' => 'Noa', '{recipient_email}' => 'noa@example.com', '{sender_name}' => self::l( 'Dana and Yoni', 'דנה ויוני' ), '{gift_amount}' => html_entity_decode( wp_strip_all_tags( wc_price( 200 ) ), ENT_QUOTES ) ];
         $subject = strtr( (string) ( ( $row['subject'] ?? '' ) ?: ( $row['default_subject'] ?? '' ) ), $tokens );
         $sent = wp_mail( $to, '[Test] ' . $subject, self::sample_html( $id, $design ), [ 'Content-Type: text/html; charset=UTF-8' ] );
         return $sent ? [ 'ok' => true ] : new WP_Error( 'mail', 'The test couldn\'t be sent.' );

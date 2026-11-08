@@ -651,6 +651,21 @@ class Qwoo_Platform_Dashboard {
     private static function action_product_save( array $params ) {
         $f       = is_array( $params['fields'] ?? null ) ? $params['fields'] : [];
         $type    = ( $f['type'] ?? 'simple' ) === 'variable' ? 'variable' : 'simple';
+        // A gift card is a simple product with its own settings (Qwoo_Gift_Cards).
+        $gift    = null;
+        $rules   = null;
+        if ( ( $f['type'] ?? '' ) === 'giftcard' ) {
+            $gift = Qwoo_Gift_Cards::clean_settings( $f['giftcard'] ?? [] );
+            if ( is_wp_error( $gift ) ) {
+                return self::bad( $gift->get_error_message() );
+            }
+            $rules = is_array( $f['giftcard_rules'] ?? null ) ? Qwoo_Gift_Cards::clean_rules( $f['giftcard_rules'] ) : null;
+            $f['regular_price'] = (string) ( $gift['amounts'] ? min( $gift['amounts'] ) : $gift['min'] );
+            $f['sale_price']    = '';
+            $f['manage_stock']  = false;
+            $f['sale_from']     = '';
+            $f['sale_to']       = '';
+        }
         $id      = absint( $params['id'] ?? 0 );
         $product = null;
         if ( $id ) {
@@ -743,6 +758,10 @@ class Qwoo_Platform_Dashboard {
         Qwoo_Translations::save( 'product', $product->get_id(), ( is_array( $params['fields'] ?? null ) ? ( $params['fields']['translations'] ?? null ) : null ) );
         // Questions and answers, bought-together products (only when sent).
         Qwoo_Product_Extras::save( $product, $f );
+        // Made a gift card, or no longer one (only when the editor said what it is: options always do).
+        if ( $gift !== null || isset( $f['type'] ) ) {
+            Qwoo_Gift_Cards::save_product( wc_get_product( $product->get_id() ), $gift, $rules );
+        }
         wc_delete_product_transients( $product->get_id() );
         return self::product_full( wc_get_product( $product->get_id() ) );
     }
@@ -2575,6 +2594,8 @@ class Qwoo_Platform_Dashboard {
             'line_items'   => $items,
             'notes'        => $notes,
             'refunds'      => $refunds,
+            // Cards that paid for this order, and cards bought in it.
+            'gift_cards'   => Qwoo_Gift_Cards::for_order( $o ),
         ];
     }
 
@@ -2708,6 +2729,8 @@ class Qwoo_Platform_Dashboard {
         $description = (string) $p->get_description();
         return self::product_summary( $p ) + self::product_options( $p ) + [ 'details' => self::product_details( $p ) ] + self::sale_dates_of( $p ) + Qwoo_Product_Extras::for_editor( $p ) + [
             'editable'     => $p->is_type( self::EDITABLE_TYPES ),
+            // A gift card's settings, rules and cards sold; null for other products.
+            'giftcard'     => Qwoo_Gift_Cards::for_editor( $p ),
             // For the formatted editor: what it can show (anything else is dropped when saving).
             'description_html' => self::clean_description( wpautop( $description ) ),
             'short_description_html' => self::clean_description( wpautop( (string) $p->get_short_description() ) ),
