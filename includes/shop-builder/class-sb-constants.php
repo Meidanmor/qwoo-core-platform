@@ -3322,7 +3322,10 @@ abstract class Shop_Builder_Constants {
      */
     const LAYOUT_PAGES = [
             'product'   => [ 'products', 'categories' ],
-            'category'  => [ 'categories' ],
+            // Product archives: the All products page and every category page are one page (`shop`);
+            // archive = [ 'main' (the All products page), 'categories' (every category page) ].
+            // The category page's own layouts moved here (merge_archive_layouts()).
+            'shop'      => [ 'archive', 'categories' ],
             'blog'      => [ 'blog_categories' ],
             'blog_post' => [ 'blog_categories' ],
             // Header and footer templates: the main one, plus others shown on chosen pages.

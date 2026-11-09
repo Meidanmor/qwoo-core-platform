@@ -880,6 +880,8 @@ trait SB_Sanitizers {
         // part of this submission at all (e.g. a plain options.php post,
         // where the builder's JSON isn't included), keep what's stored
         // instead of wiping them.
+        // Layouts of the category page (an older version or import) join the Product archives.
+        $input = self::merge_archive_layouts( $input );
         // An older shop page (sections in slots, from an import or an older dashboard) becomes its template first.
         foreach ( self::SHOP_TEMPLATE_PAGES as $page_slug ) {
             if ( is_array( $input[ $page_slug ] ?? null ) && ( isset( $input[ $page_slug ]['sections'] ) || isset( $input[ $page_slug ]['layouts'] ) ) ) {

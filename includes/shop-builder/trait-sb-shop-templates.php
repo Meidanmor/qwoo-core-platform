@@ -396,6 +396,64 @@ trait SB_Shop_Templates {
                 }
             }
         }
+        return self::merge_archive_layouts( $options, $changed );
+    }
+
+    /**
+     * Product archives (2026-11-09): All products and the category pages are one Store builder page,
+     * `shop`. Its sections are the main layout of every products page; its layouts take over where
+     * they match (LAYOUT_PAGES['shop']). Layouts made for the category page move to it, ids and
+     * conditions kept (after the shop's own); the category page's own sections stay stored, unused
+     * (the user chose to drop that design; it can be brought back from there). Also each extra
+     * language's copies and section_sync keys ("category@lay_…" → "shop@lay_…"). Nothing changes
+     * when there is nothing to move.
+     */
+    public static function merge_archive_layouts( array $options, &$changed = false ) {
+        $append = static function ( array $shop, array $layouts ) {
+            $list = array_values( array_filter( (array) ( $shop['layouts'] ?? [] ), 'is_array' ) );
+            $at   = [];
+            foreach ( $list as $i => $l ) $at[ (string) ( $l['id'] ?? '' ) ] = $i;
+            foreach ( $layouts as $l ) {
+                if ( ! is_array( $l ) ) continue;
+                $id = (string) ( $l['id'] ?? '' );
+                if ( $id !== '' && isset( $at[ $id ] ) ) {
+                    $list[ $at[ $id ] ] = $l;
+                } else {
+                    $list[] = $l;
+                }
+            }
+            $shop['layouts'] = array_slice( $list, 0, self::MAX_LAYOUTS );
+            return $shop;
+        };
+
+        $moved = array_values( array_filter( (array) ( $options['category']['layouts'] ?? [] ), 'is_array' ) );
+        if ( isset( $options['category']['layouts'] ) ) {
+            unset( $options['category']['layouts'] );
+            $changed = true;
+        }
+        if ( $moved ) {
+            $options['shop'] = $append( is_array( $options['shop'] ?? null ) ? $options['shop'] : [], $moved );
+        }
+
+        foreach ( (array) ( $options['i18n'] ?? [] ) as $lang => $tr ) {
+            if ( ! isset( $tr['pages']['category']['layouts'] ) ) continue;
+            $own = array_values( array_filter( (array) $tr['pages']['category']['layouts'], 'is_array' ) );
+            unset( $options['i18n'][ $lang ]['pages']['category']['layouts'] );
+            $changed = true;
+            if ( ! $own ) continue;
+            // A language without its own All products copy starts from the main one.
+            $base = $tr['pages']['shop'] ?? ( is_array( $options['shop'] ?? null ) ? $options['shop'] : [] );
+            $options['i18n'][ $lang ]['pages']['shop'] = $append( (array) $base, $own );
+        }
+
+        foreach ( (array) ( $options['section_sync'] ?? [] ) as $code => $map ) {
+            foreach ( (array) $map as $key => $source ) {
+                if ( strpos( (string) $key, 'category@' ) !== 0 ) continue;
+                $options['section_sync'][ $code ][ 'shop@' . substr( (string) $key, 9 ) ] = $source;
+                unset( $options['section_sync'][ $code ][ $key ] );
+                $changed = true;
+            }
+        }
         return $options;
     }
 

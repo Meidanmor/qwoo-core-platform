@@ -144,6 +144,10 @@ trait SB_Layouts {
                 $out[ $kind ] = self::sanitize_chrome_targets( $raw[ $kind ] ?? [] );
                 continue;
             }
+            if ( $kind === 'archive' ) {
+                $out[ $kind ] = self::archive_lists( $raw )['archive'];
+                continue;
+            }
             $ids = array_values( array_unique( array_filter( array_map( 'intval', (array) ( $raw[ $kind ] ?? [] ) ), static fn( $id ) => $id > 0 ) ) );
             $out[ $kind ] = array_slice( $ids, 0, 200 );
         }
@@ -180,6 +184,58 @@ trait SB_Layouts {
             }
         }
         return $out;
+    }
+
+    /** A Product archives layout's lists: { archive: [main|categories], categories: [ids] }. */
+    private static function archive_lists( array $c ) {
+        return [
+            'archive'    => array_values( array_intersect( [ 'main', 'categories' ], array_map( 'strval', array_filter( (array) ( $c['archive'] ?? [] ), 'is_scalar' ) ) ) ),
+            'categories' => array_values( array_filter( array_map( 'intval', (array) ( $c['categories'] ?? [] ) ) ) ),
+        ];
+    }
+
+    /**
+     * Product archives as the storefront reads them: shop.json (the All products page) and
+     * category.json (every category page), worked out from the one `shop` page, so the storefront
+     * needs nothing new. The first layout that matches wins, in the owner's order, as before:
+     * - shop.json `sections`: the first layout for the main page (else the main layout), no layouts.
+     * - category.json: chosen-categories layouts as they are; "every category page" with Exclude rows
+     *   becomes an Exclude-only layout (every other category); "every category page" with none ends
+     *   the list as `sections` (else the main layout).
+     * A layout with only Exclude rows takes every products page but those.
+     */
+    public static function compiled_archive_pages( array $options ) {
+        $shop = is_array( $options['shop'] ?? null ) ? $options['shop'] : [];
+        $main = isset( $shop['sections'] ) ? (array) $shop['sections'] : self::default_template_sections( 'shop' );
+        $for_main    = null;
+        $for_all     = null;
+        $cat_layouts = [];
+        foreach ( (array) ( $shop['layouts'] ?? [] ) as $layout ) {
+            if ( ! is_array( $layout ) ) continue;
+            $in     = self::archive_lists( (array) ( $layout['conditions'] ?? [] ) );
+            $ex     = self::archive_lists( (array) ( $layout['conditions']['exclude'] ?? [] ) );
+            $has_in = $in['archive'] || $in['categories'];
+            if ( ! $has_in && ! $ex['archive'] && ! $ex['categories'] ) continue;
+            $sections = (array) ( $layout['sections'] ?? [] );
+            $base     = [ 'id' => (string) ( $layout['id'] ?? '' ), 'name' => (string) ( $layout['name'] ?? '' ), 'sections' => $sections ];
+
+            if ( $for_main === null && ! in_array( 'main', $ex['archive'], true ) && ( $has_in ? in_array( 'main', $in['archive'], true ) : true ) ) {
+                $for_main = $sections;
+            }
+            if ( $for_all !== null || in_array( 'categories', $ex['archive'], true ) ) continue;
+            $every = $has_in ? in_array( 'categories', $in['archive'], true ) : true;
+            if ( $every && ! $ex['categories'] ) {
+                $for_all = $sections;
+            } elseif ( $every ) {
+                $cat_layouts[] = $base + [ 'conditions' => [ 'exclude' => [ 'categories' => $ex['categories'] ] ] ];
+            } elseif ( $in['categories'] ) {
+                $cat_layouts[] = $base + [ 'conditions' => [ 'categories' => $in['categories'] ] + ( $ex['categories'] ? [ 'exclude' => [ 'categories' => $ex['categories'] ] ] : [] ) ];
+            }
+        }
+        $rest = static fn( $page ) => array_diff_key( is_array( $options[ $page ] ?? null ) ? $options[ $page ] : [], [ 'sections' => 1, 'layouts' => 1 ] );
+        $options['shop']     = [ 'sections' => $for_main ?? $main ] + $rest( 'shop' );
+        $options['category'] = [ 'sections' => $for_all ?? $main, 'layouts' => $cat_layouts ] + $rest( 'category' );
+        return $options;
     }
 
     /**

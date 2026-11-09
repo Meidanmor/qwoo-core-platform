@@ -315,6 +315,8 @@ trait SB_Github_Push {
             $options[ $page_slug ] = is_array( $options[ $page_slug ] ?? null ) ? $options[ $page_slug ] : [ 'sections' => self::default_template_sections( $page_slug ) ];
             $options[ $page_slug ]['template'] = 1;
         }
+        // Product archives: one page in the Store builder, shop.json + category.json for the storefront.
+        $options = self::compiled_archive_pages( $options );
 
         foreach ( $allowed_pages as $page_slug ) {
             if ( ! isset( $options[ $page_slug ] ) ) continue;
