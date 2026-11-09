@@ -285,13 +285,47 @@ class Qwoo_Platform_Dashboard {
         }
 
         $params = is_array( $data['params'] ?? null ) ? $data['params'] : [];
+        // If PHP crashes during the action, WordPress's "critical error" reply says why (for support).
+        add_filter( 'wp_php_error_message', [ __CLASS__, 'crash_message' ], 10, 2 );
+        add_filter( 'wp_php_error_args', [ __CLASS__, 'crash_args' ] );
         $result = call_user_func( [ __CLASS__, self::ACTIONS[ $action ] ], $params, $claims );
+        remove_filter( 'wp_php_error_message', [ __CLASS__, 'crash_message' ], 10 );
+        remove_filter( 'wp_php_error_args', [ __CLASS__, 'crash_args' ] );
         if ( is_wp_error( $result ) ) {
             return $result;
         }
         $response = rest_ensure_response( $result );
         $response->header( 'Cache-Control', 'no-store' );
         return $response;
+    }
+
+    /**
+     * A PHP crash during a signed dashboard call: a short reason instead of
+     * WordPress's page text. Only the kind (memory, time, error), the file
+     * name, line and the error text with folder paths taken out; it goes to
+     * the platform only (shown to the owner's own browser as store_error).
+     */
+    public static function crash_message( $message, $error ) {
+        if ( ! is_array( $error ) ) {
+            return $message;
+        }
+        $text = (string) ( $error['message'] ?? '' );
+        $kind = 'error';
+        if ( stripos( $text, 'Allowed memory size' ) !== false || stripos( $text, 'Out of memory' ) !== false ) {
+            $kind = 'memory';
+        } elseif ( stripos( $text, 'Maximum execution time' ) !== false ) {
+            $kind = 'time';
+        }
+        // No folder paths (they show the hosting account), only file names.
+        $text = preg_replace( '#(?:[A-Za-z]:)?[\\/](?:[^\s:()\\/]+[\\/])+#', '', $text );
+        $text = preg_replace( '/\s+/', ' ', strtok( $text, "\n" ) ?: '' );
+        $where = basename( (string) ( $error['file'] ?? '' ) ) . ':' . (int) ( $error['line'] ?? 0 );
+        return $kind . ' @ ' . $where . ' | ' . mb_substr( trim( (string) $text ), 0, 200 ) . ' | ' . round( memory_get_peak_usage( true ) / 1048576 ) . 'M of ' . ini_get( 'memory_limit' );
+    }
+
+    public static function crash_args( $args ) {
+        $args['code'] = 'qwoo_dashboard_crash';
+        return $args;
     }
 
     /** { kid, public_key } (base64). */
