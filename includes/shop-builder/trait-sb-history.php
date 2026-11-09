@@ -9,6 +9,12 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *              newest first). A pushed version is flagged. Restoring loads
  *              the snapshot into the builder as unsaved changes — nothing is
  *              overwritten until the user saves.
+ *              REVISIONS_OPTION only lists the versions (id, time, user,
+ *              hash, pushed, section counts); each snapshot is its own
+ *              option (REVISION_PREFIX + id), compressed JSON. Saving one
+ *              version so never loads or rewrites the others: with all 20
+ *              in one option, big designs ran out of memory on Save /
+ *              Publish (2026-11-09). Older lists are split on first read.
  *
  *   Templates  A section saved under a name, insertable on any page as an
  *              independent copy (fresh ids; editing the copy doesn't change
@@ -36,9 +42,69 @@ trait SB_History {
        Versions
        ===================================================================== */
 
+    /** The version list (no snapshots: revision_pages() reads one). */
     private static function get_revisions() {
         $list = get_option( self::REVISIONS_OPTION, [] );
-        return is_array( $list ) ? array_values( $list ) : [];
+        $list = is_array( $list ) ? array_values( $list ) : [];
+        foreach ( $list as $rev ) {
+            if ( is_array( $rev ) && array_key_exists( 'pages', $rev ) ) {
+                return self::split_revisions( $list );
+            }
+        }
+        return $list;
+    }
+
+    /** An older list with every snapshot inside: each snapshot to its own option. */
+    private static function split_revisions( array $list ) {
+        $out = [];
+        foreach ( $list as $i => $rev ) {
+            if ( ! is_array( $rev ) || empty( $rev['id'] ) ) continue;
+            if ( array_key_exists( 'pages', $rev ) ) {
+                $pages         = (array) $rev['pages'];
+                $rev['counts'] = self::revision_counts( $pages );
+                self::store_revision_pages( (string) $rev['id'], $pages );
+                unset( $rev['pages'], $pages, $list[ $i ] );
+            }
+            $out[] = $rev;
+        }
+        self::put_revision_list( $out );
+        return $out;
+    }
+
+    /**
+     * Writes the (small) list. Not update_option(): it serializes the old
+     * value again to compare, and the old value may be the big one.
+     */
+    private static function put_revision_list( array $list ) {
+        delete_option( self::REVISIONS_OPTION );
+        add_option( self::REVISIONS_OPTION, array_values( $list ), '', false );
+    }
+
+    /** { page: number of sections } for the version pickers. */
+    private static function revision_counts( array $pages ) {
+        $counts = [];
+        foreach ( $pages as $page => $sections ) {
+            $counts[ $page ] = count( (array) $sections );
+        }
+        return $counts;
+    }
+
+    private static function store_revision_pages( string $id, array $pages ) {
+        $json = (string) wp_json_encode( $pages );
+        $data = function_exists( 'gzdeflate' ) ? 'gz:' . base64_encode( gzdeflate( $json, 6 ) ) : 'js:' . $json;
+        unset( $json );
+        delete_option( self::REVISION_PREFIX . $id );
+        add_option( self::REVISION_PREFIX . $id, $data, '', false );
+    }
+
+    /** One version's snapshot: { page: sections }, or null when it's gone. */
+    private static function revision_pages( string $id ) {
+        if ( ! preg_match( '/^rev_[A-Za-z0-9]{6,20}$/', $id ) ) return null;
+        $data = get_option( self::REVISION_PREFIX . $id, null );
+        if ( ! is_string( $data ) || strlen( $data ) < 3 ) return null;
+        $json = substr( $data, 0, 3 ) === 'gz:' ? @gzinflate( (string) base64_decode( substr( $data, 3 ) ) ) : substr( $data, 3 );
+        $pages = is_string( $json ) ? json_decode( $json, true ) : null;
+        return is_array( $pages ) ? $pages : null;
     }
 
     /** Snapshot of every page's sections, as stored. */
@@ -69,15 +135,21 @@ trait SB_History {
         if ( $list && ( $list[0]['hash'] ?? '' ) === $hash ) return;
 
         $user = wp_get_current_user();
+        $id   = self::new_id( 'rev' );
+        self::store_revision_pages( $id, $pages );
         array_unshift( $list, [
-                'id'     => self::new_id( 'rev' ),
+                'id'     => $id,
                 'time'   => time(),
                 'user'   => $user && $user->exists() ? $user->display_name : '',
                 'hash'   => $hash,
                 'pushed' => 0,
-                'pages'  => $pages,
+                'counts' => self::revision_counts( $pages ),
         ] );
+        unset( $pages );
 
+        foreach ( array_slice( $list, self::MAX_REVISIONS ) as $old ) {
+            delete_option( self::REVISION_PREFIX . ( $old['id'] ?? '' ) );
+        }
         update_option( self::REVISIONS_OPTION, array_slice( $list, 0, self::MAX_REVISIONS ), false );
     }
 
@@ -100,10 +172,7 @@ trait SB_History {
 
         $out = [];
         foreach ( self::get_revisions() as $rev ) {
-            $counts = [];
-            foreach ( (array) ( $rev['pages'] ?? [] ) as $page => $sections ) {
-                $counts[ $page ] = count( (array) $sections );
-            }
+            $counts = (array) ( $rev['counts'] ?? [] );
             $out[] = [
                     'id'     => $rev['id'],
                     'time'   => (int) $rev['time'],
@@ -123,9 +192,10 @@ trait SB_History {
         $id = self::posted_id();
         foreach ( self::get_revisions() as $rev ) {
             if ( ( $rev['id'] ?? '' ) !== $id ) continue;
+            $pages = self::revision_pages( $id );
+            if ( $pages === null ) break;
 
             $refs  = [];
-            $pages = (array) ( $rev['pages'] ?? [] );
             foreach ( $pages as $sections ) self::collect_sections_refs( (array) $sections, $refs );
 
             wp_send_json_success( [ 'pages' => (object) $pages ] + self::refs_payload( $refs ) );

@@ -3351,6 +3351,7 @@ abstract class Shop_Builder_Constants {
     /** Saved versions of the builder (one per Save that changed something) and section templates. */
     const REVISIONS_OPTION = 'shop_builder_revisions';
     const MAX_REVISIONS    = 20;
+    const REVISION_PREFIX  = 'shop_builder_rev_';
     const TEMPLATES_OPTION = 'shop_builder_templates';
     const MAX_TEMPLATES    = 50;
 

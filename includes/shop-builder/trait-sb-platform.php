@@ -464,10 +464,7 @@ trait SB_Platform {
     public static function platform_revisions() {
         $out = [];
         foreach ( self::get_revisions() as $rev ) {
-            $counts = [];
-            foreach ( (array) ( $rev['pages'] ?? [] ) as $page => $sections ) {
-                $counts[ $page ] = count( (array) $sections );
-            }
+            $counts = (array) ( $rev['counts'] ?? [] );
             $out[] = [ 'id' => $rev['id'], 'time' => (int) $rev['time'], 'user' => $rev['user'] ?? '', 'pushed' => ! empty( $rev['pushed'] ), 'counts' => $counts ];
         }
         return $out;
@@ -477,8 +474,9 @@ trait SB_Platform {
     public static function platform_revision( $id ) {
         foreach ( self::get_revisions() as $rev ) {
             if ( ( $rev['id'] ?? '' ) !== $id ) continue;
+            $pages = self::revision_pages( (string) $id );
+            if ( $pages === null ) return null;
             $refs  = [];
-            $pages = (array) ( $rev['pages'] ?? [] );
             foreach ( $pages as $sections ) self::collect_sections_refs( (array) $sections, $refs );
             return [ 'pages' => (object) $pages ] + self::refs_payload( $refs );
         }

@@ -132,6 +132,7 @@ trait SB_Migration {
         update_option( 'shop_builder_options', $options );
 
         if ( $force ) return;
+        // Versions are stored one per option since 2026-11-09; only older lists hold snapshots.
         foreach ( [ self::REVISIONS_OPTION, self::TEMPLATES_OPTION ] as $name ) {
             $stored = get_option( $name, null );
             if ( is_array( $stored ) && $stored ) {
