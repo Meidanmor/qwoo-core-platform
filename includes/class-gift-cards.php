@@ -56,6 +56,7 @@ class Qwoo_Gift_Cards {
 
     public static function init() {
         add_action( 'init', [ __CLASS__, 'register_store_api' ] );
+        add_action( 'init', [ __CLASS__, 'clean_old_categories' ], 30 );
         add_action( 'rest_api_init', [ __CLASS__, 'routes' ] );
 
         add_filter( 'woocommerce_store_api_add_to_cart_data', [ __CLASS__, 'add_to_cart_data' ], 10, 2 );
@@ -390,6 +391,16 @@ class Qwoo_Gift_Cards {
             if ( $s && empty( $s['in_lists'] ) ) $hidden[] = (int) $id;
         }
         update_option( 'qwoo_gc_hidden', $hidden, true );
+    }
+
+    /**
+     * Once: gift cards saved before they lost their category (store 8e28925) still have one,
+     * and the category's count shows a product its page can't list.
+     */
+    public static function clean_old_categories() {
+        if ( get_option( 'qwoo_gc_nocat' ) === '1' ) return;
+        update_option( 'qwoo_gc_nocat', '1', true );
+        foreach ( self::gift_products() as $id ) self::no_category( (int) $id );
     }
 
     public static function no_category( $product_id ) {
@@ -1267,6 +1278,8 @@ class Qwoo_Gift_Cards {
             'to_email'     => (string) $c['to_email'],
             'email'        => (string) $c['email_status'],
             'send_at'      => self::iso( $c['send_at'] ),
+            // The store's own clock (what the shopper chose, and the order says): "Y-m-d H:i".
+            'send_local'   => $c['send_at'] ? wp_date( 'Y-m-d H:i', strtotime( $c['send_at'] . ' UTC' ) ) : '',
             'sent_at'      => self::iso( $c['sent_at'] ),
             'expires_at'   => self::iso( $c['expires_at'] ),
             'expiry_years' => (int) $c['expiry_years'],
@@ -1335,7 +1348,10 @@ class Qwoo_Gift_Cards {
             'page'     => $page,
             'currency' => get_woocommerce_currency(),
             'stats'    => [ 'count' => (int) ( $stats['n'] ?? 0 ), 'sold' => (float) ( $stats['sold'] ?? 0 ), 'open' => (float) ( $stats['open'] ?? 0 ), 'waiting' => (int) ( $stats['waiting'] ?? 0 ) ],
-            'products' => array_map( static fn( $id ) => [ 'id' => (int) $id, 'name' => get_the_title( $id ) ], self::gift_products() ),
+            'products' => array_map( static fn( $id ) => [ 'id' => (int) $id, 'name' => get_the_title( $id ), 'status' => get_post_status( $id ) ], self::gift_products() ),
+            'timezone' => wp_timezone_string(),
+            // A new WordPress is on UTC until someone picks a time zone.
+            'tz_unset' => (string) get_option( 'timezone_string' ) === '' && (float) get_option( 'gmt_offset' ) === 0.0,
         ];
     }
 
