@@ -2313,6 +2313,9 @@ class Qwoo_Platform_Dashboard {
                     'cost'        => (string) $method->get_instance_option( 'cost', '' ),
                     'min_amount'  => (string) $method->get_instance_option( 'min_amount', '' ),
                     'requires'    => (string) $method->get_instance_option( 'requires', '' ),
+                    // Our own rules, applied by Qwoo_Cart_Extras::package_rates.
+                    'free_from'   => (string) $method->get_instance_option( 'qwoo_free_from', '' ),
+                    'hide'        => array_values( array_map( 'intval', array_filter( explode( ',', (string) $method->get_instance_option( 'qwoo_hide', '' ) ) ) ) ),
                     'editable'    => in_array( $method->id, self::SHIPPING_METHODS, true ),
                 ];
             }
@@ -2372,6 +2375,9 @@ class Qwoo_Platform_Dashboard {
      * { zone_id, instance_id?, method_id, title, enabled, cost, min_amount,
      * requires }. requires (free shipping) is WooCommerce's: '' (everyone),
      * min_amount, coupon (a free-shipping discount code), either or both.
+     * free_from (Flat rate, Local pickup): the method is free once the cart
+     * reaches it. hide (Free shipping): instance ids of the zone's other
+     * methods hidden while it is offered. Both: Qwoo_Cart_Extras::package_rates.
      */
     private static function action_method_save( array $params ) {
         $zone_id = absint( $params['zone_id'] ?? 0 );
@@ -2403,6 +2409,13 @@ class Qwoo_Platform_Dashboard {
                 return self::bad( 'The cost must be a number, like 25 or 9.90.' );
             }
             $settings['cost'] = $cost;
+            if ( array_key_exists( 'free_from', $params ) ) { // older callers keep what's saved
+                $from = self::price( $params['free_from'] );
+                if ( $from === null ) {
+                    return self::bad( 'The "free from" amount must be a number, like 300.' );
+                }
+                $settings['qwoo_free_from'] = ( $from !== '' && (float) $from > 0 ) ? $from : '';
+            }
         }
         if ( $type === 'free_shipping' ) {
             $min = self::price( $params['min_amount'] ?? '' );
@@ -2419,6 +2432,16 @@ class Qwoo_Platform_Dashboard {
             }
             $settings['requires']   = $requires;
             $settings['min_amount'] = $min;
+            if ( array_key_exists( 'hide', $params ) ) { // older callers keep what's saved
+                $others = [];
+                foreach ( $zone->get_shipping_methods( false ) as $other ) {
+                    if ( (int) $other->instance_id !== $instance_id && $other->id !== 'free_shipping' ) {
+                        $others[] = (int) $other->instance_id;
+                    }
+                }
+                $hide = array_intersect( array_map( 'intval', (array) $params['hide'] ), $others );
+                $settings['qwoo_hide'] = implode( ',', array_unique( $hide ) );
+            }
         }
 
         if ( ! $instance_id ) {
