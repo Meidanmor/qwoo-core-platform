@@ -62,6 +62,7 @@ class Qwoo_Platform_Dashboard {
         'products_list'   => 'action_products_list',
         'product_get'     => 'action_product_get',
         'product_save'    => 'action_product_save',
+        'product_quick'   => 'action_product_quick',
         'product_delete'  => 'action_product_delete',
         'product_duplicate'     => 'action_product_duplicate',
         'products_bulk'         => 'action_products_bulk',
@@ -469,18 +470,24 @@ class Qwoo_Platform_Dashboard {
         for ( $i = 29; $i >= 0; $i-- ) {
             $daily[ $start->modify( "-{$i} days" )->format( 'Y-m-d' ) ] = 0.0;
         }
-        $sales = [ 'total' => 0.0, 'orders' => 0, 'today' => 0.0, 'today_orders' => 0 ];
+        $sales = [ 'total' => 0.0, 'orders' => 0, 'today' => 0.0, 'today_orders' => 0, 'prev_total' => 0.0, 'prev_orders' => 0 ];
+        $prev  = $start->modify( '-59 days' )->getTimestamp(); // the 30 days before, for the Home trends
 
         $orders = wc_get_orders( [
             'type'         => 'shop_order',
             'status'       => $counted,
-            'date_created' => '>=' . $since,
-            'limit'        => 2000,
+            'date_created' => '>=' . $prev,
+            'limit'        => 4000,
         ] );
         foreach ( $orders as $order ) {
             $created = $order->get_date_created();
             if ( ! $created ) continue;
             $total = (float) $order->get_total() - (float) $order->get_total_refunded();
+            if ( $created->getTimestamp() < $since ) {
+                $sales['prev_total'] += $total;
+                $sales['prev_orders']++;
+                continue;
+            }
             $day   = wp_date( 'Y-m-d', $created->getTimestamp(), $tz );
             if ( isset( $daily[ $day ] ) ) {
                 $daily[ $day ] += $total;
@@ -522,6 +529,9 @@ class Qwoo_Platform_Dashboard {
             'sales'    => array_map( static fn( $v ) => is_float( $v ) ? round( $v, 2 ) : $v, $sales ),
             'daily'    => array_map( static fn( $v ) => round( $v, 2 ), $daily ),
             'to_fulfil' => (int) wc_orders_count( 'processing' ),
+            // Paid orders ever (the Home's milestones: first order, 10th…).
+            'orders_all' => array_sum( array_map( static fn( $s ) => (int) wc_orders_count( $s ), [ 'processing', 'completed', 'on-hold' ] ) ),
+            'low_stock'  => self::low_stock(),
             'products' => [
                 'published'    => $count( [ 'status' => 'publish' ] ),
                 'out_of_stock' => $count( [ 'status' => 'publish', 'stock_status' => 'outofstock' ] ),
@@ -548,6 +558,31 @@ class Qwoo_Platform_Dashboard {
      */
     private static function action_analytics( array $params ) {
         return Qwoo_Analytics::report( $params );
+    }
+
+    /**
+     * Published products (and their variants) that are out of stock or at the
+     * store's low stock amount: { count, items: [ { id (the product to open), name, quantity } ] }, 5 at most.
+     */
+    private static function low_stock() {
+        global $wpdb;
+        $low  = max( 0, (int) get_option( 'woocommerce_notify_low_stock_amount', 2 ) );
+        $from = "FROM {$wpdb->wc_product_meta_lookup} l JOIN {$wpdb->posts} p ON p.ID = l.product_id
+            WHERE p.post_status = 'publish' AND p.post_type IN ('product', 'product_variation')
+            AND ( l.stock_status = 'outofstock' OR ( l.stock_quantity IS NOT NULL AND l.stock_quantity <= %d ) )";
+        $count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) $from", $low ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $ids   = $count ? $wpdb->get_col( $wpdb->prepare( "SELECT l.product_id $from ORDER BY l.stock_quantity IS NULL, l.stock_quantity ASC LIMIT 5", $low ) ) : []; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $items = [];
+        foreach ( $ids as $id ) {
+            $product = wc_get_product( (int) $id );
+            if ( ! $product ) continue;
+            $items[] = [
+                'id'       => $product->get_parent_id() ?: $product->get_id(),
+                'name'     => html_entity_decode( wp_strip_all_tags( $product->get_name() ), ENT_QUOTES ),
+                'quantity' => $product->get_stock_status() === 'outofstock' ? 0 : $product->get_stock_quantity(),
+            ];
+        }
+        return [ 'count' => $count, 'items' => $items ];
     }
 
     /** The owner checked the store's time zone: the Overview stops asking. */
@@ -676,6 +711,43 @@ class Qwoo_Platform_Dashboard {
         ];
         $clauses['orderby'] = $orders[ $sort ] . ", {$wpdb->posts}.ID DESC";
         return $clauses;
+    }
+
+    /**
+     * { id, price?, quantity? }: the products list's quick edit, for simple
+     * products. price is the regular price (not while a sale price is set);
+     * quantity only when the product counts its stock. Answers the list row.
+     */
+    private static function action_product_quick( array $params ) {
+        $product = self::find_product( $params['id'] ?? 0 );
+        if ( is_wp_error( $product ) ) {
+            return $product;
+        }
+        if ( ! $product->is_type( 'simple' ) ) {
+            return self::bad( 'Change this product\'s price and stock in its editor.' );
+        }
+        if ( array_key_exists( 'price', $params ) ) {
+            $price = self::price( $params['price'] );
+            if ( $price === null || $price === '' ) {
+                return self::bad( 'The price must be a number, like 25 or 9.90.' );
+            }
+            if ( (string) $product->get_sale_price() !== '' ) {
+                return self::bad( 'This product is on sale: change its prices in its editor.' );
+            }
+            $product->set_regular_price( $price );
+        }
+        if ( array_key_exists( 'quantity', $params ) ) {
+            if ( ! $product->managing_stock() ) {
+                return self::bad( 'This product doesn\'t count its stock.' );
+            }
+            $quantity = trim( (string) $params['quantity'] );
+            if ( ! preg_match( '/^-?\d{1,7}$/', $quantity ) ) {
+                return self::bad( 'The stock must be a whole number.' );
+            }
+            $product->set_stock_quantity( (int) $quantity );
+        }
+        $product->save();
+        return self::product_summary( wc_get_product( $product->get_id() ) );
     }
 
     private static function action_product_get( array $params ) {
