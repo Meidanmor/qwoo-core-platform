@@ -58,6 +58,7 @@ class Qwoo_Platform_Dashboard {
         'analytics'       => 'action_analytics',
         'growth'          => 'action_growth',
         'legal_reviewed'  => 'action_legal_reviewed',
+        'time_checked'    => 'action_time_checked',
         'products_list'   => 'action_products_list',
         'product_get'     => 'action_product_get',
         'product_save'    => 'action_product_save',
@@ -496,6 +497,13 @@ class Qwoo_Platform_Dashboard {
             'reviews'  => self::action_reviews_pending(),
             // Legal pages written and published at setup: the owner is asked to read them.
             'legal_review' => Shop_Settings_Builder::legal_review(),
+            // The store's clock: the Overview asks the owner to check it once.
+            'time_check'   => get_option( 'qwoo_time_checked' ) ? null : [
+                'zone'  => wp_timezone_string(),
+                'unset' => (string) get_option( 'timezone_string' ) === '' && (float) get_option( 'gmt_offset' ) === 0.0,
+                'now'   => wp_date( 'Y-m-d H:i' ),
+                'week'  => (int) get_option( 'start_of_week', 1 ),
+            ],
         ];
     }
 
@@ -506,6 +514,12 @@ class Qwoo_Platform_Dashboard {
      */
     private static function action_analytics( array $params ) {
         return Qwoo_Analytics::report( $params );
+    }
+
+    /** The owner checked the store's time zone: the Overview stops asking. */
+    private static function action_time_checked( array $params ) {
+        update_option( 'qwoo_time_checked', time(), false );
+        return [ 'ok' => true ];
     }
 
     /** The owner read the generated legal pages: the Overview stops asking. */

@@ -137,6 +137,36 @@ trait SB_Template_Import {
      * ]
      * @return array [ 'done' => true, 'warnings' => [...] ] or [ 'error' => message ].
      */
+    /**
+     * From the setup form: the time zone (a new WordPress is on UTC), the business address, and
+     * Israeli stores' week starting on Sunday. Every value is checked again here.
+     */
+    public static function apply_setup_settings( array $setup, string $lang = '' ): void {
+        $zone = (string) ( $setup['timezone'] ?? '' );
+        if ( $zone !== '' && in_array( $zone, timezone_identifiers_list(), true ) ) {
+            update_option( 'timezone_string', $zone );
+            update_option( 'gmt_offset', '' );
+        }
+        $country = strtoupper( (string) ( $setup['country'] ?? '' ) );
+        if ( preg_match( '/^[A-Z]{2}$/', $country ) && function_exists( 'WC' ) && isset( WC()->countries->get_countries()[ $country ] ) ) {
+            update_option( 'woocommerce_default_country', $country );
+            if ( $country === 'IL' ) {
+                update_option( 'woocommerce_currency', 'ILS' );
+                update_option( 'woocommerce_weight_unit', 'kg' );
+                update_option( 'woocommerce_dimension_unit', 'cm' );
+            }
+        }
+        foreach ( [ 'address1' => 'woocommerce_store_address', 'city' => 'woocommerce_store_city', 'postcode' => 'woocommerce_store_postcode' ] as $key => $option ) {
+            $value = mb_substr( trim( sanitize_text_field( (string) ( $setup[ $key ] ?? '' ) ) ), 0, 120 );
+            if ( $value !== '' ) update_option( $option, $value );
+        }
+        // Weeks start on Sunday in Israel (WordPress' default is Monday).
+        $store_country = strtok( (string) get_option( 'woocommerce_default_country' ), ':' );
+        if ( $store_country === 'IL' || $zone === 'Asia/Jerusalem' || $lang === 'he' ) {
+            update_option( 'start_of_week', 0 );
+        }
+    }
+
     public static function apply_platform_branding( array $input ) {
         $state = get_option( self::$branding_option, [] );
         $state = is_array( $state ) ? $state : [];
@@ -171,6 +201,8 @@ trait SB_Template_Import {
         if ( $description !== '' ) {
             update_option( 'blogdescription', $description );
         }
+        // Time zone (the owner's browser) and the business address (optional): before the legal pages, which use them.
+        self::apply_setup_settings( (array) ( $input['setup'] ?? [] ), (string) ( $input['lang'] ?? '' ) );
         // Home (from the template's homepage), privacy policy, terms, shipping & returns.
         self::ensure_store_pages( true, trim( (string) ( $input['name'] ?? '' ) ) );
         // Templates published before "Default" alignment existed say "left".
