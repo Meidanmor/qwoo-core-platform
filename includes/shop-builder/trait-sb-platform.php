@@ -149,6 +149,8 @@ trait SB_Platform {
             'checkout' => [
                 'require_terms'   => (bool) ( $o['checkout']['require_terms'] ?? true ),
                 'allow_signup'    => (bool) ( $o['checkout']['allow_signup'] ?? true ),
+                'steps'           => (bool) ( $o['checkout']['steps'] ?? false ),
+                'hide_chrome'     => (bool) ( $o['checkout']['hide_chrome'] ?? false ),
             ],
             'account'  => [
                 'allow_signup'    => (bool) ( $o['account']['allow_signup'] ?? true ),

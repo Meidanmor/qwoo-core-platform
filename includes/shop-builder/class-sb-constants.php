@@ -778,6 +778,17 @@ abstract class Shop_Builder_Constants {
                 'help' => 'On: a thin border, padding and rounded corners, which the Style tab\'s Box, Border and Margin change. Off: none of them.' ],
         'ts:title'   => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
     ];
+    /**
+     * Which step a checkout block shows in when the checkout is in steps (`checkout.steps`).
+     * Automatic: Details (sign in, contact, delivery or pickup, address, note), Delivery (the
+     * delivery options), Payment (billing address, coupon, payment); the title, items, totals,
+     * Order Summary and Place Order (Continue in the first steps) show in every step.
+     */
+    const CHECKOUT_STEP_FIELD = [
+        'step' => [ 'type' => 'select', 'label' => 'Step', 'tab' => 'content', 'group' => 'Checkout in steps', 'default' => 'auto',
+                'options' => [ 'auto' => 'Automatic', '1' => 'Step 1: Details', '2' => 'Step 2: Delivery', '3' => 'Step 3: Payment', 'all' => 'Every step' ],
+                'help' => 'Used when the checkout is in steps (Settings → Checkout).', 'pages' => [ 'checkout' ] ],
+    ];
     /** The cart page's Items and Totals: the same card, no title. */
     const CART_CARD_FIELD = [
         'card' => self::CHECKOUT_CARD_FIELDS['card'],
@@ -2064,6 +2075,7 @@ abstract class Shop_Builder_Constants {
                     'label' => 'Sign-in Box', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'person',
                     'fields' => [
                             'label' => [ 'type' => 'text', 'label' => 'Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Have an account?' ],
+                    ] + self::CHECKOUT_STEP_FIELD + [
                     ],
             ],
             // The first checkout blocks held several parts each; they're split into the blocks
@@ -2082,21 +2094,21 @@ abstract class Shop_Builder_Constants {
             ],
             'checkout_contact' => [
                     'label' => 'Contact Details', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'person',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Personal Details' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK,
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Personal Details' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + self::CHECKOUT_STEP_FIELD,
             ],
             'checkout_shipping_address' => [
                     'label' => 'Shipping Address', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'person',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Shipping Address' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK,
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Shipping Address' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + self::CHECKOUT_STEP_FIELD,
             ],
             'checkout_billing_address' => [
                     'label' => 'Billing Address', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'card',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Billing Address' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + [
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Billing Address' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + self::CHECKOUT_STEP_FIELD + [
                             'checkbox_label' => [ 'type' => 'text', 'label' => 'Checkbox Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Different billing address?' ],
                     ],
             ],
             'checkout_coupon' => [
                     'label' => 'Coupon Box', 'category' => 'dynamic', 'pages' => [ 'checkout', 'cart', 'drawer_cart' ], 'icon' => 'tag',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Coupon', 'show_if' => [ 'show_title' => true ] ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + [
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Coupon', 'show_if' => [ 'show_title' => true ] ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + self::CHECKOUT_STEP_FIELD + [
                             'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Apply' ],
                             'folded'       => [ 'type' => 'toggle', 'label' => 'Folded until clicked', 'tab' => 'content', 'default' => false,
                                     'help' => 'Shows "Have a coupon?" and opens the field on a click. Saves room in a drawer.' ],
@@ -2108,36 +2120,80 @@ abstract class Shop_Builder_Constants {
             // The customer's note for the order (WooCommerce's order note): the owner sees it on the order.
             'checkout_note' => [
                     'label' => 'Order Note', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'text',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Order Note' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + [
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Order Note' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + self::CHECKOUT_STEP_FIELD + [
                             'field_label' => [ 'type' => 'text', 'label' => 'Text in the Field', 'tab' => 'content', 'default' => '', 'placeholder' => 'Notes about your order, e.g. delivery instructions' ],
                     ],
             ],
             'checkout_items' => [
                     'label' => 'Cart Items', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'cart',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Your Cart' ] ] + self::CHECKOUT_CARD_FIELDS + [
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Your Cart' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_STEP_FIELD + [
                             'image_size' => [ 'type' => 'length', 'label' => 'Photo Size', 'tab' => 'style', 'units' => [ 'px' ], 'placeholder' => '100px' ],
                             'ts:item'    => [ 'type' => 'text_style', 'label' => 'Items', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
                     ],
             ],
             'checkout_shipping' => [
                     'label' => 'Delivery Options', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'cart',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Choose Shipping Method' ] ] + self::CHECKOUT_CARD_FIELDS + [
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Choose Shipping Method' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_STEP_FIELD + [
                             'choice_color' => [ 'type' => 'color', 'label' => 'Chosen Option Color', 'tab' => 'style', 'default' => '' ],
                             'ts:option'    => [ 'type' => 'text_style', 'label' => 'Options', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
                     ],
             ],
             'checkout_payment' => [
                     'label' => 'Payment Options', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'card',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Payment Method' ] ] + self::CHECKOUT_CARD_FIELDS + [
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Payment Method' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_STEP_FIELD + [
                             'choice_color' => [ 'type' => 'color', 'label' => 'Chosen Option Color', 'tab' => 'style', 'default' => '' ],
                             'ts:option'    => [ 'type' => 'text_style', 'label' => 'Options', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
                     ],
             ],
             'checkout_totals' => [
                     'label' => 'Order Totals', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'products',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Order Summary' ] ] + self::CHECKOUT_CARD_FIELDS + [
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Order Summary' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_STEP_FIELD + [
                             'show_discount' => [ 'type' => 'toggle', 'label' => 'Show the discount', 'tab' => 'content', 'default' => true ],
                             'ts:total'      => [ 'type' => 'text_style', 'label' => 'Total', 'default_font' => 'headings' ],
+                    ],
+            ],
+            // A folding "Order summary": the items, a coupon box and the totals under a header with the
+            // total. Open or closed when the page opens, set for computers and phones apart.
+            'checkout_order_summary' => [
+                    'label' => 'Order Summary', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'cart',
+                    'fields' => [
+                            'title'        => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Order summary' ],
+                            'show_total'   => [ 'type' => 'toggle', 'label' => 'The total next to the title', 'tab' => 'content', 'default' => true ],
+                            'show_items'   => [ 'type' => 'toggle', 'label' => 'The cart\'s items', 'tab' => 'content', 'group' => 'Inside', 'default' => true ],
+                            'show_coupon'  => [ 'type' => 'toggle', 'label' => 'Coupon box', 'tab' => 'content', 'group' => 'Inside', 'default' => false ],
+                            'show_lines'   => [ 'type' => 'toggle', 'label' => 'Subtotal, shipping and discount', 'tab' => 'content', 'group' => 'Inside', 'default' => true ],
+                            'show_grand'   => [ 'type' => 'toggle', 'label' => 'The total', 'tab' => 'content', 'group' => 'Inside', 'default' => true ],
+                            'open_desktop' => [ 'type' => 'toggle', 'label' => 'Open on computers and tablets', 'tab' => 'content', 'group' => 'When the page opens', 'default' => true ],
+                            'open_mobile'  => [ 'type' => 'toggle', 'label' => 'Open on phones', 'tab' => 'content', 'group' => 'When the page opens', 'default' => false ],
+                            'card'         => self::CHECKOUT_CARD_FIELDS['card'],
+                            'image_size'   => [ 'type' => 'length', 'label' => 'Photo Size', 'tab' => 'style', 'units' => [ 'px' ], 'placeholder' => '64px' ],
+                            'ts:title'     => self::CHECKOUT_CARD_FIELDS['ts:title'],
+                            'ts:item'      => [ 'type' => 'text_style', 'label' => 'Items', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
+                            'ts:total'     => [ 'type' => 'text_style', 'label' => 'Total', 'default_font' => 'headings' ],
+                    ] + self::CHECKOUT_FIELD_LOOK + self::CHECKOUT_STEP_FIELD,
+            ],
+            // Delivery or pickup: Pickup uses the store's local pickup methods (Settings → Shipping)
+            // and needs no address. Hidden when the store has no pickup, or nothing needs shipping.
+            'checkout_delivery_mode' => [
+                    'label' => 'Delivery or Pickup', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'shipping',
+                    'fields' => [
+                            'title'          => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'How would you like to get your order?' ],
+                            'delivery_label' => [ 'type' => 'text', 'label' => 'Delivery Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Delivery' ],
+                            'pickup_label'   => [ 'type' => 'text', 'label' => 'Pickup Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Pickup' ],
+                            'choice_color'   => [ 'type' => 'color', 'label' => 'Chosen Option Color', 'tab' => 'style', 'default' => '' ],
+                            'ts:option'      => [ 'type' => 'text_style', 'label' => 'Options', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
+                    ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_STEP_FIELD,
+            ],
+            // The steps bar (Details · Delivery · Payment) when the checkout is in steps. Without
+            // one on the page, the storefront draws it at the top.
+            'checkout_steps' => [
+                    'label' => 'Checkout Steps', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'products',
+                    'fields' => [
+                            'details_label'  => [ 'type' => 'text', 'label' => 'Step 1', 'tab' => 'content', 'default' => '', 'placeholder' => 'Details' ],
+                            'delivery_label' => [ 'type' => 'text', 'label' => 'Step 2', 'tab' => 'content', 'default' => '', 'placeholder' => 'Delivery' ],
+                            'payment_label'  => [ 'type' => 'text', 'label' => 'Step 3', 'tab' => 'content', 'default' => '', 'placeholder' => 'Payment' ],
+                            'active_color'   => [ 'type' => 'color', 'label' => 'Current Step Color', 'tab' => 'style', 'default' => '' ],
+                            'ts:steps'       => [ 'type' => 'text_style', 'label' => 'Steps', 'parts' => [ 'font', 'size', 'weight' ] ],
                     ],
             ],
             'checkout_place_order' => [
@@ -2147,6 +2203,7 @@ abstract class Shop_Builder_Constants {
                                     'help' => 'Turn off when the page has an Order Totals block.' ],
                             'card'         => [ 'type' => 'toggle', 'label' => 'In a card', 'tab' => 'style', 'default' => true ],
                             'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Place Order' ],
+                            'continue_label' => [ 'type' => 'text', 'label' => 'Button Text Before the Last Step', 'tab' => 'content', 'default' => '', 'placeholder' => 'Continue', 'help' => 'When the checkout is in steps.' ],
                             'full_width'   => [ 'type' => 'toggle', 'label' => 'Full-width button', 'tab' => 'style', 'default' => false ],
                             'button_bg'    => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
                             'button_text'  => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],

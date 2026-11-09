@@ -23,6 +23,74 @@ class Qwoo_Checkout_Extras {
         add_action( 'init', [ __CLASS__, 'register_schema' ] );
         add_action( 'woocommerce_store_api_checkout_update_order_from_request', [ __CLASS__, 'check_terms' ], 10, 2 );
         add_action( 'rest_api_init', [ __CLASS__, 'sync_once' ] );
+        // Pickup, or nothing that ships (gift cards, digital products): no address needed.
+        add_filter( 'woocommerce_get_country_locale', [ __CLASS__, 'address_optional' ], 99 );
+        add_filter( 'woocommerce_get_country_locale_default', [ __CLASS__, 'address_optional_fields' ], 99 );
+        add_action( 'woocommerce_store_api_checkout_update_order_from_request', [ __CLASS__, 'fresh_locale' ], 1 );
+    }
+
+    /** The address parts a shopper can leave empty when nothing is delivered. */
+    const ADDRESS_PARTS = [ 'address_1', 'address_2', 'city', 'postcode', 'state' ];
+
+    /**
+     * Whether this request places an order that needs no address: a Store API checkout
+     * whose cart has nothing to ship, or whose chosen shipping is all local pickup.
+     * Only the checkout: the cart and every other request keep WooCommerce's rules.
+     */
+    private static function address_not_needed() {
+        $method = strtoupper( (string) ( $_SERVER['REQUEST_METHOD'] ?? '' ) );
+        $uri    = (string) ( $_SERVER['REQUEST_URI'] ?? '' ) . '|' . (string) ( $_GET['rest_route'] ?? '' );
+        if ( $method !== 'POST' || ! preg_match( '#wc/store(/v1)?/checkout#', $uri ) ) {
+            return false;
+        }
+        if ( ! function_exists( 'WC' ) || ! WC()->cart || ! WC()->session ) {
+            return false;
+        }
+        if ( ! WC()->cart->needs_shipping() ) {
+            return true;
+        }
+        $chosen = array_filter( (array) WC()->session->get( 'chosen_shipping_methods', [] ) );
+        if ( ! $chosen ) {
+            return false;
+        }
+        foreach ( $chosen as $rate_id ) {
+            if ( ! in_array( strtok( (string) $rate_id, ':' ), [ 'local_pickup', 'pickup_location' ], true ) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** woocommerce_get_country_locale: each country's address parts optional (see address_not_needed). */
+    public static function address_optional( $locale ) {
+        if ( ! is_array( $locale ) || ! self::address_not_needed() ) {
+            return $locale;
+        }
+        foreach ( $locale as $country => $fields ) {
+            if ( ! is_array( $fields ) ) continue;
+            foreach ( self::ADDRESS_PARTS as $part ) {
+                $locale[ $country ][ $part ] = array_merge( (array) ( $fields[ $part ] ?? [] ), [ 'required' => false ] );
+            }
+        }
+        return $locale;
+    }
+
+    /** woocommerce_get_country_locale_default: the same for countries without their own rules. */
+    public static function address_optional_fields( $fields ) {
+        if ( ! is_array( $fields ) || ! self::address_not_needed() ) {
+            return $fields;
+        }
+        foreach ( self::ADDRESS_PARTS as $part ) {
+            if ( isset( $fields[ $part ] ) && is_array( $fields[ $part ] ) ) $fields[ $part ]['required'] = false;
+        }
+        return $fields;
+    }
+
+    /** The address rules are worked out once per request: again now that the cart and its shipping are known. */
+    public static function fresh_locale() {
+        if ( function_exists( 'WC' ) && WC()->countries && self::address_not_needed() ) {
+            WC()->countries->locale = [];
+        }
     }
 
     /** Stores that never saved the Checkout tab: WooCommerce's switch matches the default (on). */

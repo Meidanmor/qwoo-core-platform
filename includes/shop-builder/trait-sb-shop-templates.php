@@ -163,7 +163,7 @@ trait SB_Shop_Templates {
                             'style' => [ 'width_mode' => 'full', 'padding_preset' => 'none', 'direction' => $rwd( 'row', 'row', 'column' ), 'justify' => $rwd( 'space-between' ), 'align_items' => $rwd( 'flex-start' ), 'gap' => $rwd( '16px' ) ],
                             'blocks' => [
                                 $col( array_merge( $inside( 'before_customer_details' ),
-                                    $types( [ 'checkout_contact', 'checkout_shipping_address', 'checkout_billing_address', 'checkout_coupon', 'checkout_note' ] ),
+                                    $types( [ 'checkout_contact', 'checkout_delivery_mode', 'checkout_shipping_address', 'checkout_billing_address', 'checkout_coupon', 'checkout_note' ] ),
                                     $inside( 'after_customer_details' ) ), $rwd( '57%', '57%', '100%' ) ),
                                 $col( array_merge( $inside( 'before_order_review' ),
                                     $types( [ 'checkout_items', 'checkout_shipping', 'checkout_payment', 'checkout_totals' ] ),

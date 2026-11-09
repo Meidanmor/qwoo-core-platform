@@ -115,15 +115,10 @@ trait SB_Layouts {
         }
         foreach ( array_slice( array_values( is_array( $raw ) ? $raw : [] ), 0, self::MAX_LAYOUTS ) as $layout ) {
             if ( ! is_array( $layout ) ) continue;
-            $conditions = [];
-            foreach ( $kinds as $kind ) {
-                if ( $kind === 'targets' ) {
-                    $conditions[ $kind ] = self::sanitize_chrome_targets( $layout['conditions'][ $kind ] ?? [] );
-                    continue;
-                }
-                $ids = array_values( array_unique( array_filter( array_map( 'intval', (array) ( $layout['conditions'][ $kind ] ?? [] ) ), static fn( $id ) => $id > 0 ) ) );
-                $conditions[ $kind ] = array_slice( $ids, 0, 200 );
-            }
+            $conditions = self::sanitize_condition_lists( (array) ( $layout['conditions'] ?? [] ), $kinds );
+            // "Exclude" rows: the same lists; a page they match never gets this layout.
+            $exclude = self::sanitize_condition_lists( (array) ( $layout['conditions']['exclude'] ?? [] ), $kinds );
+            if ( array_filter( $exclude ) ) $conditions['exclude'] = $exclude;
             $row = [
                 'id'         => preg_match( '/^lay_[A-Za-z0-9]{6,20}$/', (string) ( $layout['id'] ?? '' ) ) ? $layout['id'] : self::new_id( 'lay' ),
                 'name'       => mb_substr( sanitize_text_field( (string) ( $layout['name'] ?? '' ) ), 0, 60 ) ?: 'Layout',
@@ -137,6 +132,20 @@ trait SB_Layouts {
                     : self::sanitize_header_settings( $old, [] );
             }
             $out[] = $row;
+        }
+        return $out;
+    }
+
+    /** A layout's condition lists for its page's kinds: ids (or, for targets, kinds of pages). */
+    private static function sanitize_condition_lists( array $raw, array $kinds ) {
+        $out = [];
+        foreach ( $kinds as $kind ) {
+            if ( $kind === 'targets' ) {
+                $out[ $kind ] = self::sanitize_chrome_targets( $raw[ $kind ] ?? [] );
+                continue;
+            }
+            $ids = array_values( array_unique( array_filter( array_map( 'intval', (array) ( $raw[ $kind ] ?? [] ) ), static fn( $id ) => $id > 0 ) ) );
+            $out[ $kind ] = array_slice( $ids, 0, 200 );
         }
         return $out;
     }
@@ -161,8 +170,10 @@ trait SB_Layouts {
             foreach ( (array) ( $options[ $page ]['layouts'] ?? [] ) as $layout ) {
                 $pages[ $page . '@' . $layout['id'] ] = array_values( (array) ( $layout['sections'] ?? [] ) );
                 self::collect_sections_refs( $pages[ $page . '@' . $layout['id'] ], $refs );
-                foreach ( (array) ( $layout['conditions']['products'] ?? [] ) as $id ) $refs['products'][ (int) $id ] = true;
-                foreach ( (array) ( $layout['conditions']['categories'] ?? [] ) as $id ) $refs['categories'][ (int) $id ] = true;
+                foreach ( [ (array) ( $layout['conditions'] ?? [] ), (array) ( $layout['conditions']['exclude'] ?? [] ) ] as $lists ) {
+                    foreach ( (array) ( $lists['products'] ?? [] ) as $id ) $refs['products'][ (int) $id ] = true;
+                    foreach ( (array) ( $lists['categories'] ?? [] ) as $id ) $refs['categories'][ (int) $id ] = true;
+                }
                 $row = [ 'id' => $layout['id'], 'name' => $layout['name'], 'conditions' => (array) $layout['conditions'] ];
                 if ( $page === 'header' ) $row['settings'] = self::sanitize_header_settings( (array) ( $layout['settings'] ?? [] ), [] );
                 $out[ $page ][] = $row;
@@ -179,30 +190,9 @@ trait SB_Layouts {
         $out   = [];
         $paths = null;
         foreach ( $layouts as $layout ) {
-            $conditions = [];
-            foreach ( (array) ( $layout['conditions'] ?? [] ) as $kind => $ids ) {
-                if ( $kind === 'targets' ) {
-                    // Header / footer templates: the chosen own pages' addresses too (the storefront matches by address).
-                    $targets = self::sanitize_chrome_targets( $ids );
-                    $conditions['targets'] = $targets;
-                    $paths = $paths ?? self::published_page_map( get_option( 'shop_builder_options', [] ) );
-                    $conditions['page_paths'] = [];
-                    foreach ( $targets as $target ) {
-                        if ( isset( $paths[ $target ] ) ) $conditions['page_paths'][] = (string) $paths[ $target ]['path'];
-                    }
-                    continue;
-                }
-                $ids = array_values( array_map( 'intval', (array) $ids ) );
-                $conditions[ $kind ] = $ids;
-                $taxonomy = [ 'categories' => 'product_cat', 'blog_categories' => 'category' ][ $kind ] ?? '';
-                if ( $taxonomy !== '' && $ids ) {
-                    $slugs = [];
-                    foreach ( $ids as $id ) {
-                        $term = get_term( $id, $taxonomy );
-                        if ( $term && ! is_wp_error( $term ) ) $slugs[] = urldecode( $term->slug );
-                    }
-                    $conditions[ $kind . '_slugs' ] = $slugs;
-                }
+            $conditions = self::published_condition_lists( (array) ( $layout['conditions'] ?? [] ), $paths );
+            if ( ! empty( $layout['conditions']['exclude'] ) ) {
+                $conditions['exclude'] = self::published_condition_lists( (array) $layout['conditions']['exclude'], $paths );
             }
             $row = [
                 'id'         => $layout['id'],
@@ -214,5 +204,36 @@ trait SB_Layouts {
             $out[] = $row;
         }
         return $out;
+    }
+
+    /** One set of condition lists as published: the ids, categories' slugs, own pages' addresses. */
+    private static function published_condition_lists( array $lists, &$paths ) {
+        $conditions = [];
+        foreach ( $lists as $kind => $ids ) {
+            if ( $kind === 'exclude' ) continue;
+            if ( $kind === 'targets' ) {
+                // Header / footer templates: the chosen own pages' addresses too (the storefront matches by address).
+                $targets = self::sanitize_chrome_targets( $ids );
+                $conditions['targets'] = $targets;
+                $paths = $paths ?? self::published_page_map( get_option( 'shop_builder_options', [] ) );
+                $conditions['page_paths'] = [];
+                foreach ( $targets as $target ) {
+                    if ( isset( $paths[ $target ] ) ) $conditions['page_paths'][] = (string) $paths[ $target ]['path'];
+                }
+                continue;
+            }
+            $ids = array_values( array_map( 'intval', (array) $ids ) );
+            $conditions[ $kind ] = $ids;
+            $taxonomy = [ 'categories' => 'product_cat', 'blog_categories' => 'category' ][ $kind ] ?? '';
+            if ( $taxonomy !== '' && $ids ) {
+                $slugs = [];
+                foreach ( $ids as $id ) {
+                    $term = get_term( $id, $taxonomy );
+                    if ( $term && ! is_wp_error( $term ) ) $slugs[] = urldecode( $term->slug );
+                }
+                $conditions[ $kind . '_slugs' ] = $slugs;
+            }
+        }
+        return $conditions;
     }
 }

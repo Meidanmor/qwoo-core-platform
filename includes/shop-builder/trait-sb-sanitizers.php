@@ -941,6 +941,14 @@ trait SB_Sanitizers {
                     'allow_signup'    => ! empty( $input['checkout']['allow_signup'] ),
             ] + ( $clean['checkout'] ?? [] );
         }
+        // The checkout in steps (Details → Delivery → Payment, each block's `step`), and the
+        // checkout without the store's header and footer. Each kept as it was when not sent.
+        foreach ( [ 'steps', 'hide_chrome' ] as $key ) {
+            if ( isset( $input['checkout'][ $key ] ) ) {
+                $clean['checkout'] = (array) ( $clean['checkout'] ?? [] );
+                $clean['checkout'][ $key ] = ! empty( $input['checkout'][ $key ] );
+            }
+        }
 
         // My account: whether visitors can make an account themselves (Sign Up Form, Google).
         if ( isset( $input['account']['allow_signup'] ) ) {
