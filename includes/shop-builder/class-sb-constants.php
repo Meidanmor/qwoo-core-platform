@@ -1881,6 +1881,18 @@ abstract class Shop_Builder_Constants {
                             'columns'       => [ 'type' => 'number', 'label' => 'Products Per Row', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
                                     'default' => [ 'desktop' => 3, 'tablet' => 2, 'mobile' => 2 ] ],
                             'gap'           => [ 'type' => 'length', 'label' => 'Gap Between Products', 'tab' => 'style', 'group' => 'Layout', 'responsive' => true, 'placeholder' => '16px' ],
+                            // Pagination (it used to be its own "Page Numbers" block: shop_page_as_template() moves it here).
+                            'per_page'      => [ 'type' => 'number', 'label' => 'Products Per Page', 'tab' => 'content', 'group' => 'Pagination', 'min' => 1, 'max' => 48, 'default' => 6 ],
+                            'pagination'    => [ 'type' => 'select', 'label' => 'More Products', 'tab' => 'content', 'group' => 'Pagination', 'default' => 'numbers',
+                                    'options' => [ 'numbers' => 'Page numbers', 'button' => 'A "Load more" button', 'scroll' => 'Load while scrolling', 'none' => 'None (first page only)' ] ],
+                            'show_progress' => [ 'type' => 'toggle', 'label' => 'Show "Showing 12 of 66"', 'tab' => 'content', 'group' => 'Pagination', 'default' => true,
+                                    'show_if' => [ 'pagination' => [ 'button', 'scroll' ] ] ],
+                            'more_text'     => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'group' => 'Pagination', 'default' => '', 'placeholder' => 'Load more',
+                                    'show_if' => [ 'pagination' => 'button' ] ],
+                            'more_bg'       => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'group' => 'Load more button', 'default' => '', 'show_if' => [ 'pagination' => 'button' ] ],
+                            'more_color'    => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'group' => 'Load more button', 'default' => '', 'show_if' => [ 'pagination' => 'button' ] ],
+                            'more_border'   => [ 'type' => 'color', 'label' => 'Button Frame Color', 'tab' => 'style', 'group' => 'Load more button', 'default' => '', 'show_if' => [ 'pagination' => 'button' ] ],
+                            'more_radius'   => [ 'type' => 'length', 'label' => 'Button Corner Radius', 'tab' => 'style', 'group' => 'Load more button', 'placeholder' => 'e.g. 999px', 'show_if' => [ 'pagination' => 'button' ] ],
                             'promo'         => [ 'type' => 'toggle', 'label' => 'Show a promo card among the products', 'tab' => 'content', 'group' => 'Promo card', 'default' => false,
                                     'help' => 'Shown on the first page only.' ],
                             'promo_position' => [ 'type' => 'number', 'label' => 'Comes After Product', 'tab' => 'content', 'group' => 'Promo card', 'min' => 0, 'max' => 24, 'default' => 2, 'show_if' => [ 'promo' => true ] ],
@@ -1897,10 +1909,7 @@ abstract class Shop_Builder_Constants {
                             'promo_radius'  => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Promo card', 'placeholder' => 'e.g. 16px', 'show_if' => [ 'promo' => true ] ],
                     ],
             ],
-            'archive_pagination' => [
-                    'label' => 'Page Numbers', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'pagination',
-                    'fields' => [],
-            ],
+            // No 'archive_pagination' ("Page Numbers") any more: Products Grid → Pagination.
 
             'cart_title' => [
                     'label' => 'Cart Title', 'category' => 'dynamic', 'pages' => [ 'cart' ], 'icon' => 'title',

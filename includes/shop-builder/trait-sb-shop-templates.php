@@ -131,8 +131,7 @@ trait SB_Shop_Templates {
                             [ $block( 'archive_count' ), $sticky_phones( $block( 'archive_sort' ) ) ],
                             $inside( 'before_products_grid' ),
                             [ $block( 'archive_products' ) ],
-                            $inside( 'after_products_grid' ),
-                            [ $block( 'archive_pagination' ) ]
+                            $inside( 'after_products_grid' )
                         ), $rwd( '75%', '75%', '100%' ), [ 'gap' => $rwd( '16px' ) ] ),
                     ], $pad( '0', '16', '20', '16' ) + [ 'direction' => $rwd( 'row', 'row', 'column' ), 'gap' => $rwd( '20px' ) ] ) ],
                     $top( 'after_pagination' )
@@ -243,6 +242,25 @@ trait SB_Shop_Templates {
         return $out;
     }
 
+    /**
+     * The old "Page Numbers" block (archive_pagination) leaves the list: page numbers are now
+     * the Products Grid's own (Pagination, 'numbers' by default), so the page looks the same.
+     */
+    public static function drop_page_numbers_block( array $nodes, &$changed = false ) {
+        $out = [];
+        foreach ( $nodes as $node ) {
+            if ( is_array( $node ) && (string) ( $node['type'] ?? '' ) === 'archive_pagination' ) {
+                $changed = true;
+                continue;
+            }
+            if ( is_array( $node ) && is_array( $node['blocks'] ?? null ) ) {
+                $node['blocks'] = self::drop_page_numbers_block( $node['blocks'], $changed );
+            }
+            $out[] = $node;
+        }
+        return $out;
+    }
+
     /** An old top-level section as a section inside a column. */
     private static function shop_nested_section( array $s ) {
         return [
@@ -266,6 +284,16 @@ trait SB_Shop_Templates {
                 if ( is_array( $layout ) && self::is_old_shop_list( $layout['sections'] ?? [], $page ) ) {
                     $page_opts['layouts'][ $i ]['sections'] = self::shop_template_sections( $page, (array) ( $layout['sections'] ?? [] ) );
                     $changed = true;
+                }
+            }
+        }
+        if ( $page === 'shop' || $page === 'category' ) {
+            if ( is_array( $page_opts['sections'] ?? null ) ) {
+                $page_opts['sections'] = self::drop_page_numbers_block( $page_opts['sections'], $changed );
+            }
+            foreach ( (array) ( $page_opts['layouts'] ?? [] ) as $i => $layout ) {
+                if ( is_array( $layout['sections'] ?? null ) ) {
+                    $page_opts['layouts'][ $i ]['sections'] = self::drop_page_numbers_block( $layout['sections'], $changed );
                 }
             }
         }
