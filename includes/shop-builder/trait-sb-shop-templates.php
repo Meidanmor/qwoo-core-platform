@@ -146,7 +146,7 @@ trait SB_Shop_Templates {
                     [ $sec( [ $block( 'cart_items' ) ], $pad( '0', '16', '0', '16' ) ) ],
                     $top( 'after_cart_items' ),
                     $top( 'before_cart_totals' ),
-                    [ $sec( [ $block( 'cart_totals' ) ], $pad( '16', '16', '16', '16' ) ) ],
+                    [ $sec( [ $block( 'checkout_coupon' ), $block( 'cart_totals' ) ], $pad( '16', '16', '16', '16' ) + [ 'gap' => $rwd( '16px' ) ] ) ],
                     $top( 'after_cart_totals' ),
                     $top( 'after_cart' )
                 );
@@ -243,6 +243,44 @@ trait SB_Shop_Templates {
     }
 
     /**
+     * One coupon block everywhere (2026-11-09): a Cart Coupon becomes a Coupon Box (same fields),
+     * and a Cart Totals with its coupon on gets a Coupon Box before it (its coupon then off).
+     * $deep: also inner lists (sanitize_blocks walks those itself).
+     */
+    public static function merge_cart_coupons( array $nodes, &$changed = false, $deep = true ) {
+        $on  = static fn( $v ) => in_array( $v, [ true, 1, '1', 'true' ], true );
+        $out = [];
+        foreach ( $nodes as $node ) {
+            if ( ! is_array( $node ) ) {
+                $out[] = $node;
+                continue;
+            }
+            $type = (string) ( $node['type'] ?? '' );
+            if ( $type === 'cart_coupon' ) {
+                $node['type'] = 'checkout_coupon';
+                $changed      = true;
+            } elseif ( $type === 'cart_totals' && is_array( $node['data'] ?? null ) && $on( $node['data']['show_coupon'] ?? false ) ) {
+                $card  = $node['data']['card'] ?? true;
+                $out[] = [
+                    'id'      => self::new_id( 'blk' ),
+                    'type'    => 'checkout_coupon',
+                    'label'   => '',
+                    'enabled' => ! isset( $node['enabled'] ) || ( ! empty( $node['enabled'] ) && $node['enabled'] !== 'false' ),
+                    'style'   => [],
+                    'data'    => [ 'show_title' => true, 'card' => $card ],
+                ];
+                $node['data']['show_coupon'] = false;
+                $changed = true;
+            }
+            if ( $deep && is_array( $node['blocks'] ?? null ) ) {
+                $node['blocks'] = self::merge_cart_coupons( $node['blocks'], $changed );
+            }
+            $out[] = $node;
+        }
+        return $out;
+    }
+
+    /**
      * The old "Page Numbers" block (archive_pagination) leaves the list: page numbers are now
      * the Products Grid's own (Pagination, 'numbers' by default), so the page looks the same.
      */
@@ -294,6 +332,16 @@ trait SB_Shop_Templates {
             foreach ( (array) ( $page_opts['layouts'] ?? [] ) as $i => $layout ) {
                 if ( is_array( $layout['sections'] ?? null ) ) {
                     $page_opts['layouts'][ $i ]['sections'] = self::drop_page_numbers_block( $layout['sections'], $changed );
+                }
+            }
+        }
+        if ( $page === 'cart' ) {
+            if ( is_array( $page_opts['sections'] ?? null ) ) {
+                $page_opts['sections'] = self::merge_cart_coupons( $page_opts['sections'], $changed );
+            }
+            foreach ( (array) ( $page_opts['layouts'] ?? [] ) as $i => $layout ) {
+                if ( is_array( $layout['sections'] ?? null ) ) {
+                    $page_opts['layouts'][ $i ]['sections'] = self::merge_cart_coupons( $layout['sections'], $changed );
                 }
             }
         }

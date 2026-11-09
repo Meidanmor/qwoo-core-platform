@@ -1934,8 +1934,12 @@ abstract class Shop_Builder_Constants {
             'cart_totals' => [
                     'label' => 'Cart Totals', 'category' => 'dynamic', 'pages' => [ 'cart', 'drawer_cart' ], 'icon' => 'products',
                     'fields' => [
-                            'show_coupon'   => [ 'type' => 'toggle', 'label' => 'Coupon box', 'tab' => 'content', 'default' => true ],
+                            // Older designs only (merge_cart_coupons() turns it into a Coupon Box block above).
+                            'show_coupon'   => [ 'type' => 'toggle', 'label' => 'Coupon box', 'tab' => 'content', 'default' => false, 'show_if' => [ 'show_coupon' => true ],
+                                    'help' => 'Add the Coupon Box block instead: it has its own title, look and button.' ],
                             'show_shipping' => [ 'type' => 'toggle', 'label' => 'Shipping choice', 'tab' => 'content', 'default' => true ],
+                            'line_subtotal' => [ 'type' => 'toggle', 'label' => 'Products subtotal', 'tab' => 'content', 'group' => 'Lines before the total', 'default' => false ],
+                            'line_shipping' => [ 'type' => 'toggle', 'label' => 'Shipping price', 'tab' => 'content', 'group' => 'Lines before the total', 'default' => false, 'help' => 'Only once a shipping price is known.' ],
                             'button_label'  => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Checkout' ],
                             'view_cart'     => [ 'type' => 'toggle', 'label' => 'A "View cart" button too', 'tab' => 'content', 'default' => false,
                                     'help' => 'Next to Checkout. Handy in the cart drawer.' ],
@@ -1945,9 +1949,12 @@ abstract class Shop_Builder_Constants {
             ],
 
             // Cart Totals in parts, for placing each one on its own (e.g. the buttons pinned to the
-            // bottom of the cart drawer). The buttons are Button blocks: "Go to checkout" / "Go to the cart page".
+            // bottom of the cart drawer). The buttons are Button blocks: "Go to checkout" / "Go to the cart page"
+            // (the dashboard offers them as "Checkout Button" / "Cart Page Button"); the coupon is the Coupon Box.
+            // Replaced by the Coupon Box (checkout_coupon), which works on the cart page and in the cart
+            // drawer too: saved ones become one (merge_cart_coupons). Kept so older lists still read.
             'cart_coupon' => [
-                    'label' => 'Cart Coupon', 'category' => 'dynamic', 'pages' => [ 'cart', 'drawer_cart' ], 'icon' => 'products',
+                    'label' => 'Cart Coupon', 'category' => 'dynamic', 'pages' => [], 'legacy' => true, 'icon' => 'products',
                     'fields' => [
                             'show_title'  => [ 'type' => 'toggle', 'label' => 'Show a title', 'tab' => 'content', 'default' => true ],
                             'title'       => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Coupon', 'show_if' => [ 'show_title' => true ] ],
@@ -2088,9 +2095,12 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
             'checkout_coupon' => [
-                    'label' => 'Coupon Box', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'tag',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Coupon' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + [
+                    'label' => 'Coupon Box', 'category' => 'dynamic', 'pages' => [ 'checkout', 'cart', 'drawer_cart' ], 'icon' => 'tag',
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Coupon', 'show_if' => [ 'show_title' => true ] ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + [
                             'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Apply' ],
+                            'folded'       => [ 'type' => 'toggle', 'label' => 'Folded until clicked', 'tab' => 'content', 'default' => false,
+                                    'help' => 'Shows "Have a coupon?" and opens the field on a click. Saves room in a drawer.' ],
+                            'folded_text'  => [ 'type' => 'text', 'label' => 'Text to open it', 'tab' => 'content', 'default' => '', 'placeholder' => 'Have a coupon?', 'show_if' => [ 'folded' => true ] ],
                             'button_bg'    => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'default' => '' ],
                             'button_text'  => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'default' => '' ],
                     ],

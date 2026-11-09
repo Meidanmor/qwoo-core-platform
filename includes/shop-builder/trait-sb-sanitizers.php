@@ -440,6 +440,7 @@ trait SB_Sanitizers {
      */
     private function sanitize_blocks( $raw_blocks, $depth = 1 ) {
         if ( ! is_array( $raw_blocks ) ) return [];
+        $raw_blocks = self::merge_cart_coupons( array_values( $raw_blocks ), $unused, false );
 
         $clean = [];
         foreach ( array_slice( array_values( $raw_blocks ), 0, self::MAX_BLOCKS ) as $block ) {
