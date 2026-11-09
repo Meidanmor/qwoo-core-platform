@@ -1889,6 +1889,19 @@ abstract class Shop_Builder_Constants {
             'archive_products' => [
                     'label' => 'Products Grid', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'grid',
                     'fields' => [
+                            // Query: which products. "This page's products" works on every page (all products on the shop page,
+                            // the category's on a category page); the others replace the page's own list. Leave out comes on top.
+                            'query_source' => [ 'type' => 'select', 'label' => 'Show', 'tab' => 'content', 'group' => 'Query', 'default' => 'current',
+                                    'options' => [ 'current' => "This page's products", 'products' => 'Chosen products', 'categories' => 'Products in chosen categories', 'tags' => 'Products with chosen tags', 'on_sale' => 'Products on sale', 'featured' => 'Featured products' ],
+                                    'help' => "This page's products: every product on the shop page, the category's products on a category page. Shoppers' filters work inside what is shown." ],
+                            'query_product_ids'  => [ 'type' => 'products', 'label' => 'Products', 'tab' => 'content', 'group' => 'Query', 'show_if' => [ 'query_source' => 'products' ] ],
+                            'query_category_ids' => [ 'type' => 'categories', 'label' => 'Categories', 'tab' => 'content', 'group' => 'Query', 'show_if' => [ 'query_source' => 'categories' ] ],
+                            'query_tag_ids'      => [ 'type' => 'tags', 'label' => 'Tags', 'tab' => 'content', 'group' => 'Query', 'show_if' => [ 'query_source' => 'tags' ] ],
+                            'exclude_product_ids'  => [ 'type' => 'products', 'label' => 'Leave Out Products', 'tab' => 'content', 'group' => 'Query' ],
+                            'exclude_category_ids' => [ 'type' => 'categories', 'label' => 'Leave Out Categories', 'tab' => 'content', 'group' => 'Query',
+                                    'help' => "Products in these categories (or their sub categories) aren't shown, even when they are in another category too." ],
+                            'exclude_tag_ids'      => [ 'type' => 'tags', 'label' => 'Leave Out Tags', 'tab' => 'content', 'group' => 'Query' ],
+                            'hide_out_of_stock'    => [ 'type' => 'toggle', 'label' => 'Hide out-of-stock products', 'tab' => 'content', 'group' => 'Query', 'default' => false ],
                             'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Loop Template', 'tab' => 'content', 'default' => '',
                                     'help' => 'Empty: the one chosen for product cards in Loop templates.' ],
                             'empty_text'    => [ 'type' => 'text', 'label' => 'Text when nothing is found', 'tab' => 'content', 'default' => '', 'placeholder' => 'No products found' ],
