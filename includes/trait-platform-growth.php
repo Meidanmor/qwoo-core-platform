@@ -61,8 +61,9 @@ trait Qwoo_Platform_Growth {
                 return [ 'campaigns' => Qwoo_Email_Marketing::campaigns(), 'last_error' => Qwoo_Email_Marketing::last_error() ];
             case 'campaign_get':
                 $row = $id ? Qwoo_Email_Marketing::campaign_row( $id ) : null;
-                if ( ! $row ) return $id ? new WP_Error( 'missing', 'That email doesn\'t exist any more.' ) : [ 'design' => Qwoo_Email_Marketing::starter_design(), 'segment' => 'all', 'segment_days' => 90, 'status' => 'draft', 'name' => '', 'subject' => '', 'preheader' => '' ];
-                return $row + [ 'stats' => Qwoo_Email_Marketing::campaign_stats( $id ) ];
+                if ( ! $row ) return $id ? new WP_Error( 'missing', 'That email doesn\'t exist any more.' ) : [ 'design' => Qwoo_Email_Marketing::starter_design(), 'segment' => 'all', 'segment_days' => 90, 'status' => 'draft', 'name' => '', 'subject' => '', 'preheader' => '', 'store_problems' => Qwoo_Email_Marketing::store_problems() ];
+                // Why it can't go out (before sending), and why sending stopped (paused).
+                return $row + [ 'stats' => Qwoo_Email_Marketing::campaign_stats( $id ), 'store_problems' => Qwoo_Email_Marketing::store_problems(), 'last_error' => $row['status'] === 'paused' ? Qwoo_Email_Marketing::last_error() : '' ];
             case 'campaign_save':
                 return Qwoo_Email_Marketing::save_campaign( $p, ( $p['kind'] ?? '' ) === 'flow' ? 'flow' : 'campaign' );
             case 'campaign_delete':

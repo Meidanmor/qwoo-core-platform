@@ -370,6 +370,14 @@ class Qwoo_Email_Marketing {
         return (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . self::subs_table() . " WHERE status = 'sub' AND " . self::segment_where( $segment, $days ) );
     }
 
+    /** What stops any email from going out, whatever its content (shown before sending). */
+    public static function store_problems(): array {
+        $problems = [];
+        if ( trim( (string) get_option( 'woocommerce_store_address' ) ) === '' ) $problems[] = 'Add your business address in Settings → Business details: it has to appear on marketing emails.';
+        if ( Qwoo_Platform_Dashboard::is_free_plan() ) $problems[] = 'Email marketing is on the Basic plan and up.';
+        return $problems;
+    }
+
     /** What stops an email from going out: empty when it can. */
     public static function send_problems( array $row ): array {
         $problems = [];
@@ -499,7 +507,8 @@ class Qwoo_Email_Marketing {
                 $messages[] = self::build_message( $campaigns[ $cid ], (int) $row['id'], (int) $row['sub_id'], (string) $row['email'], (string) $row['name'] );
                 $ids[]      = (int) $row['id'];
             }
-            $answer = Qwoo_Platform_Connection::marketing_send( [ 'from_name' => $settings['from_name'], 'reply_to' => $settings['reply_to'], 'messages' => $messages ] );
+            // partial: the platform may take only the first part (sending through the owner's own account); `accepted` says how many.
+            $answer = Qwoo_Platform_Connection::marketing_send( [ 'from_name' => $settings['from_name'], 'reply_to' => $settings['reply_to'], 'partial' => 1, 'messages' => $messages ] );
             if ( $answer === null ) {
                 self::pause( array_keys( $campaigns ), 'The platform can\'t be reached right now.' );
                 break;
@@ -514,10 +523,12 @@ class Qwoo_Email_Marketing {
                 self::pause( array_keys( $campaigns ), (string) $answer['error'] );
                 break;
             }
-            $now = gmdate( 'Y-m-d H:i:s' );
-            foreach ( $ids as $id ) {
+            $now  = gmdate( 'Y-m-d H:i:s' );
+            $done = isset( $answer['accepted'] ) ? max( 0, min( count( $ids ), (int) $answer['accepted'] ) ) : count( $ids );
+            foreach ( array_slice( $ids, 0, $done ) as $id ) {
                 $wpdb->update( $s, [ 'status' => 'sent', 'sent_at' => $now ], [ 'id' => $id ] );
             }
+            if ( ! $done ) break;
         }
         // Those whose status changed while waiting.
         $wpdb->query( "UPDATE $s SET status = 'skipped' WHERE status = 'wait' AND sub_id IN (SELECT id FROM " . self::subs_table() . " WHERE status <> 'sub')" );
@@ -551,8 +562,8 @@ class Qwoo_Email_Marketing {
         $wpdb->insert( self::sends_table(), [ 'campaign_id' => $campaign_id, 'sub_id' => (int) $sub['id'], 'email' => $email, 'status' => 'wait' ] );
         $send = (int) $wpdb->insert_id;
         $settings = self::settings();
-        $answer = Qwoo_Platform_Connection::marketing_send( [ 'from_name' => $settings['from_name'], 'reply_to' => $settings['reply_to'], 'messages' => [ self::build_message( $row, $send, (int) $sub['id'], $email, (string) $sub['name'] ) ] ] );
-        $ok = $answer !== null && empty( $answer['limit'] ) && empty( $answer['error'] );
+        $answer = Qwoo_Platform_Connection::marketing_send( [ 'from_name' => $settings['from_name'], 'reply_to' => $settings['reply_to'], 'partial' => 1, 'messages' => [ self::build_message( $row, $send, (int) $sub['id'], $email, (string) $sub['name'] ) ] ] );
+        $ok = $answer !== null && empty( $answer['limit'] ) && empty( $answer['error'] ) && ( ! isset( $answer['accepted'] ) || (int) $answer['accepted'] > 0 );
         $wpdb->update( self::sends_table(), [ 'status' => $ok ? 'sent' : 'failed', 'sent_at' => gmdate( 'Y-m-d H:i:s' ) ], [ 'id' => $send ] );
         return $ok;
     }
