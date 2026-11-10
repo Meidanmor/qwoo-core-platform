@@ -2,7 +2,7 @@
 /**
  * Plugin Name: QWoo Core
  * Description: Headless WooCommerce backend for QWoo
- * Version:     1.0.2
+ * Version:     1.0.3
  * Author:      Meidan Mor
  * Plugin URI:  https://github.com/Meidanmor/qwoo-core
  * Requires Plugins: woocommerce
@@ -92,6 +92,7 @@ require_once QWOO_PATH . 'includes/class-email-marketing.php';
 require_once QWOO_PATH . 'includes/class-gift-cards.php';
 require_once QWOO_PATH . 'includes/class-product-list-rules.php';
 require_once QWOO_PATH . 'includes/class-automations.php';
+require_once QWOO_PATH . 'includes/class-personalization.php';
 require_once QWOO_PATH . 'includes/class-product-feed.php';
 require_once QWOO_PATH . 'includes/class-back-in-stock.php';
 require_once QWOO_PATH . 'includes/admin-options.php';

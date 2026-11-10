@@ -32,7 +32,7 @@ class Qwoo_Push {
     const TITLE_MAX       = 65;
     const BODY_MAX        = 180;
 
-    const TRIGGERS = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'product_sale', 'back_in_stock', 'no_order' ];
+    const TRIGGERS = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'product_sale', 'back_in_stock', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed' ];
 
     /** Triggers whose notifications don't count as marketing (the shopper asked for them or ordered). */
     const SERVICE_TRIGGERS = [ 'order_placed', 'order_status', 'back_in_stock' ];
@@ -179,7 +179,7 @@ class Qwoo_Push {
 
     /** What an owner may change on a built-in (its trigger type and id stay). */
     private static function builtin_editable( array $a ): array {
-        $keep = array_intersect_key( $a, array_flip( [ 'name', 'on', 'wait', 'only', 'texts', 'pickup', 'link', 'image', 'item_image', 'audience', 'gap', 'second' ] ) );
+        $keep = array_intersect_key( $a, array_flip( [ 'name', 'on', 'wait', 'only', 'texts', 'pickup', 'link', 'image', 'item_image', 'audience', 'audience_id', 'gap', 'second' ] ) );
         if ( ( $a['builtin'] ?? '' ) === 'order_status' && ! empty( $a['trigger']['status'] ) ) {
             $keep['trigger'] = [ 'type' => 'order_status', 'status' => $a['trigger']['status'] ];
         }
@@ -339,11 +339,16 @@ class Qwoo_Push {
             $known = function_exists( 'wc_get_order_statuses' ) ? array_map( static fn( $k ) => preg_replace( '/^wc-/', '', $k ), array_keys( wc_get_order_statuses() ) ) : [ 'completed' ];
             if ( ! in_array( $status, $known, true ) ) return [ 'error' => 'Choose the order status.' ];
         }
+        $seconds = $type === 'product_view' ? min( 3600, max( 5, absint( $t['seconds'] ?? 30 ) ) ) : 0;
+        $category_id = $type === 'product_view' ? absint( $t['category_id'] ?? 0 ) : 0;
+        if ( $category_id && ! term_exists( $category_id, 'product_cat' ) ) $category_id = 0;
 
         $texts = self::clean_texts( $a['texts'] ?? [], $langs );
         if ( $builtin === '' && empty( $texts[ $langs[0] ]['title'] ) ) {
             return [ 'error' => sprintf( '"%s" needs a title in the store\'s main language.', $name ) ];
         }
+        $audience_id = sanitize_key( (string) ( $a['audience_id'] ?? '' ) );
+        if ( $audience_id && ! array_filter( Qwoo_Personalization::audiences(), static fn( $saved ) => ( $saved['id'] ?? '' ) === $audience_id ) ) return [ 'error' => 'Choose a saved audience that still exists.' ];
         $link = self::clean_link( (array) ( $a['link'] ?? [] ) );
         if ( isset( $link['error'] ) ) return $link;
 
@@ -353,8 +358,9 @@ class Qwoo_Push {
             'builtin'    => $builtin,
             'name'       => $name,
             'on'         => ! empty( $a['on'] ),
-            'trigger'    => [ 'type' => $type, 'status' => $status, 'days' => max( 1, min( 365, (int) ( $t['days'] ?? 30 ) ) ) ],
+            'trigger'    => [ 'type' => $type, 'status' => $status, 'days' => max( 1, min( 365, (int) ( $t['days'] ?? 30 ) ) ), 'seconds' => $seconds, 'category_id' => $category_id ],
             'wait'       => max( 0, min( self::MAX_WAIT, (int) ( $a['wait'] ?? 0 ) ) ),
+            'audience_id' => $audience_id,
             'only'       => [
                 'langs'      => array_values( array_intersect( array_map( 'strval', (array) ( $only['langs'] ?? [] ) ), $langs ) ),
                 'signed'     => in_array( $only['signed'] ?? '', [ 'in', 'out' ], true ) ? $only['signed'] : 'any',
@@ -472,6 +478,8 @@ class Qwoo_Push {
             'who'   => in_array( $aud['who'] ?? '', [ 'all', 'cart', 'buyers', 'new' ], true ) ? $aud['who'] : 'all',
             'langs' => array_values( array_intersect( array_map( 'strval', (array) ( $aud['langs'] ?? [] ) ), $langs ) ),
         ];
+        $audience['audience_id'] = sanitize_key( (string) ( $aud['audience_id'] ?? '' ) );
+        if ( $audience['audience_id'] && ! array_filter( Qwoo_Personalization::audiences(), static fn( $saved ) => ( $saved['id'] ?? '' ) === $audience['audience_id'] ) ) return [ 'error' => 'Choose a saved audience that still exists.' ];
         $reach = Qwoo_Push_Engine::audience_count( $audience );
         if ( ! empty( $p['dry'] ) ) {
             return [ 'reach' => $reach ];
@@ -593,6 +601,7 @@ class Qwoo_Push {
             'settings' => [ 'ask' => $s['ask'], 'quiet' => $s['quiet'], 'cap' => $s['cap'], 'back_form' => $s['back_form'], 'sender' => (string) ( is_array( $tech ) ? ( $tech['push_email'] ?? '' ) : '' ) ],
             'back_emails' => Qwoo_Back_In_Stock::waiting_count(),
             'automations' => $s['automations'],
+            'audiences' => Qwoo_Personalization::audiences(),
             'sends' => $sends,
             'stats' => Qwoo_Push_Engine::overview(),
             'ready' => Qwoo_Push_Engine::keys_ready(),

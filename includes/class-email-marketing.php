@@ -23,7 +23,7 @@ class Qwoo_Email_Marketing {
     const BATCH     = 40;
     const MAX_SUBS_IMPORT = 2000;
     const NS        = 'qwoo/v1';
-    const SEGMENTS  = [ 'all', 'buyers', 'no_orders', 'inactive' ];
+    const SEGMENTS  = [ 'all', 'buyers', 'no_orders', 'inactive', 'saved_audience' ];
     const KEEP_SENDS_DAYS = 365;
 
     public static function init() {
@@ -67,6 +67,7 @@ class Qwoo_Email_Marketing {
         preheader VARCHAR(190) NOT NULL DEFAULT '',
         design LONGTEXT NOT NULL,
         segment VARCHAR(20) NOT NULL DEFAULT 'all',
+        audience_id VARCHAR(20) NOT NULL DEFAULT '',
         segment_days INT NOT NULL DEFAULT 90,
         status VARCHAR(12) NOT NULL DEFAULT 'draft',
         send_at DATETIME NULL,
@@ -302,7 +303,7 @@ class Qwoo_Email_Marketing {
     public static function campaigns(): array {
         global $wpdb;
         $out = [];
-        foreach ( (array) $wpdb->get_results( 'SELECT id, name, subject, status, segment, send_at, updated FROM ' . self::campaigns_table() . " WHERE kind = 'campaign' ORDER BY id DESC LIMIT 100", ARRAY_A ) as $row ) {
+        foreach ( (array) $wpdb->get_results( 'SELECT id, name, subject, status, segment, audience_id, send_at, updated FROM ' . self::campaigns_table() . " WHERE kind = 'campaign' ORDER BY id DESC LIMIT 100", ARRAY_A ) as $row ) {
             $out[] = [ 'id' => (int) $row['id'] ] + $row + [ 'stats' => self::campaign_stats( (int) $row['id'] ) ];
         }
         return $out;
@@ -317,6 +318,8 @@ class Qwoo_Email_Marketing {
             if ( in_array( $status, [ 'sending', 'sent' ], true ) ) return new WP_Error( 'locked', 'An email that was sent can\'t be changed. Make a copy instead.' );
         }
         $segment = in_array( $in['segment'] ?? '', self::SEGMENTS, true ) ? $in['segment'] : 'all';
+        $audience_id = $segment === 'saved_audience' ? sanitize_key( (string) ( $in['audience_id'] ?? '' ) ) : '';
+        if ( $segment === 'saved_audience' && ( $audience_id === '' || ! array_filter( Qwoo_Personalization::audiences(), static fn( $a ) => ( $a['id'] ?? '' ) === $audience_id ) ) ) return new WP_Error( 'audience', 'Choose a saved audience that still exists.' );
         $data = [
             'kind'         => $kind,
             'name'         => mb_substr( sanitize_text_field( (string) ( $in['name'] ?? '' ) ), 0, 190 ),
@@ -324,6 +327,7 @@ class Qwoo_Email_Marketing {
             'preheader'    => mb_substr( sanitize_text_field( (string) ( $in['preheader'] ?? '' ) ), 0, 190 ),
             'design'       => wp_json_encode( self::clean_design( $in['design'] ?? [] ) ),
             'segment'      => $segment,
+            'audience_id'  => $audience_id,
             'segment_days' => min( 730, max( 7, (int) ( $in['segment_days'] ?? 90 ) ) ),
             'updated'      => gmdate( 'Y-m-d H:i:s' ),
         ];
@@ -362,11 +366,12 @@ class Qwoo_Email_Marketing {
                 $cutoff = wp_date( 'Y-m-d', time() - $days * DAY_IN_SECONDS, wp_timezone() );
                 return $buyers . $wpdb->prepare( " AND email NOT IN (SELECT email FROM $o WHERE paid = 1 AND day >= %s)", $cutoff );
         }
-        return '1 = 1';
+        return $segment === 'saved_audience' ? '0 = 1' : '1 = 1';
     }
 
-    public static function audience( string $segment, int $days ): int {
+    public static function audience( string $segment, int $days, string $audience_id = '' ): int {
         global $wpdb;
+        if ( $segment === 'saved_audience' ) return count( Qwoo_Personalization::matching_subscriber_ids( $audience_id )['ids'] );
         return (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . self::subs_table() . " WHERE status = 'sub' AND " . self::segment_where( $segment, $days ) );
     }
 
@@ -396,7 +401,13 @@ class Qwoo_Email_Marketing {
         if ( ! in_array( $row['status'], [ 'draft', 'scheduled' ], true ) ) return new WP_Error( 'sent', 'This email was already sent.' );
         $problems = self::send_problems( $row );
         if ( $problems ) return new WP_Error( 'problem', implode( ' ', $problems ) );
-        if ( self::audience( (string) $row['segment'], (int) $row['segment_days'] ) < 1 ) return new WP_Error( 'empty', 'Nobody is in this group yet.' );
+        if ( $row['segment'] === 'saved_audience' ) {
+            $matches = Qwoo_Personalization::matching_subscriber_ids( (string) ( $row['audience_id'] ?? '' ) );
+            if ( $matches['sampled'] ) return new WP_Error( 'audience_limit', 'This audience has more than 50,000 subscribers. Narrow the audience before sending.' );
+            if ( ! $matches['ids'] ) return new WP_Error( 'empty', 'Nobody is in this group yet.' );
+        } elseif ( self::audience( (string) $row['segment'], (int) $row['segment_days'] ) < 1 ) {
+            return new WP_Error( 'empty', 'Nobody is in this group yet.' );
+        }
         $when = $send_at > time() ? $send_at : time();
         $wpdb->update( self::campaigns_table(), [ 'status' => 'scheduled', 'send_at' => gmdate( 'Y-m-d H:i:s', $when ) ], [ 'id' => $id ] );
         Qwoo_Push_Engine::note_due( $when );
@@ -472,10 +483,23 @@ class Qwoo_Email_Marketing {
     private static function start_due(): void {
         global $wpdb;
         $c = self::campaigns_table();
-        foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT id, segment, segment_days FROM $c WHERE kind = 'campaign' AND status = 'scheduled' AND send_at <= %s", gmdate( 'Y-m-d H:i:s' ) ), ARRAY_A ) as $row ) {
+        foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT id, segment, segment_days, audience_id FROM $c WHERE kind = 'campaign' AND status = 'scheduled' AND send_at <= %s", gmdate( 'Y-m-d H:i:s' ) ), ARRAY_A ) as $row ) {
             $id     = (int) $row['id'];
-            $where  = self::segment_where( (string) $row['segment'], (int) $row['segment_days'] );
-            $wpdb->query( $wpdb->prepare( 'INSERT INTO ' . self::sends_table() . " (campaign_id, sub_id, email, status) SELECT %d, id, email, 'wait' FROM " . self::subs_table() . " WHERE status = 'sub' AND $where", $id ) );
+            if ( $row['segment'] === 'saved_audience' ) {
+                $matches = Qwoo_Personalization::matching_subscriber_ids( (string) $row['audience_id'] );
+                if ( $matches['sampled'] ) {
+                    update_option( 'qwoo_em_last_error', 'A scheduled email was paused because its saved audience exceeds 50,000 subscribers. Narrow the audience and schedule it again.', false );
+                    $wpdb->update( $c, [ 'status' => 'paused' ], [ 'id' => $id ] );
+                    continue;
+                }
+                foreach ( array_chunk( $matches['ids'], 500 ) as $chunk ) {
+                    $list = implode( ',', array_map( 'intval', $chunk ) );
+                    if ( $list !== '' ) $wpdb->query( $wpdb->prepare( 'INSERT INTO ' . self::sends_table() . " (campaign_id, sub_id, email, status) SELECT %d, id, email, 'wait' FROM " . self::subs_table() . " WHERE status = 'sub' AND id IN ($list)", $id ) );
+                }
+            } else {
+                $where  = self::segment_where( (string) $row['segment'], (int) $row['segment_days'] );
+                $wpdb->query( $wpdb->prepare( 'INSERT INTO ' . self::sends_table() . " (campaign_id, sub_id, email, status) SELECT %d, id, email, 'wait' FROM " . self::subs_table() . " WHERE status = 'sub' AND $where", $id ) );
+            }
             $count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::sends_table() . ' WHERE campaign_id = %d', $id ) );
             $wpdb->update( $c, [ 'status' => 'sending', 'recipients' => $count ], [ 'id' => $id ] );
         }
@@ -504,9 +528,14 @@ class Qwoo_Email_Marketing {
                 $cid = (int) $row['campaign_id'];
                 $campaigns[ $cid ] = $campaigns[ $cid ] ?? self::campaign_row( $cid );
                 if ( ! $campaigns[ $cid ] ) continue;
+                if ( ( $campaigns[ $cid ]['segment'] ?? '' ) === 'saved_audience' && ! Qwoo_Personalization::audience_for_email( (string) ( $campaigns[ $cid ]['audience_id'] ?? '' ), (string) $row['email'] ) ) {
+                    $wpdb->update( $s, [ 'status' => 'skipped' ], [ 'id' => (int) $row['id'] ] );
+                    continue;
+                }
                 $messages[] = self::build_message( $campaigns[ $cid ], (int) $row['id'], (int) $row['sub_id'], (string) $row['email'], (string) $row['name'] );
                 $ids[]      = (int) $row['id'];
             }
+            if ( ! $messages ) continue;
             // partial: the platform may take only the first part (sending through the owner's own account); `accepted` says how many.
             $answer = Qwoo_Platform_Connection::marketing_send( [ 'from_name' => $settings['from_name'], 'reply_to' => $settings['reply_to'], 'partial' => 1, 'messages' => $messages ] );
             if ( $answer === null ) {

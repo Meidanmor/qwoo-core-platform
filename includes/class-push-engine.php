@@ -39,6 +39,7 @@ class Qwoo_Push_Engine {
         add_action( 'woocommerce_product_set_stock_status', [ __CLASS__, 'on_stock_status' ], 20, 3 );
         add_action( 'woocommerce_variation_set_stock_status', [ __CLASS__, 'on_stock_status' ], 20, 3 );
         add_action( 'deleted_user', [ __CLASS__, 'on_user_deleted' ] );
+        add_action( 'qwoo_personalization_event', [ __CLASS__, 'on_personalization_event' ], 20, 4 );
     }
 
     /* ---------------- tables ---------------- */
@@ -65,6 +66,7 @@ class Qwoo_Push_Engine {
         Qwoo_Webhooks::install_tables();
         Qwoo_Email_Marketing::install_tables();
         Qwoo_Automations::install_tables();
+        Qwoo_Personalization::install_table();
         Qwoo_Gift_Cards::install_tables();
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
         $charset = $wpdb->get_charset_collate();
@@ -233,6 +235,17 @@ class Qwoo_Push_Engine {
         self::event( 'subscribed', [], [ $sub ] );
     }
 
+    public static function on_personalization_event( string $type, array $profile, array $event, string $visitor_key = '' ): void {
+        $trigger = [ 'view' => 'product_view', 'cart' => 'cart_changed', 'wishlist' => 'wishlist_changed' ][ $type ] ?? '';
+        $customer_id = (int) ( $profile['customer_id'] ?? 0 );
+        if ( $trigger === '' || $customer_id < 1 ) return;
+        global $wpdb;
+        $subs = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT id FROM ' . self::subs_table() . ' WHERE customer_id = %d LIMIT 20', $customer_id ) ) );
+        if ( ! $subs ) return;
+        $ctx = [ 'product' => absint( $event['product_id'] ?? 0 ), 'seconds' => absint( $event['seconds'] ?? 0 ), 'category_ids' => array_map( 'absint', (array) ( $event['category_ids'] ?? [] ) ) ];
+        self::event( $trigger, $ctx, $subs );
+    }
+
     /** The shopper left with items in the cart ($token) or came back. */
     public static function on_cart_state( string $device, string $status, ?string $token ) {
         global $wpdb;
@@ -348,6 +361,10 @@ class Qwoo_Push_Engine {
         foreach ( Qwoo_Push::settings()['automations'] as $a ) {
             if ( ! $a['on'] || $a['trigger']['type'] !== $type ) continue;
             if ( $type === 'order_status' && $a['trigger']['status'] !== preg_replace( '/^wc-/', '', (string) ( $ctx['status'] ?? '' ) ) ) continue;
+            if ( $type === 'product_view' ) {
+                if ( (int) ( $ctx['seconds'] ?? 0 ) < (int) ( $a['trigger']['seconds'] ?? 30 ) ) continue;
+                if ( ! empty( $a['trigger']['category_id'] ) && ! in_array( (int) $a['trigger']['category_id'], array_map( 'absint', (array) ( $ctx['category_ids'] ?? [] ) ), true ) ) continue;
+            }
             if ( ! self::item_matches( $a['only'], $ctx ) ) continue;
             $marketing = Qwoo_Push::is_marketing( $type );
             $send_at = time() + $a['wait'] * 60;
@@ -367,11 +384,19 @@ class Qwoo_Push_Engine {
             }
             foreach ( (array) $subs as $sub ) {
                 if ( ! self::sub_matches( (int) $sub, $a['only'] ) ) continue;
+                if ( ! empty( $a['audience_id'] ) ) {
+                    global $wpdb;
+                    $customer_id = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT customer_id FROM ' . self::subs_table() . ' WHERE id = %d', (int) $sub ) );
+                    if ( ! Qwoo_Personalization::audience_for_customer( $customer_id, (string) $a['audience_id'] ) ) continue;
+                }
                 $uniq = null;
                 switch ( $type ) {
                     case 'subscribed':   $uniq = "sub:{$a['id']}:{$sub}"; break;
                     case 'order_placed': $uniq = "ord:{$a['id']}:{$ctx['order']}"; break;
                     case 'order_status': $uniq = "ost:{$a['id']}:{$ctx['order']}:{$ctx['status']}"; break;
+                    case 'product_view': $uniq = 'view:' . $a['id'] . ':' . (int) $sub . ':' . (int) ( $ctx['product'] ?? 0 ) . ':' . gmdate( 'Ymd' ); break;
+                    case 'cart_changed': $uniq = 'cartchange:' . $a['id'] . ':' . (int) $sub . ':' . gmdate( 'Ymd' ); break;
+                    case 'wishlist_changed': $uniq = 'wishchange:' . $a['id'] . ':' . (int) $sub . ':' . gmdate( 'Ymd' ); break;
                 }
                 $due[] = self::queue_one( (int) $sub, 'auto', $a['id'], $ctx, $marketing, $send_at, $uniq );
             }
@@ -437,6 +462,13 @@ class Qwoo_Push_Engine {
     public static function audience_count( array $aud ): int {
         global $wpdb;
         $where = self::audience_where( $aud );
+        $audience_id = sanitize_key( (string) ( $aud['audience_id'] ?? '' ) );
+        if ( $audience_id !== '' ) {
+            $rows = (array) $wpdb->get_results( 'SELECT customer_id FROM ' . self::subs_table() . ( $where ? ' WHERE ' . implode( ' AND ', $where ) : '' ), ARRAY_A );
+            $count = 0;
+            foreach ( $rows as $row ) if ( Qwoo_Personalization::audience_for_customer( (int) $row['customer_id'], $audience_id ) ) $count++;
+            return $count;
+        }
         return (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . self::subs_table() . ( $where ? ' WHERE ' . implode( ' AND ', $where ) : '' ) );
     }
 
@@ -484,6 +516,26 @@ class Qwoo_Push_Engine {
         );
         if ( $where ) $sql .= ' WHERE ' . implode( ' AND ', $where );
         return (int) $wpdb->query( $sql );
+    }
+
+    /** Saved audience fan-out is evaluated against server-owned profiles. */
+    private static function fan_out_audience( string $ref, array $audience, int $send_at ): int {
+        global $wpdb;
+        $subs = self::subs_table();
+        $where = self::audience_where( $audience );
+        $count = 0;
+        $last = 0;
+        do {
+            $sql = 'SELECT id,customer_id FROM ' . $subs . ' WHERE id > %d' . ( $where ? ' AND ' . implode( ' AND ', $where ) : '' ) . ' ORDER BY id LIMIT 400';
+            $rows = (array) $wpdb->get_results( $wpdb->prepare( $sql, $last ), ARRAY_A );
+            foreach ( $rows as $row ) {
+                $last = (int) $row['id'];
+                if ( ! Qwoo_Personalization::audience_for_customer( (int) $row['customer_id'], (string) $audience['audience_id'] ) ) continue;
+                $uniq = substr( 'ps:' . $ref . ':' . $last, 0, 120 );
+                if ( self::queue_one( $last, 'send', $ref, [], true, $send_at, $uniq ) ) $count++;
+            }
+        } while ( count( $rows ) === 400 );
+        return $count;
     }
 
     public static function cancel_waiting( string $kind, string $ref ) {
@@ -597,7 +649,10 @@ class Qwoo_Push_Engine {
         $changed = false;
         foreach ( $list as $i => $s ) {
             if ( ( $s['status'] ?? '' ) !== 'scheduled' || (int) $s['send_at'] > time() ) continue;
-            $n = self::fan_out( 'send', $s['id'], [], true, time(), self::audience_where( (array) $s['audience'] ) );
+            $audience = (array) $s['audience'];
+            $n = ! empty( $audience['audience_id'] )
+                ? self::fan_out_audience( (string) $s['id'], $audience, time() )
+                : self::fan_out( 'send', $s['id'], [], true, time(), self::audience_where( $audience ) );
             $list[ $i ]['status'] = $n ? 'sending' : 'done';
             $list[ $i ]['reach']  = $n;
             $changed = true;
@@ -702,6 +757,13 @@ class Qwoo_Push_Engine {
                     self::mark( $id, 'cancel', 'cancelled' );
                     continue;
                 }
+            }
+            $audience_id = $row['kind'] === 'auto'
+                ? (string) ( $source['audience_id'] ?? '' )
+                : (string) ( $source['audience']['audience_id'] ?? '' );
+            if ( $audience_id !== '' && ! Qwoo_Personalization::audience_for_customer( (int) ( $sub['customer_id'] ?? 0 ), $audience_id ) ) {
+                self::mark( $id, 'skip', 'audience changed' );
+                continue;
             }
             if ( ! empty( $row['marketing'] ) ) {
                 if ( $quiet_end ) {

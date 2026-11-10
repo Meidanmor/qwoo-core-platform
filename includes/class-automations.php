@@ -28,13 +28,14 @@ class Qwoo_Automations {
     const OPTION    = 'qwoo_flows';
     const MAX_FLOWS = 20;
     const MAX_STEPS = 12;
-    const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order' ];
+    const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed' ];
     const SCAN_KEY  = 'qwoo_flows_scanned';
 
     public static function init() {
         add_action( 'qwoo_subscriber_added', [ __CLASS__, 'on_subscribed' ], 10, 2 );
         add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'on_order_placed' ], 30 );
         add_action( 'woocommerce_order_status_changed', [ __CLASS__, 'on_order_status' ], 30, 4 );
+        add_action( 'qwoo_personalization_event', [ __CLASS__, 'on_personalization_event' ], 10, 4 );
         add_action( 'qwoo_push_tick', [ __CLASS__, 'run_due' ] );
         add_filter( 'qwoo_push_next_due', [ __CLASS__, 'next_due' ] );
     }
@@ -131,6 +132,13 @@ class Qwoo_Automations {
         if ( $type === 'order_status' ) $trigger['status'] = sanitize_key( preg_replace( '/^wc-/', '', (string) ( $in['trigger']['status'] ?? 'completed' ) ) );
         if ( $type === 'no_order' ) $trigger['days'] = min( 730, max( 7, (int) ( $in['trigger']['days'] ?? 60 ) ) );
         if ( $type === 'cart_left' ) $trigger['minutes'] = min( 7 * 24 * 60, max( 30, (int) ( $in['trigger']['minutes'] ?? 60 ) ) );
+        if ( $type === 'product_view' ) {
+            $trigger['seconds'] = min( 3600, max( 5, absint( $in['trigger']['seconds'] ?? 30 ) ) );
+            $category = absint( $in['trigger']['category_id'] ?? 0 );
+            if ( $category && term_exists( $category, 'product_cat' ) ) $trigger['category_id'] = $category;
+        }
+        $audience_id = sanitize_key( (string) ( $in['audience_id'] ?? '' ) );
+        if ( $audience_id && ! array_filter( Qwoo_Personalization::audiences(), static fn( $a ) => ( $a['id'] ?? '' ) === $audience_id ) ) return new WP_Error( 'audience', 'Choose a saved audience that still exists.' );
         $rules = [];
         foreach ( (array) ( $in['rules'] ?? [] ) as $raw ) self::add_rule( $rules, (array) $raw );
         $steps = [];
@@ -148,7 +156,7 @@ class Qwoo_Automations {
         }
         $flows = self::flows();
         $id    = sanitize_key( (string) ( $in['id'] ?? '' ) );
-        $data  = [ 'name' => mb_substr( sanitize_text_field( (string) ( $in['name'] ?? '' ) ), 0, 120 ), 'on' => ! empty( $in['on'] ), 'trigger' => $trigger, 'rules' => array_values( $rules ), 'steps' => $steps ];
+        $data  = [ 'name' => mb_substr( sanitize_text_field( (string) ( $in['name'] ?? '' ) ), 0, 120 ), 'on' => ! empty( $in['on'] ), 'trigger' => $trigger, 'audience_id' => $audience_id, 'rules' => array_values( $rules ), 'steps' => $steps ];
         $found = false;
         foreach ( $flows as &$flow ) {
             if ( $flow['id'] === $id ) {
@@ -204,6 +212,11 @@ class Qwoo_Automations {
             if ( empty( $flow['on'] ) || $flow['trigger']['type'] !== $type ) continue;
             if ( $type === 'order_status' && ( $flow['trigger']['status'] ?? '' ) !== ( $match['status'] ?? '' ) ) continue;
             if ( $type === 'no_order' && (int) ( $flow['trigger']['days'] ?? 0 ) !== (int) ( $match['days'] ?? 0 ) ) continue;
+            if ( $type === 'product_view' ) {
+                if ( (int) ( $match['seconds'] ?? 0 ) < (int) ( $flow['trigger']['seconds'] ?? 30 ) ) continue;
+                if ( ! empty( $flow['trigger']['category_id'] ) && ! in_array( (int) $flow['trigger']['category_id'], array_map( 'absint', (array) ( $match['category_ids'] ?? [] ) ), true ) ) continue;
+            }
+            if ( ! empty( $flow['audience_id'] ) && ! Qwoo_Personalization::audience_for_email( (string) $flow['audience_id'], $email ) ) continue;
             $now = gmdate( 'Y-m-d H:i:s' );
             // A repeated event hits the unique key and adds nothing.
             $wpdb->query( $wpdb->prepare(
@@ -226,6 +239,25 @@ class Qwoo_Automations {
     public static function on_order_status( $order_id, $from, $to, $order = null ) {
         $order = $order ?: wc_get_order( $order_id );
         if ( $order ) self::start( 'order_status', 'st:' . $order->get_id() . ':' . $to, (string) $order->get_billing_email(), (int) $order->get_id(), [ 'status' => (string) $to ] );
+    }
+
+    public static function on_personalization_event( string $type, array $profile, array $event, string $visitor_key = '' ): void {
+        if ( ! self::allowed() ) return;
+        $trigger = [ 'view' => 'product_view', 'cart' => 'cart_changed', 'wishlist' => 'wishlist_changed' ][ $type ] ?? '';
+        if ( $trigger === '' ) return;
+        $email = '';
+        $customer_id = (int) ( $profile['customer_id'] ?? 0 );
+        if ( $customer_id ) {
+            $user = get_user_by( 'id', $customer_id );
+            if ( $user ) $email = (string) $user->user_email;
+        }
+        if ( $email === '' && ! empty( $profile['subscriber_id'] ) ) {
+            global $wpdb;
+            $email = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT email FROM ' . Qwoo_Email_Marketing::subs_table() . " WHERE id = %d AND status = 'sub'", (int) $profile['subscriber_id'] ) );
+        }
+        if ( ! is_email( $email ) ) return;
+        $key = 'persona:' . $type . ':' . substr( hash( 'sha256', $visitor_key ), 0, 18 ) . ':' . (int) ( $event['product_id'] ?? 0 ) . ':' . gmdate( 'Ymd' );
+        self::start( $trigger, $key, $email, 0, $event );
     }
 
     /** Twice an hour: checkouts left without paying, and buyers who haven't been back. */
@@ -303,6 +335,10 @@ class Qwoo_Automations {
                 return;
             }
             if ( in_array( $step['type'], [ 'email', 'push', 'webhook' ], true ) ) {
+                if ( ! empty( $flow['audience_id'] ) && ! Qwoo_Personalization::audience_for_email( (string) $flow['audience_id'], (string) $row['email'] ) ) {
+                    $wpdb->update( $t, [ 'step' => $i, 'status' => 'stopped' ], [ 'id' => $row['id'] ] );
+                    return;
+                }
                 foreach ( (array) ( $flow['rules'] ?? [] ) as $rule ) {
                     if ( self::passes( $rule, $row ) ) continue;
                     $wpdb->update( $t, [ 'step' => $i, 'status' => 'stopped' ], [ 'id' => $row['id'] ] );

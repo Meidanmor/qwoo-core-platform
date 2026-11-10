@@ -22,6 +22,15 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 trait SB_Popups {
 
+    private static function popup_settings_schema(): array {
+        $fields = self::POPUP_SETTINGS_FIELDS;
+        $fields['audience']['options']['saved'] = 'Shoppers in a saved audience';
+        $options = [ '' => 'Choose an audience' ];
+        if ( class_exists( 'Qwoo_Personalization' ) ) foreach ( Qwoo_Personalization::audiences() as $audience ) $options[ $audience['id'] ] = $audience['name'];
+        $fields['audience_id'] = [ 'type' => 'select', 'label' => 'Saved Audience', 'group' => 'Who', 'options' => $options, 'show_if' => [ 'audience' => 'saved' ] ];
+        return $fields;
+    }
+
     /** Triggers that open a popup by itself (the others wait for a link). */
     private static $popup_auto_triggers = [ 'load', 'delay', 'scroll', 'exit', 'pages' ];
 
@@ -30,15 +39,34 @@ trait SB_Popups {
         $out = [];
         foreach ( array_slice( array_values( is_array( $raw ) ? $raw : [] ), 0, self::MAX_POPUPS ) as $popup ) {
             if ( ! is_array( $popup ) ) continue;
+            $sections = is_array( $popup['sections'] ?? null ) ? $popup['sections'] : [];
+            $legacy_code = sanitize_text_field( (string) ( $popup['settings']['coupon_code'] ?? '' ) );
+            if ( $legacy_code && ! $this->has_personalized_offer( $sections ) ) {
+                $offer = [ 'id' => self::new_id( 'blk' ), 'type' => 'personalized_offer', 'enabled' => true, 'style' => [],
+                    'data' => [ 'title' => 'A special offer for you', 'coupon_code' => mb_substr( $legacy_code, 0, 50 ), 'button_label' => 'Copy code' ] ];
+                if ( ! empty( $sections[0]['blocks'] ) && is_array( $sections[0]['blocks'] ) ) $sections[0]['blocks'][] = $offer;
+                else $sections[] = [ 'id' => self::new_id( 'sec' ), 'enabled' => true, 'style' => [], 'blocks' => [ $offer ] ];
+            }
             $out[] = [
                 'id'       => preg_match( '/^pp_[A-Za-z0-9]{3,20}$/', (string) ( $popup['id'] ?? '' ) ) ? $popup['id'] : self::new_id( 'pp' ),
                 'name'     => mb_substr( sanitize_text_field( (string) ( $popup['name'] ?? '' ) ), 0, 60 ) ?: 'Popup',
                 'enabled'  => ! isset( $popup['enabled'] ) || ( ! empty( $popup['enabled'] ) && $popup['enabled'] !== 'false' ),
                 'settings' => self::sanitize_popup_settings( (array) ( $popup['settings'] ?? [] ) ),
-                'sections' => $this->sanitize_sections( $popup['sections'] ?? [], 'popup' ),
+                'sections' => $this->sanitize_sections( $sections, 'popup' ),
             ];
         }
         return $out;
+    }
+
+    private function has_personalized_offer( array $sections ): bool {
+        $walk = static function ( array $nodes ) use ( &$walk ): bool {
+            foreach ( $nodes as $node ) {
+                if ( ( $node['type'] ?? '' ) === 'personalized_offer' ) return true;
+                if ( is_array( $node['blocks'] ?? null ) && $walk( $node['blocks'] ) ) return true;
+            }
+            return false;
+        };
+        return $walk( $sections );
     }
 
     /** One popup's settings: every POPUP_SETTINGS_FIELDS key, cleaned (missing ones get their defaults). */
@@ -55,8 +83,9 @@ trait SB_Popups {
                 $out[ $key ] = self::sanitize_field_value( $spec, $raw[ $key ] ?? null );
             }
         }
-        $coupon_code         = is_scalar( $raw['coupon_code'] ?? null ) ? (string) $raw['coupon_code'] : '';
-        $out['coupon_code']   = mb_substr( sanitize_text_field( $coupon_code ), 0, 50 );
+        $out['audience'] = in_array( (string) ( $raw['audience'] ?? 'all' ), [ 'all', 'guests', 'customers', 'interest', 'saved' ], true ) ? (string) $raw['audience'] : 'all';
+        $audience_ids = array_column( class_exists( 'Qwoo_Personalization' ) ? Qwoo_Personalization::audiences() : [], 'id' );
+        $out['audience_id'] = in_array( sanitize_key( (string) ( $raw['audience_id'] ?? '' ) ), $audience_ids, true ) ? sanitize_key( (string) $raw['audience_id'] ) : '';
         // An end before the start would never show.
         if ( $out['start_date'] !== '' && $out['end_date'] !== '' && $out['end_date'] < $out['start_date'] ) {
             $out['end_date'] = '';

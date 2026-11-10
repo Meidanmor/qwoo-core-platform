@@ -22,6 +22,22 @@ trait Qwoo_Platform_Growth {
             case 'overview':
                 return self::growth_overview( $p );
 
+            /* Shared shopper audiences and first-party signal controls. */
+            case 'personalization_get':
+                return Qwoo_Personalization::dashboard_state();
+            case 'personalization_save':
+                return Qwoo_Personalization::save_settings( $p );
+            case 'audience_save':
+                return Qwoo_Personalization::save_audience( $p );
+            case 'audience_delete':
+                return Qwoo_Personalization::delete_audience( sanitize_key( (string) ( $p['id'] ?? '' ) ) );
+            case 'audience_count':
+                return Qwoo_Personalization::audience_count( sanitize_key( (string) ( $p['id'] ?? '' ) ) );
+            case 'personalization_clear':
+                global $wpdb;
+                $wpdb->query( 'DELETE FROM ' . Qwoo_Personalization::table() );
+                return [ 'ok' => true ];
+
             /* Subscribers */
             case 'subscribers':
                 return Qwoo_Email_Marketing::subscribers( $p ) + [ 'counts' => Qwoo_Email_Marketing::counts() ];
@@ -74,7 +90,9 @@ trait Qwoo_Platform_Growth {
             case 'campaign_preview':
                 return [ 'html' => Qwoo_Email_Marketing::preview_html( $p ) ];
             case 'campaign_audience':
-                return [ 'count' => Qwoo_Email_Marketing::audience( in_array( $p['segment'] ?? '', Qwoo_Email_Marketing::SEGMENTS, true ) ? $p['segment'] : 'all', max( 7, (int) ( $p['segment_days'] ?? 90 ) ) ) ];
+                $segment = in_array( $p['segment'] ?? '', Qwoo_Email_Marketing::SEGMENTS, true ) ? $p['segment'] : 'all';
+                if ( $segment === 'saved_audience' ) return Qwoo_Personalization::audience_count( sanitize_key( (string) ( $p['audience_id'] ?? '' ) ) );
+                return [ 'count' => Qwoo_Email_Marketing::audience( $segment, max( 7, (int) ( $p['segment_days'] ?? 90 ) ) ), 'sampled' => false ];
             case 'campaign_test':
                 $row = $id ? Qwoo_Email_Marketing::campaign_row( $id ) : null;
                 return $row ? Qwoo_Email_Marketing::send_test( $row, (string) ( $p['to'] ?? '' ) ) : new WP_Error( 'missing', 'Save the email first.' );
@@ -112,7 +130,7 @@ trait Qwoo_Platform_Growth {
             case 'flow_test':
                 return Qwoo_Automations::test( sanitize_key( (string) ( $p['id'] ?? '' ) ), (string) ( $p['to'] ?? '' ) );
             case 'flows':
-                return [ 'flows' => Qwoo_Automations::overview(), 'allowed' => Qwoo_Automations::allowed(), 'statuses' => array_keys( wc_get_order_statuses() ) ];
+                return [ 'flows' => Qwoo_Automations::overview(), 'allowed' => Qwoo_Automations::allowed(), 'statuses' => array_keys( wc_get_order_statuses() ), 'audiences' => Qwoo_Personalization::audiences(), 'categories' => Qwoo_Personalization::categories() ];
             case 'flow_save':
                 return Qwoo_Automations::save( $p );
             case 'flow_delete':

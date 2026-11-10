@@ -273,9 +273,6 @@ abstract class Shop_Builder_Constants {
                     'show_if' => [ 'audience' => 'interest' ],
                     'help' => 'Uses product categories the visitor has viewed on this device. It does not identify the visitor or require email signup.' ],
             'hide_on'  => [ 'type' => 'devices', 'label' => 'Not On', 'group' => 'Who' ],
-            'coupon_code' => [ 'type' => 'text', 'label' => 'Coupon Code (optional)', 'group' => 'Offer', 'placeholder' => 'e.g. WELCOME10',
-                    'help' => 'Shown and copyable inside this popup. It is a public offer; WooCommerce checks the code and its restrictions at checkout.' ],
-
             'frequency' => [ 'type' => 'select', 'label' => 'How Often', 'group' => 'How often', 'default' => 'session',
                     'options' => [ 'always' => 'Every time', 'session' => 'Once per visit', 'days' => 'Once every few days', 'once' => 'Once, then never again' ],
                     'show_if' => [ 'trigger' => [ 'load', 'delay', 'scroll', 'exit', 'pages' ] ] ],
@@ -885,6 +882,23 @@ abstract class Shop_Builder_Constants {
                             'alignment'  => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'content', 'responsive' => true,
                                     'options' => self::ALIGN_OPTIONS, 'default' => 'default' ],
                             'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'line_height', 'color', 'spacing', 'case' ], 'keys' => [ 'font' => 'font', 'size' => 'font_size', 'weight' => 'font_weight', 'line_height' => 'line_height', 'color' => 'text_color' ] ],
+                    ],
+            ],
+
+            'personalized_offer' => [
+                    'label' => 'Personalized Offer',
+                    'category' => 'shop',
+                    'icon' => 'local_offer',
+                    'summary' => 'title',
+                    'fields' => [
+                            'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => 'A special offer for you' ],
+                            'description' => [ 'type' => 'text', 'label' => 'Description', 'tab' => 'content' ],
+                            'coupon_code' => [ 'type' => 'text', 'label' => 'WooCommerce Coupon Code', 'tab' => 'content' ],
+                            'button_label' => [ 'type' => 'text', 'label' => 'Copy Button', 'tab' => 'content', 'default' => 'Copy code' ],
+                            'alignment' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'options' => self::ALIGN_OPTIONS, 'default' => 'center' ],
+                            'text_color' => [ 'type' => 'color', 'label' => 'Text Color', 'tab' => 'style' ],
+                            'background' => [ 'type' => 'color', 'label' => 'Background', 'tab' => 'style' ],
+                            'button_color' => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style' ],
                     ],
             ],
 
