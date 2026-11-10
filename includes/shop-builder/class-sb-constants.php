@@ -268,8 +268,13 @@ abstract class Shop_Builder_Constants {
                     'help' => 'E.g. never on the checkout.' ],
 
             'audience' => [ 'type' => 'select', 'label' => 'Show To', 'group' => 'Who', 'default' => 'all',
-                    'options' => [ 'all' => 'Everyone', 'guests' => 'Visitors who aren\'t signed in', 'customers' => 'Signed-in customers' ] ],
+                    'options' => [ 'all' => 'Everyone', 'guests' => 'Visitors who aren\'t signed in', 'customers' => 'Signed-in customers', 'interest' => 'Visitors interested in selected categories' ] ],
+            'interest_category_ids' => [ 'type' => 'categories', 'label' => 'Interested Categories', 'group' => 'Who',
+                    'show_if' => [ 'audience' => 'interest' ],
+                    'help' => 'Uses product categories the visitor has viewed on this device. It does not identify the visitor or require email signup.' ],
             'hide_on'  => [ 'type' => 'devices', 'label' => 'Not On', 'group' => 'Who' ],
+            'coupon_code' => [ 'type' => 'text', 'label' => 'Coupon Code (optional)', 'group' => 'Offer', 'placeholder' => 'e.g. WELCOME10',
+                    'help' => 'Shown and copyable inside this popup. It is a public offer; WooCommerce checks the code and its restrictions at checkout.' ],
 
             'frequency' => [ 'type' => 'select', 'label' => 'How Often', 'group' => 'How often', 'default' => 'session',
                     'options' => [ 'always' => 'Every time', 'session' => 'Once per visit', 'days' => 'Once every few days', 'once' => 'Once, then never again' ],
@@ -722,6 +727,7 @@ abstract class Shop_Builder_Constants {
             'cart'         => 'Suggestions for the cart',
             // The last 20 products the shopper viewed, kept in their browser (the page's own product left out).
             'recent'       => 'Recently viewed',
+            'for_you'      => 'For you (based on products viewed)',
     ];
 
     /**
@@ -735,10 +741,14 @@ abstract class Shop_Builder_Constants {
                         'help' => 'When the cart\'s products have no "Bought together" products (Products → a product → Bought together).' ],
                 'empty_action' => [ 'type' => 'select', 'label' => 'Before Any Product Was Viewed', 'tab' => 'content', 'default' => 'hide_section',
                         'options' => [ 'hide_section' => 'Hide the section it is in', 'hide_block' => 'Hide only this block', 'message' => 'Show a message' ],
-                        'show_if' => [ 'query_type' => 'recent' ],
+                        'show_if' => [ 'query_type' => [ 'recent', 'for_you' ] ],
                         'help' => 'Hiding the section hides its heading too. On a product page, the product being viewed never shows in the list.' ],
                 'empty_text' => [ 'type' => 'text', 'label' => 'Message', 'tab' => 'content', 'default' => '', 'placeholder' => 'e.g. Products you view will show here',
-                        'show_if' => [ 'query_type' => 'recent', 'empty_action' => 'message' ] ],
+                        'show_if' => [ 'query_type' => [ 'recent', 'for_you' ], 'empty_action' => 'message' ] ],
+                'for_you_fallback' => [ 'type' => 'select', 'label' => 'When There Is Not Enough Interest Yet', 'tab' => 'content', 'default' => 'best_selling',
+                        'options' => [ 'best_selling' => 'Best selling products', 'newest' => 'Newest products', 'none' => 'Nothing' ],
+                        'show_if' => [ 'query_type' => 'for_you' ],
+                        'help' => 'Recommendations use product categories from this visitor’s recently viewed products, stored only in this browser.' ],
     ];
     const CAROUSEL_LIST_EXTRAS = [
                 'cart_fallback' => [ 'type' => 'select', 'label' => 'When There Are None', 'tab' => 'content', 'default' => 'newest',
@@ -747,10 +757,14 @@ abstract class Shop_Builder_Constants {
                         'help' => 'When the cart\'s products have no "Bought together" products (Products → a product → Bought together).' ],
                 'empty_action' => [ 'type' => 'select', 'label' => 'Before Any Product Was Viewed', 'tab' => 'content', 'default' => 'hide_section',
                         'options' => [ 'hide_section' => 'Hide the section it is in', 'hide_block' => 'Hide only this block', 'message' => 'Show a message' ],
-                        'show_if' => [ 'source' => 'products', 'query_type' => 'recent' ],
+                        'show_if' => [ 'source' => 'products', 'query_type' => [ 'recent', 'for_you' ] ],
                         'help' => 'Hiding the section hides its heading too. On a product page, the product being viewed never shows in the list.' ],
                 'empty_text' => [ 'type' => 'text', 'label' => 'Message', 'tab' => 'content', 'default' => '', 'placeholder' => 'e.g. Products you view will show here',
-                        'show_if' => [ 'source' => 'products', 'query_type' => 'recent', 'empty_action' => 'message' ] ],
+                        'show_if' => [ 'source' => 'products', 'query_type' => [ 'recent', 'for_you' ], 'empty_action' => 'message' ] ],
+                'for_you_fallback' => [ 'type' => 'select', 'label' => 'When There Is Not Enough Interest Yet', 'tab' => 'content', 'default' => 'best_selling',
+                        'options' => [ 'best_selling' => 'Best selling products', 'newest' => 'Newest products', 'none' => 'Nothing' ],
+                        'show_if' => [ 'source' => 'products', 'query_type' => 'for_you' ],
+                        'help' => 'Recommendations use product categories from this visitor’s recently viewed products, stored only in this browser.' ],
     ];
 
     /** Field types a custom form can ask for (form block, form_type = custom). */
@@ -2022,7 +2036,7 @@ abstract class Shop_Builder_Constants {
                             'show_title'   => [ 'type' => 'toggle', 'label' => 'Show a title', 'tab' => 'content', 'default' => true ],
                             'title'        => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'You may also like', 'show_if' => [ 'show_title' => true ] ],
                             'query_type'   => [ 'type' => 'select', 'label' => 'Show', 'tab' => 'content', 'default' => 'cart',
-                                    'options' => [ 'cart' => 'Bought together with the cart\'s products', 'recent' => 'Recently viewed' ] ],
+                                    'options' => [ 'cart' => 'Bought together with the cart\'s products', 'recent' => 'Recently viewed', 'for_you' => 'For you (based on products viewed)' ] ],
                             'product_ids'  => [ 'type' => 'products', 'label' => 'Products', 'tab' => 'content', 'show_if' => [ 'query_type' => 'cart', 'cart_fallback' => 'manual' ] ],
                             'limit'        => [ 'type' => 'number', 'label' => 'Number of Products', 'tab' => 'content', 'min' => 1, 'max' => 12, 'default' => 6 ],
                             'hide_out_of_stock' => [ 'type' => 'toggle', 'label' => 'Hide out-of-stock products', 'tab' => 'content', 'default' => true ],
@@ -2776,7 +2790,7 @@ abstract class Shop_Builder_Constants {
                             'exclude_current' => [ 'type' => 'toggle', 'label' => 'Leave out this page\'s product', 'tab' => 'content', 'default' => true, 'pages' => [ 'product' ], 'show_if' => [ 'source' => 'products' ],
                                     'help' => 'On the product page: the product being viewed isn\'t shown in this list.' ],
                             'limit'        => [ 'type' => 'number', 'label' => 'Number of Products', 'tab' => 'content', 'min' => 1, 'max' => 24, 'default' => 8,
-                                    'show_if' => [ 'source' => 'products', 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag', 'cart', 'recent' ] ] ],
+                                    'show_if' => [ 'source' => 'products', 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag', 'cart', 'recent', 'for_you' ] ] ],
                             'hide_out_of_stock' => [ 'type' => 'toggle', 'label' => 'Hide out-of-stock products', 'tab' => 'content', 'show_if' => [ 'source' => 'products' ] ],
                     ] + self::CAROUSEL_LIST_EXTRAS + [
                             'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Loop Template', 'tab' => 'content', 'default' => '',

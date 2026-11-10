@@ -55,6 +55,8 @@ trait SB_Popups {
                 $out[ $key ] = self::sanitize_field_value( $spec, $raw[ $key ] ?? null );
             }
         }
+        $coupon_code         = is_scalar( $raw['coupon_code'] ?? null ) ? (string) $raw['coupon_code'] : '';
+        $out['coupon_code']   = mb_substr( sanitize_text_field( $coupon_code ), 0, 50 );
         // An end before the start would never show.
         if ( $out['start_date'] !== '' && $out['end_date'] !== '' && $out['end_date'] < $out['start_date'] ) {
             $out['end_date'] = '';
