@@ -22,13 +22,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 trait SB_Popups {
 
+    /** Popup settings for the dashboard (audiences are picked with the `audience` field type, from schema.audiences). */
     private static function popup_settings_schema(): array {
-        $fields = self::POPUP_SETTINGS_FIELDS;
-        $fields['audience']['options']['saved'] = 'Shoppers in a saved audience';
-        $options = [ '' => 'Choose an audience' ];
-        if ( class_exists( 'Qwoo_Personalization' ) ) foreach ( Qwoo_Personalization::audiences() as $audience ) $options[ $audience['id'] ] = $audience['name'];
-        $fields['audience_id'] = [ 'type' => 'select', 'label' => 'Saved Audience', 'group' => 'Who', 'options' => $options, 'show_if' => [ 'audience' => 'saved' ] ];
-        return $fields;
+        return self::POPUP_SETTINGS_FIELDS;
     }
 
     /** Triggers that open a popup by itself (the others wait for a link). */
@@ -83,9 +79,15 @@ trait SB_Popups {
                 $out[ $key ] = self::sanitize_field_value( $spec, $raw[ $key ] ?? null );
             }
         }
-        $out['audience'] = in_array( (string) ( $raw['audience'] ?? 'all' ), [ 'all', 'guests', 'customers', 'interest', 'saved' ], true ) ? (string) $raw['audience'] : 'all';
-        $audience_ids = array_column( class_exists( 'Qwoo_Personalization' ) ? Qwoo_Personalization::audiences() : [], 'id' );
-        $out['audience_id'] = in_array( sanitize_key( (string) ( $raw['audience_id'] ?? '' ) ), $audience_ids, true ) ? sanitize_key( (string) $raw['audience_id'] ) : '';
+        // Codex's "interested in categories" (browser only) becomes an audience with the same categories.
+        if ( ( $raw['audience'] ?? '' ) === 'interest' && class_exists( 'Qwoo_Personalization' ) ) {
+            $cats  = array_slice( array_filter( array_map( 'absint', (array) ( $raw['interest_category_ids'] ?? [] ) ) ), 0, 10 );
+            $names = array_filter( array_map( static function ( $id ) { $t = get_term( $id, 'product_cat' ); return $t && ! is_wp_error( $t ) ? $t->name : ''; }, $cats ) );
+            $made  = $cats ? Qwoo_Personalization::save_audience( [ 'name' => mb_substr( 'Interested in ' . implode( ', ', $names ), 0, 80 ), 'match' => 'any', 'rules' => array_map( static fn( $id ) => [ 'type' => 'viewed_category', 'category_id' => $id, 'min' => 1, 'days' => 30 ], $cats ) ] ) : null;
+            $out['audience']    = is_array( $made ) ? 'saved' : 'all';
+            $out['audience_id'] = is_array( $made ) ? $made['audience']['id'] : '';
+        }
+        if ( in_array( $out['audience'], [ 'saved', 'not_saved' ], true ) && $out['audience_id'] === '' ) $out['audience'] = 'all';
         // An end before the start would never show.
         if ( $out['start_date'] !== '' && $out['end_date'] !== '' && $out['end_date'] < $out['start_date'] ) {
             $out['end_date'] = '';

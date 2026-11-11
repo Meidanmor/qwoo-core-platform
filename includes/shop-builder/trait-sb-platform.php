@@ -89,7 +89,10 @@ trait SB_Platform {
                 'loop_types'       => self::LOOP_TYPES,
                 'max_loops'        => self::MAX_LOOPS,
                 'popup_settings'   => self::popup_settings_schema(),
-                'personalization_audiences' => class_exists( 'Qwoo_Personalization' ) ? array_column( Qwoo_Personalization::audiences(), 'name', 'id' ) : [],
+                // Marketing → Audiences: pickers for "Show To" (sections, blocks, popups) and the Coupon block's codes.
+                'audiences'        => class_exists( 'Qwoo_Personalization' ) ? array_map( static fn( $a ) => [ 'id' => $a['id'], 'name' => $a['name'] ], Qwoo_Personalization::audiences() ) : [],
+                'audiences_state'  => class_exists( 'Qwoo_Personalization' ) ? [ 'enabled' => Qwoo_Personalization::enabled(), 'allowed' => Qwoo_Personalization::plan_allows() ] : [ 'enabled' => false, 'allowed' => false ],
+                'coupons'          => self::coupon_choices(),
                 'max_popups'       => self::MAX_POPUPS,
                 'chrome_targets'   => self::CHROME_TARGETS,
                 'padding_presets'  => self::SECTION_PADDING_PRESETS,
@@ -193,6 +196,16 @@ trait SB_Platform {
      * Saves the dashboard's draft: the option groups and every page's
      * sections go through sanitize_options(), exactly like Save Draft.
      */
+    /** Published discount codes for the Coupon block: [ { code, info } ] (newest 200). */
+    private static function coupon_choices(): array {
+        $out = [];
+        foreach ( get_posts( [ 'post_type' => 'shop_coupon', 'post_status' => 'publish', 'numberposts' => 200, 'orderby' => 'date', 'order' => 'DESC' ] ) as $post ) {
+            $code = (string) $post->post_title;
+            if ( $code !== '' ) $out[] = [ 'code' => $code, 'info' => self::coupon_info( $code ) ];
+        }
+        return $out;
+    }
+
     public static function platform_save( array $options, array $pages, ?array $custom_pages = null, ?array $menus = null, ?array $layouts = null, ?array $sync = null, ?array $loops = null, ?array $loops_default = null, ?array $popups = null ) {
         $input = array_intersect_key( $options, array_flip( self::$platform_option_groups ) );
         // Card designs: [ { id, type, name, sections } ] and { product: id }.

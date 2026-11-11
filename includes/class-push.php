@@ -32,7 +32,7 @@ class Qwoo_Push {
     const TITLE_MAX       = 65;
     const BODY_MAX        = 180;
 
-    const TRIGGERS = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'product_sale', 'back_in_stock', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed' ];
+    const TRIGGERS = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'product_sale', 'back_in_stock', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed', 'audience_joined' ];
 
     /** Triggers whose notifications don't count as marketing (the shopper asked for them or ordered). */
     const SERVICE_TRIGGERS = [ 'order_placed', 'order_status', 'back_in_stock' ];
@@ -342,6 +342,8 @@ class Qwoo_Push {
         $seconds = $type === 'product_view' ? min( 3600, max( 5, absint( $t['seconds'] ?? 30 ) ) ) : 0;
         $category_id = $type === 'product_view' ? absint( $t['category_id'] ?? 0 ) : 0;
         if ( $category_id && ! term_exists( $category_id, 'product_cat' ) ) $category_id = 0;
+        $joined = $type === 'audience_joined' ? sanitize_key( (string) ( $t['audience_id'] ?? '' ) ) : '';
+        if ( $type === 'audience_joined' && ! Qwoo_Personalization::exists( $joined ) ) return [ 'error' => sprintf( '"%s": choose the audience that sends it.', $name ) ];
 
         $texts = self::clean_texts( $a['texts'] ?? [], $langs );
         if ( $builtin === '' && empty( $texts[ $langs[0] ]['title'] ) ) {
@@ -358,7 +360,7 @@ class Qwoo_Push {
             'builtin'    => $builtin,
             'name'       => $name,
             'on'         => ! empty( $a['on'] ),
-            'trigger'    => [ 'type' => $type, 'status' => $status, 'days' => max( 1, min( 365, (int) ( $t['days'] ?? 30 ) ) ), 'seconds' => $seconds, 'category_id' => $category_id ],
+            'trigger'    => [ 'type' => $type, 'status' => $status, 'days' => max( 1, min( 365, (int) ( $t['days'] ?? 30 ) ) ), 'seconds' => $seconds, 'category_id' => $category_id, 'audience_id' => $joined ],
             'wait'       => max( 0, min( self::MAX_WAIT, (int) ( $a['wait'] ?? 0 ) ) ),
             'audience_id' => $audience_id,
             'only'       => [
@@ -610,6 +612,7 @@ class Qwoo_Push {
                 'langs'       => self::langs(),
                 'statuses'    => $statuses,
                 'triggers'    => self::TRIGGERS,
+                'audiences'   => array_map( static fn( $a ) => [ 'id' => $a['id'], 'name' => $a['name'] ], Qwoo_Personalization::audiences() ),
                 'service'     => self::SERVICE_TRIGGERS,
                 'link_types'  => self::LINK_TYPES,
                 'tokens'      => self::TOKENS,

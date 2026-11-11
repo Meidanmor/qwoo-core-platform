@@ -170,6 +170,11 @@ class Qwoo_Custom_Code {
         update_option( self::OPTION, $v, false );
     }
 
+    /** A new stamp: the storefront reads the settings again (Audiences on / off changes the cookie banner). */
+    public static function touch(): void {
+        self::put( self::get() );
+    }
+
     /** The test link's key, made the first time it's needed. */
     private static function key( array &$v ): string {
         if ( empty( $v['test_key'] ) || ! preg_match( '/^[a-f0-9]{32}$/', (string) $v['test_key'] ) ) {
@@ -264,6 +269,8 @@ class Qwoo_Custom_Code {
         return [
             'stamp'     => (int) ( $v['stamp'] ?? 0 ),
             'consent'   => self::consent_of( $v ),
+            // Audiences collects visitor activity under Analytics: the banner asks even with no tracking code.
+            'audiences' => class_exists( 'Qwoo_Personalization' ) && Qwoo_Personalization::active(),
             'snippets'  => $list,
             'shortcuts' => $active,
             'csp'       => array_map( 'array_keys', $csp ),

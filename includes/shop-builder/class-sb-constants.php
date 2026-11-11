@@ -268,10 +268,10 @@ abstract class Shop_Builder_Constants {
                     'help' => 'E.g. never on the checkout.' ],
 
             'audience' => [ 'type' => 'select', 'label' => 'Show To', 'group' => 'Who', 'default' => 'all',
-                    'options' => [ 'all' => 'Everyone', 'guests' => 'Visitors who aren\'t signed in', 'customers' => 'Signed-in customers', 'interest' => 'Visitors interested in selected categories' ] ],
-            'interest_category_ids' => [ 'type' => 'categories', 'label' => 'Interested Categories', 'group' => 'Who',
-                    'show_if' => [ 'audience' => 'interest' ],
-                    'help' => 'Uses product categories the visitor has viewed on this device. It does not identify the visitor or require email signup.' ],
+                    'options' => [ 'all' => 'Everyone', 'guests' => 'Visitors who aren\'t signed in', 'customers' => 'Signed-in customers', 'saved' => 'People in an audience', 'not_saved' => 'Everyone except an audience' ] ],
+            'audience_id' => [ 'type' => 'audience', 'label' => 'Audience', 'group' => 'Who', 'default' => '',
+                    'show_if' => [ 'audience' => [ 'saved', 'not_saved' ] ],
+                    'help' => 'Marketing → Audiences. Only visitors who allowed Analytics cookies can be in an audience.' ],
             'hide_on'  => [ 'type' => 'devices', 'label' => 'Not On', 'group' => 'Who' ],
             'frequency' => [ 'type' => 'select', 'label' => 'How Often', 'group' => 'How often', 'default' => 'session',
                     'options' => [ 'always' => 'Every time', 'session' => 'Once per visit', 'days' => 'Once every few days', 'once' => 'Once, then never again' ],
@@ -436,8 +436,12 @@ abstract class Shop_Builder_Constants {
      */
     const AUDIENCE_FIELDS = [
             'audience' => [ 'type' => 'select', 'label' => 'Show To', 'tab' => 'advanced', 'group' => 'Visibility', 'default' => 'all',
-                    'options' => [ 'all' => 'Everyone', 'guests' => 'Visitors who aren\'t signed in', 'customers' => 'Signed-in customers' ],
+                    'options' => [ 'all' => 'Everyone', 'guests' => 'Visitors who aren\'t signed in', 'customers' => 'Signed-in customers', 'in' => 'People in an audience', 'out' => 'Everyone except an audience' ],
                     'help' => 'E.g. a sign-in form for visitors and a "Welcome back" banner for customers. Only hides it from view: don\'t use it for anything secret.' ],
+            // Marketing → Audiences (Pro and Plus). Search engines and visitors who said no to Analytics cookies see the "Everyone" version.
+            'audience_id' => [ 'type' => 'audience', 'label' => 'Audience', 'tab' => 'advanced', 'group' => 'Visibility', 'default' => '',
+                    'show_if' => [ 'audience' => [ 'in', 'out' ] ],
+                    'help' => 'Shows a moment after the page opens, once the store knows the visitor. Put two versions one after the other: one for the audience, one for everyone except it.' ],
     ];
 
     /* ------------------------------------------------------------------
@@ -724,7 +728,7 @@ abstract class Shop_Builder_Constants {
             'cart'         => 'Suggestions for the cart',
             // The last 20 products the shopper viewed, kept in their browser (the page's own product left out).
             'recent'       => 'Recently viewed',
-            'for_you'      => 'For you (based on products viewed)',
+            'for_you'      => 'For you (from what the visitor viewed and bought)',
     ];
 
     /**
@@ -745,7 +749,7 @@ abstract class Shop_Builder_Constants {
                 'for_you_fallback' => [ 'type' => 'select', 'label' => 'When There Is Not Enough Interest Yet', 'tab' => 'content', 'default' => 'best_selling',
                         'options' => [ 'best_selling' => 'Best selling products', 'newest' => 'Newest products', 'none' => 'Nothing' ],
                         'show_if' => [ 'query_type' => 'for_you' ],
-                        'help' => 'Recommendations use product categories from this visitor’s recently viewed products, stored only in this browser.' ],
+                        'help' => 'Uses what the visitor viewed, carted and bought (Marketing → Audiences on), or the products viewed in this browser.' ],
     ];
     const CAROUSEL_LIST_EXTRAS = [
                 'cart_fallback' => [ 'type' => 'select', 'label' => 'When There Are None', 'tab' => 'content', 'default' => 'newest',
@@ -761,7 +765,7 @@ abstract class Shop_Builder_Constants {
                 'for_you_fallback' => [ 'type' => 'select', 'label' => 'When There Is Not Enough Interest Yet', 'tab' => 'content', 'default' => 'best_selling',
                         'options' => [ 'best_selling' => 'Best selling products', 'newest' => 'Newest products', 'none' => 'Nothing' ],
                         'show_if' => [ 'source' => 'products', 'query_type' => 'for_you' ],
-                        'help' => 'Recommendations use product categories from this visitor’s recently viewed products, stored only in this browser.' ],
+                        'help' => 'Uses what the visitor viewed, carted and bought (Marketing → Audiences on), or the products viewed in this browser.' ],
     ];
 
     /** Field types a custom form can ask for (form block, form_type = custom). */
@@ -885,20 +889,32 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
 
+            // A discount code from Marketing → Discounts: its amount and end date show by themselves, it hides once it ends.
+            // For one audience only: Advanced → Show To. (Type key kept from Codex's "Personalized Offer".)
             'personalized_offer' => [
-                    'label' => 'Personalized Offer',
+                    'label' => 'Coupon',
                     'category' => 'shop',
                     'icon' => 'local_offer',
-                    'summary' => 'title',
+                    'summary' => 'coupon_code',
                     'fields' => [
+                            'coupon_code' => [ 'type' => 'coupon', 'label' => 'Discount Code', 'tab' => 'content', 'default' => '',
+                                    'help' => 'Marketing → Discounts. To show it to one audience only: Advanced → Show To.' ],
                             'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => 'A special offer for you' ],
-                            'description' => [ 'type' => 'text', 'label' => 'Description', 'tab' => 'content' ],
-                            'coupon_code' => [ 'type' => 'text', 'label' => 'WooCommerce Coupon Code', 'tab' => 'content' ],
+                            'description' => [ 'type' => 'textarea', 'label' => 'Text', 'tab' => 'content', 'default' => '' ],
+                            'show_amount' => [ 'type' => 'toggle', 'label' => 'Show the discount (e.g. 10% off)', 'tab' => 'content', 'default' => true ],
+                            'show_end' => [ 'type' => 'toggle', 'label' => 'Show the end date', 'tab' => 'content', 'default' => true ],
                             'button_label' => [ 'type' => 'text', 'label' => 'Copy Button', 'tab' => 'content', 'default' => 'Copy code' ],
+                            'apply' => [ 'type' => 'toggle', 'label' => 'Apply to cart button', 'tab' => 'content', 'default' => true ],
+                            'apply_label' => [ 'type' => 'text', 'label' => 'Apply Button', 'tab' => 'content', 'default' => 'Apply to my cart', 'show_if' => [ 'apply' => true ] ],
+                            'layout' => [ 'type' => 'select', 'label' => 'Layout', 'tab' => 'style', 'default' => 'stack', 'options' => [ 'stack' => 'Text above the code', 'row' => 'Text and code side by side' ] ],
                             'alignment' => [ 'type' => 'select', 'label' => 'Alignment', 'tab' => 'style', 'options' => self::ALIGN_OPTIONS, 'default' => 'center' ],
                             'text_color' => [ 'type' => 'color', 'label' => 'Text Color', 'tab' => 'style' ],
                             'background' => [ 'type' => 'color', 'label' => 'Background', 'tab' => 'style' ],
+                            'code_border' => [ 'type' => 'color', 'label' => 'Code Border', 'tab' => 'style' ],
                             'button_color' => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style' ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title' ],
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Text' ],
+                            'ts:code' => [ 'type' => 'text_style', 'label' => 'Code', 'parts' => [ 'font', 'size', 'weight', 'color', 'spacing', 'case' ] ],
                     ],
             ],
 

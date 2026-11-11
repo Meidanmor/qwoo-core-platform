@@ -40,6 +40,7 @@ class Qwoo_Push_Engine {
         add_action( 'woocommerce_variation_set_stock_status', [ __CLASS__, 'on_stock_status' ], 20, 3 );
         add_action( 'deleted_user', [ __CLASS__, 'on_user_deleted' ] );
         add_action( 'qwoo_personalization_event', [ __CLASS__, 'on_personalization_event' ], 20, 4 );
+        add_action( 'qwoo_audience_joined', [ __CLASS__, 'on_audience_joined' ], 20, 3 );
     }
 
     /* ---------------- tables ---------------- */
@@ -246,6 +247,14 @@ class Qwoo_Push_Engine {
         self::event( $trigger, $ctx, $subs );
     }
 
+    /** A signed-in shopper joined an audience: "Joined an audience" automatic notifications. */
+    public static function on_audience_joined( string $audience_id, string $email, int $customer_id = 0 ): void {
+        if ( $customer_id < 1 ) return;
+        global $wpdb;
+        $subs = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT id FROM ' . self::subs_table() . ' WHERE customer_id = %d LIMIT 20', $customer_id ) ) );
+        if ( $subs ) self::event( 'audience_joined', [ 'audience' => $audience_id ], $subs );
+    }
+
     /** The shopper left with items in the cart ($token) or came back. */
     public static function on_cart_state( string $device, string $status, ?string $token ) {
         global $wpdb;
@@ -361,6 +370,7 @@ class Qwoo_Push_Engine {
         foreach ( Qwoo_Push::settings()['automations'] as $a ) {
             if ( ! $a['on'] || $a['trigger']['type'] !== $type ) continue;
             if ( $type === 'order_status' && $a['trigger']['status'] !== preg_replace( '/^wc-/', '', (string) ( $ctx['status'] ?? '' ) ) ) continue;
+            if ( $type === 'audience_joined' && ( $a['trigger']['audience_id'] ?? '' ) !== ( $ctx['audience'] ?? '' ) ) continue;
             if ( $type === 'product_view' ) {
                 if ( (int) ( $ctx['seconds'] ?? 0 ) < (int) ( $a['trigger']['seconds'] ?? 30 ) ) continue;
                 if ( ! empty( $a['trigger']['category_id'] ) && ! in_array( (int) $a['trigger']['category_id'], array_map( 'absint', (array) ( $ctx['category_ids'] ?? [] ) ), true ) ) continue;
@@ -397,6 +407,7 @@ class Qwoo_Push_Engine {
                     case 'product_view': $uniq = 'view:' . $a['id'] . ':' . (int) $sub . ':' . (int) ( $ctx['product'] ?? 0 ) . ':' . gmdate( 'Ymd' ); break;
                     case 'cart_changed': $uniq = 'cartchange:' . $a['id'] . ':' . (int) $sub . ':' . gmdate( 'Ymd' ); break;
                     case 'wishlist_changed': $uniq = 'wishchange:' . $a['id'] . ':' . (int) $sub . ':' . gmdate( 'Ymd' ); break;
+                    case 'audience_joined': $uniq = 'aj:' . $a['id'] . ':' . (int) $sub . ':' . gmdate( 'Ym' ); break;
                 }
                 $due[] = self::queue_one( (int) $sub, 'auto', $a['id'], $ctx, $marketing, $send_at, $uniq );
             }
@@ -464,9 +475,11 @@ class Qwoo_Push_Engine {
         $where = self::audience_where( $aud );
         $audience_id = sanitize_key( (string) ( $aud['audience_id'] ?? '' ) );
         if ( $audience_id !== '' ) {
-            $rows = (array) $wpdb->get_results( 'SELECT customer_id FROM ' . self::subs_table() . ( $where ? ' WHERE ' . implode( ' AND ', $where ) : '' ), ARRAY_A );
+            $in = Qwoo_Personalization::matching_customer_ids( $audience_id );
+            if ( ! $in ) return 0;
+            $rows = (array) $wpdb->get_col( 'SELECT customer_id FROM ' . self::subs_table() . ( $where ? ' WHERE ' . implode( ' AND ', $where ) : '' ) );
             $count = 0;
-            foreach ( $rows as $row ) if ( Qwoo_Personalization::audience_for_customer( (int) $row['customer_id'], $audience_id ) ) $count++;
+            foreach ( $rows as $cid ) if ( isset( $in[ (int) $cid ] ) ) $count++;
             return $count;
         }
         return (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . self::subs_table() . ( $where ? ' WHERE ' . implode( ' AND ', $where ) : '' ) );
@@ -521,6 +534,7 @@ class Qwoo_Push_Engine {
     /** Saved audience fan-out is evaluated against server-owned profiles. */
     private static function fan_out_audience( string $ref, array $audience, int $send_at ): int {
         global $wpdb;
+        $in = Qwoo_Personalization::matching_customer_ids( (string) $audience['audience_id'] );
         $subs = self::subs_table();
         $where = self::audience_where( $audience );
         $count = 0;
@@ -530,7 +544,7 @@ class Qwoo_Push_Engine {
             $rows = (array) $wpdb->get_results( $wpdb->prepare( $sql, $last ), ARRAY_A );
             foreach ( $rows as $row ) {
                 $last = (int) $row['id'];
-                if ( ! Qwoo_Personalization::audience_for_customer( (int) $row['customer_id'], (string) $audience['audience_id'] ) ) continue;
+                if ( ! isset( $in[ (int) $row['customer_id'] ] ) ) continue;
                 $uniq = substr( 'ps:' . $ref . ':' . $last, 0, 120 );
                 if ( self::queue_one( $last, 'send', $ref, [], true, $send_at, $uniq ) ) $count++;
             }

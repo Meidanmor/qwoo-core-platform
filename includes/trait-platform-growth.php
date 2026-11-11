@@ -28,14 +28,23 @@ trait Qwoo_Platform_Growth {
             case 'personalization_save':
                 return Qwoo_Personalization::save_settings( $p );
             case 'audience_save':
+                if ( ! Qwoo_Personalization::plan_allows() ) return new WP_Error( 'plan', 'Audiences are part of the Pro and Plus plans.' );
                 return Qwoo_Personalization::save_audience( $p );
+            case 'audience_template':
+                if ( ! Qwoo_Personalization::plan_allows() ) return new WP_Error( 'plan', 'Audiences are part of the Pro and Plus plans.' );
+                return Qwoo_Personalization::add_template( sanitize_key( (string) ( $p['template'] ?? '' ) ), (string) ( $p['name'] ?? '' ) );
             case 'audience_delete':
                 return Qwoo_Personalization::delete_audience( sanitize_key( (string) ( $p['id'] ?? '' ) ) );
             case 'audience_count':
                 return Qwoo_Personalization::audience_count( sanitize_key( (string) ( $p['id'] ?? '' ) ) );
+            case 'audiences_overview':
+                return Qwoo_Personalization::overview( $p );
+            case 'audience_test':
+                return Qwoo_Personalization::preview_size( $p );
+            case 'audience_detail':
+                return Qwoo_Personalization::detail( sanitize_key( (string) ( $p['id'] ?? '' ) ) );
             case 'personalization_clear':
-                global $wpdb;
-                $wpdb->query( 'DELETE FROM ' . Qwoo_Personalization::table() );
+                Qwoo_Personalization::clear_all();
                 return [ 'ok' => true ];
 
             /* Subscribers */

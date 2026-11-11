@@ -240,6 +240,15 @@ trait SB_Sanitizers {
                 $value = is_scalar( $value ) ? trim( (string) $value ) : '';
                 return preg_match( '/^lt_[A-Za-z0-9]{6,20}$/', $value ) ? $value : '';
 
+            case 'audience':
+                // Marketing → Audiences: an id that still exists ('' = none chosen).
+                $value = sanitize_key( is_scalar( $value ) ? (string) $value : '' );
+                return class_exists( 'Qwoo_Personalization' ) && Qwoo_Personalization::exists( $value ) ? $value : '';
+
+            case 'coupon':
+                // A discount code (Marketing → Discounts); WooCommerce checks it again in the cart.
+                return mb_substr( sanitize_text_field( is_scalar( $value ) ? (string) $value : '' ), 0, 50 );
+
             case 'menu':
                 $value = is_scalar( $value ) ? trim( (string) $value ) : '';
                 return preg_match( '/^menu_[A-Za-z0-9_]{3,30}$/', $value ) ? $value : ( in_array( $value, [ 'menu_header', 'menu_footer' ], true ) ? $value : '' );
@@ -375,6 +384,23 @@ trait SB_Sanitizers {
        Section / block tree
        ===================================================================== */
 
+    /** { ok, type: percent | fixed_cart | fixed_product, amount, ends: Y-m-d, min, free_shipping } of a discount code, or [] when unknown. */
+    public static function coupon_info( string $code ): array {
+        if ( $code === '' || ! function_exists( 'wc_get_coupon_id_by_code' ) ) return [];
+        $id = wc_get_coupon_id_by_code( $code );
+        if ( ! $id || get_post_status( $id ) !== 'publish' ) return [ 'ok' => false ];
+        $c = new WC_Coupon( $id );
+        $ends = $c->get_date_expires();
+        return [
+            'ok'            => true,
+            'type'          => (string) $c->get_discount_type(),
+            'amount'        => (float) $c->get_amount(),
+            'ends'          => $ends ? $ends->date_i18n( 'Y-m-d' ) : '',
+            'min'           => (float) $c->get_minimum_amount(),
+            'free_shipping' => (bool) $c->get_free_shipping(),
+        ];
+    }
+
     private static function new_id( $prefix ) {
         return $prefix . '_' . substr( wp_generate_password( 12, false ), 0, 10 );
     }
@@ -397,6 +423,11 @@ trait SB_Sanitizers {
         if ( $type === 'icon' ) {
             if ( $data['icon'] === 'custom' && empty( $data['custom_icon'] ) ) $data['icon'] = 'star';
             if ( $data['icon'] !== 'custom' ) $data['custom_icon'] = 0;
+        }
+
+        // Coupon block: the code's amount and end date, read when saved (the storefront shows them without asking the store).
+        if ( $type === 'personalized_offer' ) {
+            $data['coupon_info'] = self::coupon_info( (string) ( $data['coupon_code'] ?? '' ) );
         }
 
         if ( $type === 'testimonials' ) {

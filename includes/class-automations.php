@@ -28,7 +28,7 @@ class Qwoo_Automations {
     const OPTION    = 'qwoo_flows';
     const MAX_FLOWS = 20;
     const MAX_STEPS = 12;
-    const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed' ];
+    const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed', 'audience_joined' ];
     const SCAN_KEY  = 'qwoo_flows_scanned';
 
     public static function init() {
@@ -36,6 +36,7 @@ class Qwoo_Automations {
         add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'on_order_placed' ], 30 );
         add_action( 'woocommerce_order_status_changed', [ __CLASS__, 'on_order_status' ], 30, 4 );
         add_action( 'qwoo_personalization_event', [ __CLASS__, 'on_personalization_event' ], 10, 4 );
+        add_action( 'qwoo_audience_joined', [ __CLASS__, 'on_audience_joined' ], 10, 3 );
         add_action( 'qwoo_push_tick', [ __CLASS__, 'run_due' ] );
         add_filter( 'qwoo_push_next_due', [ __CLASS__, 'next_due' ] );
     }
@@ -137,8 +138,13 @@ class Qwoo_Automations {
             $category = absint( $in['trigger']['category_id'] ?? 0 );
             if ( $category && term_exists( $category, 'product_cat' ) ) $trigger['category_id'] = $category;
         }
+        if ( $type === 'audience_joined' ) {
+            $joined = sanitize_key( (string) ( $in['trigger']['audience_id'] ?? '' ) );
+            if ( ! Qwoo_Personalization::exists( $joined ) ) return new WP_Error( 'audience', 'Choose the audience that starts this automation.' );
+            $trigger['audience_id'] = $joined;
+        }
         $audience_id = sanitize_key( (string) ( $in['audience_id'] ?? '' ) );
-        if ( $audience_id && ! array_filter( Qwoo_Personalization::audiences(), static fn( $a ) => ( $a['id'] ?? '' ) === $audience_id ) ) return new WP_Error( 'audience', 'Choose a saved audience that still exists.' );
+        if ( $audience_id && ! Qwoo_Personalization::exists( $audience_id ) ) return new WP_Error( 'audience', 'Choose an audience that still exists.' );
         $rules = [];
         foreach ( (array) ( $in['rules'] ?? [] ) as $raw ) self::add_rule( $rules, (array) $raw );
         $steps = [];
@@ -212,6 +218,7 @@ class Qwoo_Automations {
             if ( empty( $flow['on'] ) || $flow['trigger']['type'] !== $type ) continue;
             if ( $type === 'order_status' && ( $flow['trigger']['status'] ?? '' ) !== ( $match['status'] ?? '' ) ) continue;
             if ( $type === 'no_order' && (int) ( $flow['trigger']['days'] ?? 0 ) !== (int) ( $match['days'] ?? 0 ) ) continue;
+            if ( $type === 'audience_joined' && ( $flow['trigger']['audience_id'] ?? '' ) !== ( $match['audience_id'] ?? '' ) ) continue;
             if ( $type === 'product_view' ) {
                 if ( (int) ( $match['seconds'] ?? 0 ) < (int) ( $flow['trigger']['seconds'] ?? 30 ) ) continue;
                 if ( ! empty( $flow['trigger']['category_id'] ) && ! in_array( (int) $flow['trigger']['category_id'], array_map( 'absint', (array) ( $match['category_ids'] ?? [] ) ), true ) ) continue;
@@ -258,6 +265,13 @@ class Qwoo_Automations {
         if ( ! is_email( $email ) ) return;
         $key = 'persona:' . $type . ':' . substr( hash( 'sha256', $visitor_key ), 0, 18 ) . ':' . (int) ( $event['product_id'] ?? 0 ) . ':' . gmdate( 'Ymd' );
         self::start( $trigger, $key, $email, 0, $event );
+    }
+
+    /** Someone the store knows joined an audience (Marketing → Audiences); once a month per audience. */
+    public static function on_audience_joined( string $audience_id, string $email, int $customer_id = 0 ): void {
+        if ( ! self::allowed() || ! is_email( $email ) ) return;
+        $key = 'aj:' . $audience_id . ':' . substr( hash( 'sha256', strtolower( $email ) ), 0, 18 ) . ':' . gmdate( 'Ym' );
+        self::start( 'audience_joined', $key, $email, 0, [ 'audience_id' => $audience_id ] );
     }
 
     /** Twice an hour: checkouts left without paying, and buyers who haven't been back. */

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: QWoo Core
  * Description: Headless WooCommerce backend for QWoo
- * Version:     1.0.3
+ * Version:     1.0.4
  * Author:      Meidan Mor
  * Plugin URI:  https://github.com/Meidanmor/qwoo-core
  * Requires Plugins: woocommerce
