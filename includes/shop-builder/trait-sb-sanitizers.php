@@ -472,6 +472,7 @@ trait SB_Sanitizers {
     private function sanitize_blocks( $raw_blocks, $depth = 1 ) {
         if ( ! is_array( $raw_blocks ) ) return [];
         $raw_blocks = self::merge_cart_coupons( array_values( $raw_blocks ), $unused, false );
+        $raw_blocks = self::related_as_carousel( $raw_blocks, $unused, false );
 
         $clean = [];
         foreach ( array_slice( array_values( $raw_blocks ), 0, self::MAX_BLOCKS ) as $block ) {
@@ -501,7 +502,8 @@ trait SB_Sanitizers {
                 // of an inner section placed next to the block (the dashboard counts them so too).
                 if ( self::holds_blocks( $type ) && is_array( $block['blocks'] ?? null ) ) {
                     $held = array_values( array_filter( $block['blocks'], static fn( $b ) => is_array( $b ) && ( $b['type'] ?? '' ) === 'section' ) );
-                    $row['blocks'] = $this->sanitize_blocks( array_slice( $held, 0, self::MAX_HELD_SECTIONS ), $depth );
+                    $most = ( $schema['holds'] ?? '' ) === 'steps' ? self::MAX_CHECKOUT_STEPS : self::MAX_HELD_SECTIONS;
+                    $row['blocks'] = $this->sanitize_blocks( array_slice( $held, 0, $most ), $depth );
                 }
             }
 
@@ -734,7 +736,7 @@ trait SB_Sanitizers {
                 self::add_inline_svgs( $type, (array) ( $block['data'] ?? [] ), $row['data'] );
                 // Tabs with blocks, a drawer built from blocks: its sections (only while in use).
                 if ( self::holds_blocks( $type ) && self::held_blocks_used( $type, (array) ( $block['data'] ?? [] ) ) ) {
-                    $row['blocks'] = self::output_blocks( (array) ( $block['blocks'] ?? [] ), $image_cb, ( $schema['holds'] ?? '' ) === 'tabs' );
+                    $row['blocks'] = self::output_blocks( (array) ( $block['blocks'] ?? [] ), $image_cb, in_array( $schema['holds'] ?? '', [ 'tabs', 'steps' ], true ) );
                 }
             }
             $out[] = $row;
@@ -1002,6 +1004,13 @@ trait SB_Sanitizers {
                     // The page loading bar ('' = the secondary colour); wp-admin's form doesn't send it.
                     'loading_bar'   => self::sanitize_color_value( $input['branding']['loading_bar'] ?? ( $existing['branding']['loading_bar'] ?? '' ) ),
             ];
+            // Moving between pages (2026-11-11): how a new page starts (scroll up smoothly, or at the
+            // top right away) and the page animation with its speed. wp-admin's form doesn't send them.
+            $motion = [ 'page_scroll' => [ 'smooth', 'jump' ], 'page_animation' => [ 'none', 'fade', 'rise', 'slide', 'zoom' ], 'page_speed' => [ 'normal', 'fast', 'slow' ] ];
+            foreach ( $motion as $key => $allowed ) {
+                $value = (string) ( $input['branding'][ $key ] ?? ( $existing['branding'][ $key ] ?? '' ) );
+                $clean['branding'][ $key ] = in_array( $value, $allowed, true ) ? $value : $allowed[0];
+            }
             // Brand fonts: only from the dashboard (wp-admin's Branding form keeps them as they are).
             if ( isset( $input['branding']['fonts'] ) ) {
                 $clean['branding']['fonts'] = Qwoo_Brand_Fonts::sanitize( $input['branding']['fonts'] );

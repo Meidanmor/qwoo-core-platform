@@ -165,6 +165,10 @@ trait SB_Platform {
                 'logo_id'       => (int) ( $o['branding']['logo_id'] ?? 0 ),
                 'app_icon_id'   => (int) ( $o['branding']['app_icon_id'] ?? 0 ),
                 'loading_bar'   => (string) ( $o['branding']['loading_bar'] ?? '' ),
+                // Moving between pages (Branding): scroll, page animation, speed.
+                'page_scroll'    => (string) ( $o['branding']['page_scroll'] ?? 'smooth' ),
+                'page_animation' => (string) ( $o['branding']['page_animation'] ?? 'none' ),
+                'page_speed'     => (string) ( $o['branding']['page_speed'] ?? 'normal' ),
             ],
             'pwa'      => [
                 'name'             => (string) ( $o['pwa']['name'] ?? '' ),

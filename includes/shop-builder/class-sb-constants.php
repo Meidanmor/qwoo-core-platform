@@ -729,6 +729,9 @@ abstract class Shop_Builder_Constants {
             // The last 20 products the shopper viewed, kept in their browser (the page's own product left out).
             'recent'       => 'Recently viewed',
             'for_you'      => 'For you (from what the visitor viewed and bought)',
+            // On the product page: others from the product's first category, else the newest
+            // (what the Related Products block showed). On other pages: the newest.
+            'related'      => 'Related to this page\'s product',
     ];
 
     /**
@@ -799,11 +802,19 @@ abstract class Shop_Builder_Constants {
      * delivery options), Payment (billing address, coupon, payment); the title, items, totals,
      * Order Summary and Place Order (Continue in the first steps) show in every step.
      */
-    const CHECKOUT_STEP_FIELD = [
-        'step' => [ 'type' => 'select', 'label' => 'Step', 'tab' => 'content', 'group' => 'Checkout in steps', 'default' => 'auto',
-                'options' => [ 'auto' => 'Automatic', '1' => 'Step 1: Details', '2' => 'Step 2: Delivery', '3' => 'Step 3: Payment', 'all' => 'Every step' ],
-                'help' => 'Used when the checkout is in steps (Settings → Checkout).', 'pages' => [ 'checkout' ] ],
+    const CHECKOUT_STEP_FIELD = [];
+    /**
+     * The old per-block Step field's automatic choice (2026-11-11: the steps are containers in
+     * the Checkout Steps block now). Used when a saved checkout is converted
+     * (SB_Shop_Templates::checkout_steps_as_containers).
+     */
+    const CHECKOUT_AUTO_STEP = [
+            'checkout_login' => 1, 'checkout_contact' => 1, 'checkout_delivery_mode' => 1, 'checkout_shipping_address' => 1, 'checkout_note' => 1,
+            'checkout_shipping' => 2,
+            'checkout_billing_address' => 3, 'checkout_coupon' => 3, 'checkout_payment' => 3,
     ];
+    /** The most steps a Checkout Steps block holds. */
+    const MAX_CHECKOUT_STEPS = 5;
     /** The cart page's Items and Totals: the same card, no title. */
     const CART_CARD_FIELD = [
         'card' => self::CHECKOUT_CARD_FIELDS['card'],
@@ -1703,8 +1714,11 @@ abstract class Shop_Builder_Constants {
                     'label' => 'Product Reviews', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'format-quote',
                     'fields' => [],
             ],
+            // Replaced (2026-11-11) by the Carousel / Product Grid with "Related to this page's product":
+            // saved ones become a Heading + one of those (SB_Shop_Templates::related_as_carousel).
+            // Kept so older lists still read.
             'product_related' => [
-                    'label' => 'Related Products', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'products',
+                    'label' => 'Related Products', 'category' => 'dynamic', 'pages' => [], 'legacy' => true, 'icon' => 'products',
                     'fields' => [
                             'title'     => [ 'type' => 'text', 'label' => 'Heading', 'tab' => 'content', 'default' => '', 'placeholder' => 'Related Products' ],
                             'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Loop Template', 'tab' => 'content', 'default' => '' ],
@@ -1780,6 +1794,24 @@ abstract class Shop_Builder_Constants {
             ],
             'archive_filters' => [
                     'label' => 'Filters', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'filter',
+                    // `start`: what a newly added block begins with (the dashboard's Add block, the default
+                    // shop template, the AI). Saved blocks keep their own values; the field defaults stay.
+                    'start' => [
+                            'data'  => [ 'show_search' => false, 'show_categories' => true, 'show_price' => true, 'show_attributes' => true, 'show_stock' => true,
+                                    'heading_size' => [ 'desktop' => '18px' ], 'heading_weight' => '700' ],
+                            'style' => [
+                                    'box_padding'  => [ 'desktop' => [ 'top' => '20px', 'right' => '20px', 'bottom' => '20px', 'left' => '20px' ], 'mobile' => [ 'top' => '0', 'right' => '0', 'bottom' => '0', 'left' => '0' ] ],
+                                    'box_radius'   => [ 'desktop' => '18px', 'mobile' => '0px' ],
+                                    'border_width' => [ 'desktop' => [ 'top' => '1px', 'right' => '1px', 'bottom' => '1px', 'left' => '1px' ], 'mobile' => [ 'top' => '0', 'right' => '0', 'bottom' => '0', 'left' => '0' ] ],
+                                    'border_style' => 'solid',
+                                    'border_color' => [ 'desktop' => '#0000001f' ],
+                                    'width'        => [ 'desktop' => '250px', 'mobile' => '100%' ],
+                                    'position'     => [ 'desktop' => 'sticky', 'mobile' => 'static' ],
+                                    'sticky_edge'  => 'top',
+                                    'sticky_top'   => [ 'desktop' => '24px' ],
+                                    'sticky_below_header' => true,
+                            ],
+                    ],
                     'fields' => [
                             'title'           => [ 'type' => 'text', 'label' => 'Heading', 'tab' => 'content', 'default' => '', 'placeholder' => 'Filters',
                                     'help' => 'On phones the filters open from a "Filters" button: the Sort block\'s, or a Filters Button block placed anywhere.' ],
@@ -1793,11 +1825,14 @@ abstract class Shop_Builder_Constants {
                             'attributes_only' => [ 'type' => 'details', 'global_only' => true, 'label' => 'Filter By These Details', 'tab' => 'content', 'show_if' => [ 'show_attributes' => true ],
                                     'help' => 'Empty: all of them. Shown in this order. Only shared details (Products → Attributes) can filter.' ],
                             'show_stock'      => [ 'type' => 'toggle', 'label' => '"In stock only" switch', 'tab' => 'content', 'default' => false ],
+                            'show_counts'     => [ 'type' => 'toggle', 'label' => 'Show how many products each choice has', 'tab' => 'content', 'default' => false,
+                                    'help' => 'For example Blue (4). The numbers follow the other filters the shopper chose, and a choice with no products is greyed out.' ],
                             'ts:heading' => [ 'type' => 'text_style', 'label' => 'Heading', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
                     ],
             ],
             'archive_count' => [
                     'label' => 'Number of Products', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'products',
+                    'start' => [ 'data' => [ 'text_size' => [ 'desktop' => '15px' ] ], 'style' => [ 'hide_on' => [ 'mobile' => true ] ] ],
                     'fields' => [
                             'ts:text' => [ 'type' => 'text_style', 'label' => 'Text', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
                     ],
@@ -1809,6 +1844,9 @@ abstract class Shop_Builder_Constants {
                     // Show As is per screen size (an older single value is the computer's, smaller screens inherit).
                     // "Button" looks like the Filters Button block (sbt_* fields) and opens the choices:
                     // a menu on computers, a sheet from the bottom on phones.
+                    // `start`: a new block begins as one outline pill button (see Filters above).
+                    'start' => [ 'data' => [ 'display' => [ 'desktop' => 'button' ], 'sbt_show_text' => true, 'sbt_icon' => 'sort', 'sbt_icon_position' => 'start',
+                            'sbt_style' => 'outline', 'sbt_size' => 'md', 'sbt_radius' => '999px', 'sbl_size' => [ 'desktop' => '15px' ], 'sbl_weight' => '700' ] ],
                     'fields' => [
                             'display'     => [ 'type' => 'select', 'label' => 'Show As', 'tab' => 'content', 'default' => 'dropdown', 'responsive' => true,
                                     'options' => [ 'dropdown' => 'Dropdown list', 'buttons' => 'Buttons', 'button' => 'One button (like Filters)' ] ],
@@ -1900,6 +1938,7 @@ abstract class Shop_Builder_Constants {
             ],
             'archive_filters_button' => [
                     'label' => 'Filters Button', 'category' => 'dynamic', 'pages' => [ 'shop', 'category' ], 'icon' => 'filter', 'summary' => 'text',
+                    'start' => [ 'data' => [ 'icon' => 'tune', 'style' => 'outline', 'size' => 'md', 'border_radius' => '999px', 'text_size' => [ 'desktop' => '15px' ], 'font_weight' => '700' ] ],
                     'fields' => [
                             'show_text'     => [ 'type' => 'toggle', 'label' => 'Show text', 'tab' => 'content', 'default' => true,
                                     'help' => 'Turn off for an icon-only button. Shown on phones only, where the filters open as a drawer.' ],
@@ -2241,14 +2280,18 @@ abstract class Shop_Builder_Constants {
                             'ts:option'      => [ 'type' => 'text_style', 'label' => 'Options', 'parts' => [ 'font', 'size', 'weight', 'color' ] ],
                     ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_STEP_FIELD,
             ],
-            // The steps bar (Details · Delivery · Payment) when the checkout is in steps. Without
-            // one on the page, the storefront draws it at the top.
+            // The checkout's steps (2026-11-11): each step is an inner section in the block's own
+            // `blocks` (its label is the step's title; empty: Details / Delivery / Payment / Step N),
+            // holding that step's blocks. The block draws the steps bar above the step shown. Blocks
+            // outside it show on every step. With "Checkout in steps" off (Settings → Checkout) the
+            // steps show one under the other, no bar. See holds_blocks().
             'checkout_steps' => [
                     'label' => 'Checkout Steps', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'products',
+                    'holds' => 'steps',
                     'fields' => [
-                            'details_label'  => [ 'type' => 'text', 'label' => 'Step 1', 'tab' => 'content', 'default' => '', 'placeholder' => 'Details' ],
-                            'delivery_label' => [ 'type' => 'text', 'label' => 'Step 2', 'tab' => 'content', 'default' => '', 'placeholder' => 'Delivery' ],
-                            'payment_label'  => [ 'type' => 'text', 'label' => 'Step 3', 'tab' => 'content', 'default' => '', 'placeholder' => 'Payment' ],
+                            'show_bar'       => [ 'type' => 'toggle', 'label' => 'Show the steps bar', 'tab' => 'content', 'default' => true,
+                                    'help' => 'The row of step names above the step. Used when the checkout is in steps (Settings → Checkout).' ],
+                            'bar_gap'        => [ 'type' => 'length', 'label' => 'Space Under the Bar', 'tab' => 'style', 'responsive' => true, 'placeholder' => '16px' ],
                             'active_color'   => [ 'type' => 'color', 'label' => 'Current Step Color', 'tab' => 'style', 'default' => '' ],
                             'ts:steps'       => [ 'type' => 'text_style', 'label' => 'Steps', 'parts' => [ 'font', 'size', 'weight' ] ],
                     ],
@@ -2750,7 +2793,7 @@ abstract class Shop_Builder_Constants {
                             'exclude_current' => [ 'type' => 'toggle', 'label' => 'Leave out this page\'s product', 'tab' => 'content', 'default' => true, 'pages' => [ 'product' ],
                                     'help' => 'On the product page: the product being viewed isn\'t shown in this list.' ],
                             'limit'        => [ 'type' => 'number', 'label' => 'Number of Products', 'tab' => 'content', 'min' => 1, 'max' => 24, 'default' => 8,
-                                    'show_if' => [ 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag', 'cart', 'recent' ] ] ],
+                                    'show_if' => [ 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag', 'cart', 'recent', 'related' ] ] ],
                             'hide_out_of_stock' => [ 'type' => 'toggle', 'label' => 'Hide out-of-stock products', 'tab' => 'content' ],
                     ] + self::PRODUCT_LIST_EXTRAS + [
                             'columns'      => [ 'type' => 'number', 'label' => 'Columns', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
@@ -2820,7 +2863,7 @@ abstract class Shop_Builder_Constants {
                             'exclude_current' => [ 'type' => 'toggle', 'label' => 'Leave out this page\'s product', 'tab' => 'content', 'default' => true, 'pages' => [ 'product' ], 'show_if' => [ 'source' => 'products' ],
                                     'help' => 'On the product page: the product being viewed isn\'t shown in this list.' ],
                             'limit'        => [ 'type' => 'number', 'label' => 'Number of Products', 'tab' => 'content', 'min' => 1, 'max' => 24, 'default' => 8,
-                                    'show_if' => [ 'source' => 'products', 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag', 'cart', 'recent', 'for_you' ] ] ],
+                                    'show_if' => [ 'source' => 'products', 'query_type' => [ 'newest', 'on_sale', 'featured', 'best_selling', 'top_rated', 'category', 'tag', 'cart', 'recent', 'for_you', 'related' ] ] ],
                             'hide_out_of_stock' => [ 'type' => 'toggle', 'label' => 'Hide out-of-stock products', 'tab' => 'content', 'show_if' => [ 'source' => 'products' ] ],
                     ] + self::CAROUSEL_LIST_EXTRAS + [
                             'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Loop Template', 'tab' => 'content', 'default' => '',
@@ -3590,6 +3633,7 @@ abstract class Shop_Builder_Constants {
         $holds = (string) ( self::get_type_schema( (string) $type )['holds'] ?? '' );
         if ( $holds === 'tabs' ) return ( $data['content_type'] ?? 'text' ) === 'blocks';
         if ( $holds === 'drawer' ) return ( $data['drawer_content'] ?? 'standard' ) === 'blocks';
+        if ( $holds === 'steps' ) return true;
         return false;
     }
 }

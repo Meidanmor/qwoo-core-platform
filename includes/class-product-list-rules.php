@@ -32,7 +32,8 @@ class Qwoo_Product_List_Rules {
 
     public static function read( $response, $handler, $request ) {
         self::$rules = null;
-        if ( ! $request instanceof WP_REST_Request || $request->get_route() !== '/wc/store/v1/products' ) return $response;
+        // The products list, and its counts per filter value (the Filters block's "how many products each choice has").
+        if ( ! $request instanceof WP_REST_Request || ! in_array( $request->get_route(), [ '/wc/store/v1/products', '/wc/store/v1/products/collection-data' ], true ) ) return $response;
         $rules = [];
         foreach ( [ 'qq_ids', 'qq_cats', 'qq_tags', 'qq_not_ids', 'qq_not_cats', 'qq_not_tags' ] as $key ) {
             $ids = self::ids( $request->get_param( $key ) );

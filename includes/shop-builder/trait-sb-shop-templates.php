@@ -82,6 +82,11 @@ trait SB_Shop_Templates {
             'style' => $style + [ 'width_mode' => 'custom', 'width' => $width, 'padding_preset' => 'none' ], 'blocks' => $blocks,
         ];
         $types  = static fn( array $list ) => array_map( $block, $list );
+        // A block with its type's `start` values (what a newly added one begins with).
+        $started = static function ( $type ) use ( $block ) {
+            $start = (array) ( self::get_type_schema( $type )['start'] ?? [] );
+            return array_merge( $block( $type ), [ 'style' => (array) ( $start['style'] ?? [] ), 'data' => (array) ( $start['data'] ?? [] ) ] );
+        };
         // The blocks have no spacing of their own: the old pages' spacing, as block settings.
         $sides  = static fn( $t, $r, $b, $l ) => [ 'top' => $t, 'right' => $r, 'bottom' => $b, 'left' => $l ];
         $spaced = static fn( array $b ) => array_merge( $b, [ 'style' => [ 'margin' => $rwd( $sides( '20px', '', '20px', '' ) ) ] ] );
@@ -113,7 +118,10 @@ trait SB_Shop_Templates {
                     ], $pad( '16', '16', '16', '16' ) + [ 'direction' => $rwd( 'row', 'column' ), 'gap' => $rwd( '24px' ) ] ) ],
                     [ $sec( [ $block( 'product_reviews' ) ], $pad( '0', '16', '0', '16' ) ) ],
                     $top( 'before_related_products' ),
-                    [ $sec( [ $block( 'product_related' ) ], $pad( '0', '16', '16', '16' ) ) ],
+                    [ $sec( [
+                        array_merge( $block( 'heading' ), [ 'data' => [ 'title' => __( 'Related products', 'woocommerce' ), 'tag' => 'h2', 'alignment' => $rwd( 'center' ), 'font_size' => $rwd( '1.5rem' ) ] ] ),
+                        array_merge( $block( 'carousel' ), [ 'data' => [ 'source' => 'products', 'query_type' => 'related', 'limit' => 8 ] ] ),
+                    ], $pad( '0', '16', '16', '16' ) + [ 'gap' => $rwd( '16px' ) ] ) ],
                     $top( 'after_related_products' )
                 );
                 break;
@@ -125,15 +133,22 @@ trait SB_Shop_Templates {
                     [ $sec( [ $spaced( $block( 'archive_breadcrumbs' ) ) ], $pad( '0', '16', '0', '16' ) ) ],
                     $top( 'after_breadcrumbs' ),
                     [ $sec( [ $spaced( $block( 'archive_title' ) ) ], $pad( '0', '16', '0', '16' ) ) ],
-                    [ $sec( [
-                        $col( array_merge( $inside( 'before_filters' ), [ $block( 'archive_filters' ) ] ), $rwd( '25%', '25%', '100%' ), [ 'gap' => $rwd( '25px' ) ] ),
-                        $col( array_merge(
-                            [ $block( 'archive_count' ), $sticky_phones( $block( 'archive_sort' ) ) ],
+                    // Filters in a card that stays in view; a row with the Filters button (phones), the
+                    // product count and Sort as a pill button; then the grid (the blocks' `start` values).
+                    [ $sec( array_merge(
+                        $inside( 'before_filters' ),
+                        [ $started( 'archive_filters' ) ],
+                        [ $col( array_merge(
+                            [ [
+                                'id' => self::new_id( 'blk' ), 'type' => 'section', 'label' => '', 'enabled' => true,
+                                'style' => [ 'width_mode' => 'full', 'padding_preset' => 'none', 'direction' => $rwd( 'row' ), 'justify' => $rwd( 'space-between' ), 'align_items' => $rwd( 'center' ), 'gap' => $rwd( '12px' ) ],
+                                'blocks' => [ $started( 'archive_filters_button' ), $started( 'archive_count' ), $started( 'archive_sort' ) ],
+                            ] ],
                             $inside( 'before_products_grid' ),
                             [ $block( 'archive_products' ) ],
                             $inside( 'after_products_grid' )
-                        ), $rwd( '75%', '75%', '100%' ), [ 'gap' => $rwd( '16px' ) ] ),
-                    ], $pad( '0', '16', '20', '16' ) + [ 'direction' => $rwd( 'row', 'row', 'column' ), 'gap' => $rwd( '20px' ) ] ) ],
+                        ), $rwd( '100%' ), [ 'gap' => $rwd( '22px', '22px', '16px' ) ] ) ]
+                    ), $pad( '0', '16', '20', '16' ) + [ 'direction' => $rwd( 'row', 'row', 'column' ), 'align_items' => $rwd( 'flex-start', 'flex-start', 'stretch' ), 'gap' => $rwd( '36px', '36px', '0px' ) ] ) ],
                     $top( 'after_pagination' )
                 );
                 break;
@@ -281,6 +296,214 @@ trait SB_Shop_Templates {
     }
 
     /**
+     * Related Products (2026-11-11): the block is gone; a saved one becomes a Heading (when its
+     * heading was on) and a Carousel or a Product Grid that shows "Related to this page's product",
+     * with every setting kept (the Related block's fields were the Carousel's own).
+     * $deep: also inner lists (sanitize_blocks walks those itself).
+     */
+    public static function related_as_carousel( array $nodes, &$changed = false, $deep = true ) {
+        $off = static fn( $v ) => in_array( $v, [ false, 0, '0', 'false' ], true );
+        $out = [];
+        foreach ( $nodes as $node ) {
+            if ( ! is_array( $node ) ) {
+                $out[] = $node;
+                continue;
+            }
+            if ( (string) ( $node['type'] ?? '' ) === 'product_related' ) {
+                $d       = is_array( $node['data'] ?? null ) ? $node['data'] : [];
+                $enabled = ! isset( $node['enabled'] ) || ( ! empty( $node['enabled'] ) && $node['enabled'] !== 'false' );
+                if ( ! $off( $d['show_title'] ?? true ) ) {
+                    $heading = [
+                        'title'     => trim( (string) ( $d['title'] ?? '' ) ) ?: __( 'Related products', 'woocommerce' ),
+                        'tag'       => 'h2',
+                        'alignment' => $d['title_align'] ?? [ 'desktop' => 'center' ],
+                        // The old heading's size when none was set.
+                        'font_size' => [ 'desktop' => '1.5rem' ],
+                    ];
+                    $keys = [ 'title_size' => 'font_size', 'title_weight' => 'font_weight', 'title_font' => 'title_font', 'title_line_height' => 'title_line_height',
+                            'title_color' => 'title_color', 'title_spacing' => 'title_spacing', 'title_case' => 'title_case' ];
+                    foreach ( $keys as $from => $to ) {
+                        $v = $d[ $from ] ?? '';
+                        $set = is_array( $v ) ? (bool) array_filter( $v, static fn( $x ) => $x !== '' && $x !== null ) : ( $v !== '' && $v !== null );
+                        if ( $set ) $heading[ $to ] = $v;
+                    }
+                    $out[] = [
+                        'id' => self::new_id( 'blk' ), 'type' => 'heading', 'label' => '', 'enabled' => $enabled,
+                        'style' => [ 'margin' => [ 'desktop' => [ 'top' => '', 'right' => '', 'bottom' => '16px', 'left' => '' ] ] ],
+                        'data'  => $heading,
+                    ];
+                }
+                $grid = ( $d['display'] ?? 'carousel' ) === 'grid';
+                foreach ( [ 'title', 'show_title', 'title_align', 'title_size', 'title_weight', 'title_font', 'title_line_height', 'title_color', 'title_spacing', 'title_case', 'display' ] as $key ) {
+                    unset( $d[ $key ] );
+                }
+                if ( $grid ) {
+                    $node['type'] = 'product_grid';
+                    $node['data'] = [ 'query_type' => 'related', 'limit' => $d['limit'] ?? 8, 'hide_out_of_stock' => ! empty( $d['hide_out_of_stock'] ), 'card_template' => $d['card_template'] ?? '' ]
+                            + ( isset( $d['items_per_view'] ) ? [ 'columns' => $d['items_per_view'] ] : [] )
+                            + ( isset( $d['gap'] ) ? [ 'gap' => $d['gap'] ] : [] );
+                } else {
+                    $node['type'] = 'carousel';
+                    $node['data'] = [ 'source' => 'products', 'query_type' => 'related' ] + $d;
+                }
+                $changed = true;
+            }
+            if ( $deep && is_array( $node['blocks'] ?? null ) ) {
+                $node['blocks'] = self::related_as_carousel( $node['blocks'], $changed );
+            }
+            $out[] = $node;
+        }
+        return $out;
+    }
+
+    /** Whether the checkout is in steps: the page's own value when it was sent, else the stored one. */
+    private static function checkout_steps_on( array $page_opts ) {
+        if ( array_key_exists( 'steps', $page_opts ) ) return ! empty( $page_opts['steps'] ) && $page_opts['steps'] !== 'false';
+        $stored = get_option( 'shop_builder_options', [] );
+        return ! empty( $stored['checkout']['steps'] );
+    }
+
+    /**
+     * Checkout steps as containers (2026-11-11). Before, each checkout block had a Step field
+     * (Automatic / 1 / 2 / 3 / every step) and the Checkout Steps block only drew the bar. Now
+     * the Checkout Steps block holds one inner section per step. A checkout in steps without
+     * such a block (a saved one, or the switch just turned on) gets it where its first step
+     * block was: Details / Delivery / Payment, each with the blocks that showed in that step,
+     * in their order. Blocks of "every step" stay where they are. The old bar block's look and
+     * step names are kept. With steps off nothing moves (the old Step values are only dropped).
+     */
+    public static function checkout_steps_as_containers( array $sections, $steps_on, &$changed = false ) {
+        $has = false;
+        $old = false;
+        $scan = static function ( array $nodes ) use ( &$scan, &$has, &$old ) {
+            foreach ( $nodes as $n ) {
+                if ( ! is_array( $n ) ) continue;
+                if ( ( $n['type'] ?? '' ) === 'checkout_steps' && array_filter( (array) ( $n['blocks'] ?? [] ), 'is_array' ) ) $has = true;
+                if ( is_array( $n['data'] ?? null ) && array_key_exists( 'step', $n['data'] ) ) $old = true;
+                if ( is_array( $n['blocks'] ?? null ) ) $scan( $n['blocks'] );
+            }
+        };
+        $scan( $sections );
+
+        if ( $has || ! $steps_on ) {
+            if ( ! $old ) return $sections;
+            $strip = static function ( array $nodes ) use ( &$strip ) {
+                foreach ( $nodes as $i => $n ) {
+                    if ( ! is_array( $n ) ) continue;
+                    if ( is_array( $n['data'] ?? null ) ) unset( $nodes[ $i ]['data']['step'] );
+                    if ( is_array( $n['blocks'] ?? null ) ) $nodes[ $i ]['blocks'] = $strip( $n['blocks'] );
+                }
+                return $nodes;
+            };
+            $changed = true;
+            return $strip( $sections );
+        }
+
+        $steps  = [ 1 => [], 2 => [], 3 => [] ];
+        $bar    = null;
+        $placed = false;
+        $gap    = null;
+        $marker = '__checkout_steps__';
+        $is_box  = static fn( $type ) => $type === 'section' || ( $type !== '' && self::holds_blocks( $type ) );
+        $step_of = static function ( array $n ) {
+            $step = (string) ( $n['data']['step'] ?? 'auto' );
+            if ( in_array( $step, [ '1', '2', '3' ], true ) ) return (int) $step;
+            return $step === 'all' ? 0 : (int) ( self::CHECKOUT_AUTO_STEP[ (string) ( $n['type'] ?? '' ) ] ?? 0 );
+        };
+        // The Checkout Steps block goes into the list that has the most step blocks (the form's
+        // column, not a single block above it), where that list's first step block was.
+        $counts = [];
+        $count = static function ( array $nodes, $path ) use ( &$count, &$counts, $is_box, $step_of ) {
+            foreach ( $nodes as $j => $n ) {
+                if ( ! is_array( $n ) ) continue;
+                $type = (string) ( $n['type'] ?? '' );
+                if ( $type === 'checkout_steps' ) continue;
+                if ( $is_box( $type ) ) {
+                    if ( is_array( $n['blocks'] ?? null ) ) $count( $n['blocks'], $path . '/' . $j );
+                } elseif ( $step_of( $n ) ) {
+                    $counts[ $path ] = ( $counts[ $path ] ?? 0 ) + 1;
+                }
+            }
+        };
+        foreach ( $sections as $i => $section ) {
+            if ( is_array( $section ) && is_array( $section['blocks'] ?? null ) ) $count( $section['blocks'], (string) $i );
+        }
+        $home = $counts ? (string) array_search( max( $counts ), $counts, true ) : '';
+
+        $pull = static function ( array $nodes, array $parent_style, $path ) use ( &$pull, &$steps, &$bar, &$placed, &$gap, $marker, $is_box, $step_of, $home ) {
+            $out = [];
+            foreach ( $nodes as $j => $n ) {
+                if ( ! is_array( $n ) ) {
+                    $out[] = $n;
+                    continue;
+                }
+                $type = (string) ( $n['type'] ?? '' );
+                if ( $type === 'checkout_steps' ) {
+                    if ( $bar === null ) $bar = $n;
+                    continue;
+                }
+                if ( $is_box( $type ) ) {
+                    if ( is_array( $n['blocks'] ?? null ) ) $n['blocks'] = $pull( $n['blocks'], is_array( $n['style'] ?? null ) ? $n['style'] : [], $path . '/' . $j );
+                    $out[] = $n;
+                    continue;
+                }
+                $at = $step_of( $n );
+                if ( is_array( $n['data'] ?? null ) ) unset( $n['data']['step'] );
+                if ( ! $at ) {
+                    $out[] = $n;
+                    continue;
+                }
+                if ( ! $placed && $path === $home ) {
+                    $placed = true;
+                    $gap    = $parent_style['gap'] ?? null;
+                    $out[]  = $marker;
+                }
+                $steps[ $at ][] = $n;
+            }
+            return $out;
+        };
+        foreach ( $sections as $i => $section ) {
+            if ( is_array( $section ) && is_array( $section['blocks'] ?? null ) ) {
+                $sections[ $i ]['blocks'] = $pull( $section['blocks'], is_array( $section['style'] ?? null ) ? $section['style'] : [], (string) $i );
+            }
+        }
+        $changed = true;
+        if ( ! $placed ) return $sections; // no step blocks at all (the old bar, if any, is dropped)
+
+        $data   = is_array( $bar['data'] ?? null ) ? $bar['data'] : [];
+        $labels = [ 1 => (string) ( $data['details_label'] ?? '' ), 2 => (string) ( $data['delivery_label'] ?? '' ), 3 => (string) ( $data['payment_label'] ?? '' ) ];
+        unset( $data['details_label'], $data['delivery_label'], $data['payment_label'], $data['step'] );
+        $held = [];
+        foreach ( $steps as $n => $blocks ) {
+            $held[] = [
+                'id' => self::new_id( 'blk' ), 'type' => 'section', 'label' => $labels[ $n ], 'enabled' => true,
+                'style'  => [ 'width_mode' => 'full', 'padding_preset' => 'none' ] + ( $gap ? [ 'gap' => $gap ] : [] ),
+                'blocks' => $blocks,
+            ];
+        }
+        $container = [
+            'id'      => preg_match( '/^blk_[a-zA-Z0-9]{6,20}$/', (string) ( $bar['id'] ?? '' ) ) ? $bar['id'] : self::new_id( 'blk' ),
+            'type'    => 'checkout_steps',
+            'label'   => (string) ( $bar['label'] ?? '' ),
+            'enabled' => true,
+            'style'   => is_array( $bar['style'] ?? null ) ? $bar['style'] : [],
+            'data'    => $data,
+            'blocks'  => $held,
+        ];
+        $place = static function ( array $nodes ) use ( &$place, $marker, $container ) {
+            foreach ( $nodes as $i => $n ) {
+                if ( $n === $marker ) {
+                    $nodes[ $i ] = $container;
+                } elseif ( is_array( $n ) && is_array( $n['blocks'] ?? null ) ) {
+                    $nodes[ $i ]['blocks'] = $place( $n['blocks'] );
+                }
+            }
+            return $nodes;
+        };
+        return $place( $sections );
+    }
+
+    /**
      * The old "Page Numbers" block (archive_pagination) leaves the list: page numbers are now
      * the Products Grid's own (Pagination, 'numbers' by default), so the page looks the same.
      */
@@ -346,12 +569,25 @@ trait SB_Shop_Templates {
             }
         }
         if ( $page === 'checkout' ) {
+            $steps_on = self::checkout_steps_on( $page_opts );
             if ( is_array( $page_opts['sections'] ?? null ) ) {
                 $page_opts['sections'] = self::split_checkout_blocks( $page_opts['sections'], $changed );
+                $page_opts['sections'] = self::checkout_steps_as_containers( $page_opts['sections'], $steps_on, $changed );
             }
             foreach ( (array) ( $page_opts['layouts'] ?? [] ) as $i => $layout ) {
                 if ( is_array( $layout['sections'] ?? null ) ) {
                     $page_opts['layouts'][ $i ]['sections'] = self::split_checkout_blocks( $layout['sections'], $changed );
+                    $page_opts['layouts'][ $i ]['sections'] = self::checkout_steps_as_containers( $page_opts['layouts'][ $i ]['sections'], $steps_on, $changed );
+                }
+            }
+        }
+        if ( $page === 'product' ) {
+            if ( is_array( $page_opts['sections'] ?? null ) ) {
+                $page_opts['sections'] = self::related_as_carousel( $page_opts['sections'], $changed );
+            }
+            foreach ( (array) ( $page_opts['layouts'] ?? [] ) as $i => $layout ) {
+                if ( is_array( $layout['sections'] ?? null ) ) {
+                    $page_opts['layouts'][ $i ]['sections'] = self::related_as_carousel( $layout['sections'], $changed );
                 }
             }
         }
