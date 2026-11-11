@@ -1230,6 +1230,8 @@ class Qwoo_Gift_Cards {
         }
         wp_mkdir_p( self::photo_dir() );
         if ( ! is_file( self::photo_dir() . '/index.php' ) ) file_put_contents( self::photo_dir() . '/index.php', "<?php\n// Silence.\n" );
+        // wp_tempnam() lives in wp-admin: not loaded on the storefront's requests (calling it was a fatal error here).
+        if ( ! function_exists( 'wp_tempnam' ) ) require_once ABSPATH . 'wp-admin/includes/file.php';
         $tmp = wp_tempnam( 'qwoo-gc' );
         file_put_contents( $tmp, $bytes );
         $editor = wp_get_image_editor( $tmp );

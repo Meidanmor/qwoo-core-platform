@@ -1505,7 +1505,15 @@ trait Qwoo_Platform_Migration {
 
     private static function mig_phase_orders() {
         remove_action( 'woocommerce_order_status_completed', [ 'Qwoo_Reviews', 'schedule_request' ] );
-        return self::mig_pages( 'orders', 'orders', [ __CLASS__, 'mig_order_item' ], 20 );
+        $done = self::mig_pages( 'orders', 'orders', [ __CLASS__, 'mig_order_item' ], 20 );
+        // Each order is copied to the statistics tables as its request ends, and a request of the move
+        // ends close to its time limit, so some copies can be cut short. Once every order is in, the
+        // statistics copy all orders again (in small batches, the next times Analytics is opened):
+        // sales, products, customers, automations and audiences then count every imported order.
+        if ( $done === true && class_exists( 'Qwoo_Analytics' ) ) {
+            delete_option( Qwoo_Analytics::FILL_OPTION );
+        }
+        return $done;
     }
 
     /** Tax amounts per rate, with the rates' new IDs. */
