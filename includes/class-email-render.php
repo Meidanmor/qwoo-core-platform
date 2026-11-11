@@ -284,6 +284,7 @@ class Qwoo_Email_Render {
         $tokens = (array) ( $ctx['tokens'] ?? [] );
         $tokens += [ '{store_name}' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), '{first_name}' => '' ];
         $body   = strtr( $body, array_map( static fn( $v ) => esc_html( (string) $v ), $tokens ) );
+        $body   = self::front_photos( $body );
         $footer = (string) ( $ctx['footer'] ?? '' );
 
         return '<!doctype html><html dir="' . ( $rtl ? 'rtl' : 'ltr' ) . '" lang="' . esc_attr( $main ) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">'
@@ -294,6 +295,25 @@ class Qwoo_Email_Render {
             . '<table role="presentation" class="qm-wrap" width="' . $width . '" cellpadding="0" cellspacing="0" style="width:100%;max-width:' . $width . 'px;background:' . esc_attr( $s['content_bg'] ) . ';border-radius:12px;overflow:hidden;">' . $body . '</table>'
             . ( $footer !== '' ? '<table role="presentation" class="qm-wrap" width="' . $width . '" cellpadding="0" cellspacing="0" style="width:100%;max-width:' . $width . 'px;"><tr><td style="padding:16px 24px;font-family:' . $font . ';font-size:12px;line-height:1.6;color:#77748b;text-align:center;">' . $footer . '</td></tr></table>' : '' )
             . '</td></tr></table></body></html>';
+    }
+
+    /**
+     * Photos in an email load from the storefront's address (it serves /wp-content/uploads itself),
+     * like on the storefront: the backend's address never shows in an email, and its host
+     * turns away bursts of direct photo requests.
+     */
+    private static function front_photos( string $html ): string {
+        $front = class_exists( 'Qwoo_Technical_Settings' ) ? rtrim( (string) Qwoo_Technical_Settings::get_primary_frontend_domain(), '/' ) : '';
+        if ( $front === '' || strpos( $html, '/wp-content/uploads/' ) === false ) return $html;
+        $from = array_unique( array_filter( [
+            untrailingslashit( content_url( 'uploads' ) ),
+            class_exists( 'Qwoo_Technical_Settings' ) ? untrailingslashit( (string) Qwoo_Technical_Settings::uploads_backend_base() ) : '',
+        ] ) );
+        $to = $front . '/wp-content/uploads';
+        foreach ( $from as $base ) {
+            if ( $base !== $to ) $html = str_replace( $base . '/', $to . '/', $html );
+        }
+        return $html;
     }
 
     private static function hide_attrs( string $hide ): array {

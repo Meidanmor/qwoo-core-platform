@@ -80,6 +80,24 @@ trait SB_Forms {
     }
 
     /**
+     * The same search over everything the Store builder saved: a form can also sit in a
+     * layout, a popup, a drawer (a block that holds sections), a custom page or a card
+     * design, where the storefront names the place ("popup", "drawer") and not a saved page.
+     * Anything turned off on the way down is skipped. Block ids are random, so one id is one form.
+     */
+    private static function find_form_anywhere( array $tree, $block_id, int $depth = 0 ) {
+        if ( $depth > 40 ) return null;
+        if ( isset( $tree['enabled'] ) && ! $tree['enabled'] ) return null;
+        if ( ( $tree['type'] ?? '' ) === 'form' && ( $tree['id'] ?? '' ) === $block_id ) return $tree;
+        foreach ( $tree as $child ) {
+            if ( ! is_array( $child ) ) continue;
+            $found = self::find_form_anywhere( $child, $block_id, $depth + 1 );
+            if ( $found ) return $found;
+        }
+        return null;
+    }
+
+    /**
      * The field definitions a form accepts. Newsletter/contact forms have a
      * fixed shape (mirrored in the frontend's FormBlock.vue); custom forms
      * use the fields configured in the builder.
@@ -168,12 +186,16 @@ trait SB_Forms {
         $limited = function_exists( 'qwoo_rate_limit_check' ) ? qwoo_rate_limit_check( 'form_submit', 5, 10 * MINUTE_IN_SECONDS ) : true;
         if ( is_wp_error( $limited ) ) return $limited;
 
-        if ( ! in_array( $page, self::sectionable_pages(), true ) || ! preg_match( '/^blk_[a-zA-Z0-9]{6,20}$/', $block_id ) ) {
+        if ( ! preg_match( '/^blk_[a-zA-Z0-9]{6,20}$/', $block_id ) ) {
             return new WP_Error( 'qwoo_form_not_found', 'This form is no longer available.', [ 'status' => 404 ] );
         }
 
-        $options = get_option( 'shop_builder_options', [] );
-        $block   = self::find_form_block( (array) ( $options[ $page ]['sections'] ?? [] ), $block_id );
+        // The page's own sections first; then every other place a form can sit (layouts, popups, drawers, custom pages).
+        $options = (array) get_option( 'shop_builder_options', [] );
+        $block   = in_array( $page, self::sectionable_pages(), true ) ? self::find_form_block( (array) ( $options[ $page ]['sections'] ?? [] ), $block_id ) : null;
+        if ( ! $block ) {
+            $block = self::find_form_anywhere( $options, $block_id );
+        }
         if ( ! $block ) {
             return new WP_Error( 'qwoo_form_not_found', 'This form is no longer available.', [ 'status' => 404 ] );
         }

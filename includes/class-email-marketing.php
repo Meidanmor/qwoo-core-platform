@@ -437,6 +437,12 @@ class Qwoo_Email_Marketing {
         return $front !== '' ? $front . '/wp-json/' . self::NS . '/m/' : rest_url( self::NS . '/m/' );
     }
 
+    /** The storefront's home, for links in tests and previews (the backend's address only when the store has no storefront address). */
+    public static function front_home(): string {
+        $front = class_exists( 'Qwoo_Technical_Settings' ) ? rtrim( (string) Qwoo_Technical_Settings::get_primary_frontend_domain(), '/' ) : '';
+        return $front !== '' ? $front . '/' : home_url( '/' );
+    }
+
     public static function unsubscribe_url( int $sub_id, string $email ): string {
         return self::base_url() . 'u?' . http_build_query( [ 's' => $sub_id, 'k' => self::sign( 'u' . $sub_id . strtolower( $email ) ) ] );
     }
@@ -469,7 +475,7 @@ class Qwoo_Email_Marketing {
     /** A test to the owner's own address: not counted, no tracking. */
     public static function send_test( array $campaign, string $to ) {
         if ( ! is_email( $to ) ) return new WP_Error( 'email', 'Enter a valid email address.' );
-        $html = self::render( (array) $campaign['design'], (string) $campaign['preheader'], static fn( $u ) => $u, self::footer( home_url( '/' ) ), 'Dana' );
+        $html = self::render( (array) $campaign['design'], (string) $campaign['preheader'], static fn( $u ) => $u, self::footer( self::front_home() ), 'Dana' );
         $ok   = wp_mail( $to, '[Test] ' . $campaign['subject'], $html, [ 'Content-Type: text/html; charset=UTF-8' ] );
         return $ok ? [ 'ok' => true ] : new WP_Error( 'mail', 'The test couldn\'t be sent.' );
     }

@@ -630,6 +630,7 @@ class Qwoo_Store_Emails {
 
     /** The email as it would go out, with an example order or person. */
     public static function sample_html( string $id, array $design ): string {
+        $home  = class_exists( 'Qwoo_Email_Marketing' ) ? Qwoo_Email_Marketing::front_home() : home_url( '/' ); // sample links go to the storefront, never the backend
         $def   = self::catalog()[ $id ] ?? [ 'kind' => 'order' ];
         $order = in_array( $def['kind'], [ 'order', 'review' ], true ) ? self::sample_order() : null;
         $args  = [
@@ -637,14 +638,14 @@ class Qwoo_Store_Emails {
             'user_login'    => 'dana',
             'product_name'  => self::l( 'Example product', 'מוצר לדוגמה' ),
             'stock'         => '2',
-            'review_links'  => [ [ 'label' => self::l( 'Review Example product', 'כתיבת ביקורת' ), 'url' => home_url( '/' ) ] ],
-            'product_url'   => home_url( '/' ),
+            'review_links'  => [ [ 'label' => self::l( 'Review Example product', 'כתיבת ביקורת' ), 'url' => $home ] ],
+            'product_url'   => $home,
         ];
         if ( in_array( $def['kind'], [ 'gift', 'gift_notice' ], true ) ) {
             $args += [ 'recipient_name' => 'Noa', 'recipient_email' => 'noa@example.com', 'sender_name' => self::l( 'Dana and Yoni', 'דנה ויוני' ), 'gift_amount' => html_entity_decode( wp_strip_all_tags( wc_price( 200 ) ), ENT_QUOTES ) ];
         }
         $ctx = self::context( $id, $order, null, $args );
-        $ctx['urls'] += [ 'reset' => home_url( '/' ), 'pay' => home_url( '/' ), 'order' => home_url( '/' ) ];
+        $ctx['urls'] += [ 'reset' => $home, 'pay' => $home, 'order' => $home ];
         if ( ! $order ) $ctx['tokens']['{first_name}'] = 'Dana';
         if ( $def['kind'] === 'gift' && class_exists( 'Qwoo_Gift_Cards' ) ) {
             $d = Qwoo_Gift_Cards::default_designs()[0];
@@ -652,7 +653,7 @@ class Qwoo_Store_Emails {
                 'title' => $d['title'], 'mark' => $d['mark'], 'color' => Qwoo_Gift_Cards::COLORS[0], 'image' => '',
                 'amount' => $args['gift_amount'], 'code' => 'K7QX-9DMP-3RTA-H2WN',
                 'expiry' => sprintf( self::l( 'Valid until %s', 'בתוקף עד %s' ), wp_date( get_option( 'date_format' ), strtotime( '+5 years' ) ) ),
-                'to' => 'Noa', 'from' => $args['sender_name'], 'message' => self::l( 'Happy birthday! Pick something lovely for yourself.', 'יום הולדת שמח! תבחרי לך משהו יפה.' ), 'shop' => home_url( '/' ),
+                'to' => 'Noa', 'from' => $args['sender_name'], 'message' => self::l( 'Happy birthday! Pick something lovely for yourself.', 'יום הולדת שמח! תבחרי לך משהו יפה.' ), 'shop' => $home,
             ];
         }
         return Qwoo_Email_Render::html( $design, $ctx );
