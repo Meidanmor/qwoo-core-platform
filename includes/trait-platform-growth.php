@@ -96,6 +96,8 @@ trait Qwoo_Platform_Growth {
                 return [ 'ok' => true ];
             case 'campaign_duplicate':
                 return Qwoo_Email_Marketing::duplicate_campaign( $id );
+            case 'email_products':
+                return Qwoo_Email_Render::preview_products( $p );
             case 'campaign_preview':
                 return [ 'html' => Qwoo_Email_Marketing::preview_html( $p ) ];
             case 'campaign_audience':

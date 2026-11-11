@@ -532,6 +532,28 @@ class Qwoo_Email_Render {
         return array_filter( array_map( 'wc_get_product', array_slice( (array) $d['ids'], 0, $count ) ) );
     }
 
+    /**
+     * The products a Products block would show now, for the dashboard's picture of the email:
+     * [ { id, name, price, image } ]. With no order at hand, "related to this order" gives the
+     * best sellers, like the email itself does.
+     */
+    public static function preview_products( array $in ): array {
+        $source = in_array( $in['source'] ?? '', [ 'best', 'new', 'chosen', 'related' ], true ) ? (string) $in['source'] : 'best';
+        $d      = [ 'source' => $source, 'count' => max( 1, min( 8, (int) ( $in['count'] ?? 4 ) ) ), 'ids' => array_slice( array_filter( array_map( 'absint', (array) ( $in['ids'] ?? [] ) ) ), 0, 8 ) ];
+        $out    = [];
+        foreach ( self::product_list( $d, [] ) as $product ) {
+            if ( ! $product || $product->get_status() !== 'publish' ) continue;
+            $img   = wp_get_attachment_image_url( $product->get_image_id(), 'medium' );
+            $out[] = [
+                'id'    => (int) $product->get_id(),
+                'name'  => html_entity_decode( $product->get_name(), ENT_QUOTES ),
+                'price' => (float) $product->get_price() > 0 ? html_entity_decode( wp_strip_all_tags( wc_price( (float) $product->get_price() ) ), ENT_QUOTES ) : '',
+                'image' => $img ? self::front_photos( (string) $img ) : '',
+            ];
+        }
+        return [ 'products' => $out ];
+    }
+
     private static function products( array $d, array $env ): string {
         $s     = $env['s'];
         $font  = $env['font'];
