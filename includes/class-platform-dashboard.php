@@ -102,6 +102,7 @@ class Qwoo_Platform_Dashboard {
         'attribute_get'    => 'action_attribute_get',
         'attribute_save'   => 'action_attribute_save',
         'attribute_delete' => 'action_attribute_delete',
+        'options_tidy'     => 'action_options_tidy',
         'seo_get'         => 'action_seo_get',
         'seo_save'        => 'action_seo_save',
         'seo_audit'       => 'action_seo_audit',
@@ -851,6 +852,11 @@ class Qwoo_Platform_Dashboard {
                     $plan['details'] = self::build_details( $details );
                 }
                 $product->set_attributes( self::build_attributes( $plan ) );
+                $defaults = [];
+                foreach ( $plan['defaults'] as $attr_lower => $option_lower ) {
+                    $defaults[ $plan['attributes'][ $attr_lower ]['key'] ] = $plan['attributes'][ $attr_lower ]['values'][ $option_lower ][1];
+                }
+                $product->set_default_attributes( $defaults );
                 // Prices and stock are on the combinations.
                 $product->set_regular_price( '' );
                 $product->set_sale_price( '' );
@@ -1088,9 +1094,16 @@ class Qwoo_Platform_Dashboard {
      *                   regular_price, sale_price, manage_stock, stock_quantity,
      *                   stock_status, sku, image_id, enabled } ]
      *
-     * New options are kept on the product itself. Options that come from the
-     * store's shared attributes (pa_…) stay shared. Attributes the product
-     * has that aren't options (only shown as details) are kept as they are.
+     * Options always live in the store's shared attributes (pa_…), so the
+     * shop's filters see them: the attribute with the option's name, or a new
+     * one made on save. An option the product kept for itself (older saves,
+     * wp-admin) moves to the shared list on this save, its combinations with
+     * it. Attributes the product has that aren't options (only shown as
+     * details) are kept as they are.
+     *
+     *   attributes[].visible     also listed in the product's details (default yes)
+     *   default_choices          { "Size": "M" }: chosen when the product page
+     *                            opens; not sent = kept as they are
      */
     private static function variable_plan( $product, array $f, $status, $parent_sku = '' ) {
         $existing = $product ? $product->get_attributes() : [];
@@ -1115,8 +1128,21 @@ class Qwoo_Platform_Dashboard {
             }
             $taxonomy = '';
             foreach ( $existing as $attr ) {
-                if ( $attr->is_taxonomy() && mb_strtolower( wc_attribute_label( $attr->get_name() ) ) === $lower ) {
+                if ( $attr->is_taxonomy() && mb_strtolower( self::attr_label( $attr ) ) === $lower ) {
                     $taxonomy = $attr->get_name();
+                }
+            }
+            if ( $taxonomy === '' ) {
+                $shared = self::attr_by_label( $name );
+                if ( $shared ) {
+                    $taxonomy = self::attr_registered( $shared->attribute_name );
+                }
+            }
+            // The shared values there are now: lower-case name => slug.
+            $known = [];
+            if ( $taxonomy !== '' ) {
+                foreach ( self::attr_terms( $taxonomy ) as $term ) {
+                    $known[ mb_strtolower( html_entity_decode( $term->name, ENT_QUOTES ) ) ] = $term->slug;
                 }
             }
             $values = [];
@@ -1135,12 +1161,8 @@ class Qwoo_Platform_Dashboard {
                 if ( isset( $values[ $key ] ) ) {
                     continue;
                 }
-                $stored = $option; // kept on the product: the combination stores the text itself
-                if ( $taxonomy !== '' ) {
-                    $term   = get_term_by( 'name', $option, $taxonomy );
-                    $stored = $term ? $term->slug : null; // a new shared choice: created when saving
-                }
-                $values[ $key ] = [ $option, $stored ];
+                // The shared value's slug; null = a new value (or a new attribute), added when saving.
+                $values[ $key ] = [ $option, $known[ $key ] ?? null ];
             }
             if ( ! $values ) {
                 return self::bad( "Add at least one choice to \"$name\"." );
@@ -1153,6 +1175,7 @@ class Qwoo_Platform_Dashboard {
                 'key'      => $taxonomy !== '' ? $taxonomy : sanitize_title( $name ),
                 'taxonomy' => $taxonomy,
                 'values'   => $values,
+                'visible'  => ! array_key_exists( 'visible', $a ) || ! empty( $a['visible'] ),
             ];
         }
 
@@ -1160,7 +1183,7 @@ class Qwoo_Platform_Dashboard {
         foreach ( $existing as $key => $attr ) {
             // Sent with the save: checked against the options in details_plan.
             if ( ! $attr->get_variation() && ! array_key_exists( 'details', $f ) ) {
-                $label = mb_strtolower( $attr->is_taxonomy() ? wc_attribute_label( $attr->get_name() ) : $attr->get_name() );
+                $label = mb_strtolower( self::attr_label( $attr ) );
                 if ( isset( $attributes[ $label ] ) ) {
                     return self::bad( "\"{$attributes[ $label ]['name']}\" is already a product detail. Use another name." );
                 }
@@ -1237,7 +1260,45 @@ class Qwoo_Platform_Dashboard {
         if ( $status === 'publish' && ! $sold ) {
             return self::bad( 'Turn on at least one variant before publishing the product.' );
         }
-        return [ 'attributes' => $attributes, 'details' => $details, 'variations' => $variations, 'children' => $children ];
+        // Choices made when the product page opens. Not sent: the product's own stay (by name, so they survive a move to the shared list).
+        $given    = array_key_exists( 'default_choices', $f ) ? (array) $f['default_choices'] : ( $product ? self::default_choices( $product ) : [] );
+        $defaults = [];
+        foreach ( $given as $attr_name => $option ) {
+            $attr_lower   = mb_strtolower( trim( (string) $attr_name ) );
+            $option_lower = mb_strtolower( trim( is_scalar( $option ) ? (string) $option : '' ) );
+            if ( $option_lower !== '' && isset( $attributes[ $attr_lower ]['values'][ $option_lower ] ) ) {
+                $defaults[ $attr_lower ] = $option_lower;
+            }
+        }
+        return [ 'attributes' => $attributes, 'details' => $details, 'variations' => $variations, 'children' => $children, 'defaults' => $defaults ];
+    }
+
+    /** The choices made when the product page opens, by name: { "Size": "M" }. */
+    private static function default_choices( WC_Product $p ) {
+        $out = [];
+        if ( ! $p->is_type( 'variable' ) ) {
+            return $out;
+        }
+        $defaults = (array) $p->get_default_attributes( 'edit' );
+        foreach ( $p->get_attributes() as $key => $attr ) {
+            $stored = (string) ( $defaults[ $key ] ?? '' );
+            if ( ! $attr->get_variation() || $stored === '' ) {
+                continue;
+            }
+            if ( $attr->is_taxonomy() ) {
+                $term = get_term_by( 'slug', $stored, $attr->get_name() );
+                if ( $term ) {
+                    $out[ self::attr_label( $attr ) ] = html_entity_decode( $term->name, ENT_QUOTES );
+                }
+            } else {
+                foreach ( $attr->get_options() as $option ) {
+                    if ( $option === $stored || sanitize_title( $option ) === sanitize_title( $stored ) ) {
+                        $out[ $attr->get_name() ] = $option;
+                    }
+                }
+            }
+        }
+        return $out;
     }
 
     /** The product's attributes from a plan: its options (in order), then its other details. */
@@ -1247,29 +1308,35 @@ class Qwoo_Platform_Dashboard {
         foreach ( $plan['attributes'] as &$a ) {
             $attr = new WC_Product_Attribute();
             $attr->set_position( $position++ );
-            $attr->set_visible( true );
+            $attr->set_visible( $a['visible'] ?? true );
             $attr->set_variation( true );
-            if ( $a['taxonomy'] !== '' ) {
-                $ids = [];
-                foreach ( $a['values'] as &$value ) {
-                    if ( $value[1] === null ) {
-                        $term = wp_insert_term( $value[0], $a['taxonomy'] );
-                        if ( is_wp_error( $term ) ) {
-                            throw new WC_Data_Exception( 'qwoo_term', "\"{$value[0]}\" couldn't be added to \"{$a['name']}\"." );
-                        }
-                        $value[1] = get_term( $term['term_id'], $a['taxonomy'] )->slug;
+            // A name the store's list doesn't have yet: added to it now.
+            $made = 0;
+            if ( $a['taxonomy'] === '' ) {
+                $made = self::attr_create( $a['name'] );
+                if ( is_wp_error( $made ) ) {
+                    throw new WC_Data_Exception( 'qwoo_attribute', $made->get_error_message() );
+                }
+                $a['taxonomy'] = self::attr_registered( wc_get_attribute( $made )->slug );
+                $a['key']      = $a['taxonomy'];
+            }
+            $ids = [];
+            foreach ( $a['values'] as &$value ) {
+                if ( $value[1] === null ) {
+                    $term = self::attr_term( $a['taxonomy'], $value[0] );
+                    if ( is_wp_error( $term ) ) {
+                        throw new WC_Data_Exception( 'qwoo_term', "\"{$value[0]}\" couldn't be added to \"{$a['name']}\"." );
                     }
+                    $value[1] = get_term( $term, $a['taxonomy'] )->slug;
+                    $ids[]    = (int) $term;
+                } else {
                     $ids[] = (int) get_term_by( 'slug', $value[1], $a['taxonomy'] )->term_id;
                 }
-                unset( $value );
-                $attr->set_id( wc_attribute_taxonomy_id_by_name( $a['taxonomy'] ) );
-                $attr->set_name( $a['taxonomy'] );
-                $attr->set_options( $ids );
-            } else {
-                $attr->set_id( 0 );
-                $attr->set_name( $a['name'] );
-                $attr->set_options( array_values( array_column( $a['values'], 0 ) ) );
             }
+            unset( $value );
+            $attr->set_id( $made ?: wc_attribute_taxonomy_id_by_name( $a['taxonomy'] ) );
+            $attr->set_name( $a['taxonomy'] );
+            $attr->set_options( $ids );
             $list[] = $attr;
         }
         unset( $a );
@@ -3014,7 +3081,7 @@ class Qwoo_Platform_Dashboard {
      */
     private static function product_options( WC_Product $p ) {
         if ( ! $p->is_type( 'variable' ) ) {
-            return [ 'attributes' => [], 'variations' => [] ];
+            return [ 'attributes' => [], 'variations' => [], 'default_choices' => (object) [] ];
         }
         $attributes = [];
         $lookup     = []; // attribute key => [ name, [ stored value (sanitized) => choice name ] ]
@@ -3024,7 +3091,7 @@ class Qwoo_Platform_Dashboard {
             }
             $choices = [];
             if ( $attr->is_taxonomy() ) {
-                $name = wc_attribute_label( $attr->get_name() );
+                $name = self::attr_label( $attr );
                 foreach ( $attr->get_terms() ?: [] as $term ) {
                     $choices[ $term->slug ] = html_entity_decode( $term->name, ENT_QUOTES );
                 }
@@ -3034,7 +3101,7 @@ class Qwoo_Platform_Dashboard {
                     $choices[ sanitize_title( $option ) ] = $option;
                 }
             }
-            $attributes[]   = [ 'name' => $name, 'options' => array_values( $choices ), 'shared' => $attr->is_taxonomy() ];
+            $attributes[]   = [ 'name' => $name, 'options' => array_values( $choices ), 'shared' => $attr->is_taxonomy(), 'visible' => (bool) $attr->get_visible() ];
             $lookup[ $key ] = [ $name, $choices ];
         }
         $variations = [];
@@ -3062,7 +3129,7 @@ class Qwoo_Platform_Dashboard {
                 'enabled'      => $v->get_status( 'edit' ) === 'publish',
             ];
         }
-        return [ 'attributes' => $attributes, 'variations' => $variations ];
+        return [ 'attributes' => $attributes, 'variations' => $variations, 'default_choices' => (object) self::default_choices( $p ) ];
     }
 
     private static function product_full( WC_Product $p ) {

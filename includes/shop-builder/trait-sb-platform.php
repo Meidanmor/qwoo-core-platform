@@ -169,6 +169,8 @@ trait SB_Platform {
                 'page_scroll'    => (string) ( $o['branding']['page_scroll'] ?? 'smooth' ),
                 'page_animation' => (string) ( $o['branding']['page_animation'] ?? 'none' ),
                 'page_speed'     => (string) ( $o['branding']['page_speed'] ?? 'normal' ),
+                // Products with options: what the page opens with (none / first variant).
+                'product_start'  => (string) ( $o['branding']['product_start'] ?? 'none' ),
             ],
             'pwa'      => [
                 'name'             => (string) ( $o['pwa']['name'] ?? '' ),

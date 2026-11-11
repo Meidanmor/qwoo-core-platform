@@ -242,10 +242,10 @@ trait Qwoo_Platform_Attributes {
                     }
                 }
                 $shared = $attr->get_id() ? wc_get_attribute( $attr->get_id() ) : null;
-                $out[]  = [ 'name' => html_entity_decode( $shared ? $shared->name : wc_attribute_label( $attr->get_name() ), ENT_QUOTES ), 'values' => $values ];
+                $out[]  = [ 'name' => html_entity_decode( $shared ? $shared->name : wc_attribute_label( $attr->get_name() ), ENT_QUOTES ), 'values' => $values, 'visible' => (bool) $attr->get_visible() ];
             } else {
                 // Made in wp-admin on this product only: it becomes shared on the next save here.
-                $out[] = [ 'name' => $attr->get_name(), 'values' => array_values( $attr->get_options() ), 'own' => true ];
+                $out[] = [ 'name' => $attr->get_name(), 'values' => array_values( $attr->get_options() ), 'own' => true, 'visible' => (bool) $attr->get_visible() ];
             }
         }
         return $out;
@@ -294,7 +294,8 @@ trait Qwoo_Platform_Attributes {
             if ( count( $values ) > self::$attr_max_per_item ) {
                 return self::bad( "\"$name\" can have up to " . self::$attr_max_per_item . ' values on one product.' );
             }
-            $plan[ $lower ] = [ 'name' => $name, 'values' => array_values( $values ) ];
+            // visible: listed in the product's details (default); off = only for the shop's filters.
+            $plan[ $lower ] = [ 'name' => $name, 'values' => array_values( $values ), 'visible' => ! array_key_exists( 'visible', $d ) || ! empty( $d['visible'] ) ];
         }
         return $plan;
     }
@@ -322,11 +323,287 @@ trait Qwoo_Platform_Attributes {
             $attr->set_name( $taxonomy );
             $attr->set_options( $ids );
             $attr->set_position( $position++ );
-            $attr->set_visible( true );
+            $attr->set_visible( $d['visible'] ?? true );
             $attr->set_variation( false );
             $list[ $taxonomy ] = $attr;
         }
         return $list;
+    }
+
+    /* ---------------- tidy up: options kept on products move to the shared list ---------------- */
+
+    /** Why a product was left out of the tidy up (shown to the owner). */
+    private static $tidy_skip_meta = '_qwoo_options_skip';
+    /** What the product had before (attributes, default choices, each variation's choices), to put back. */
+    private static $tidy_copy_meta = '_qwoo_options_before';
+
+    /**
+     * { op: report }  what would move: { products, groups: [ { name, products,
+     *                 target (the shared attribute's name, '' = a new one),
+     *                 new_values } ], skipped: [ { id, name, why } ] }
+     * { op: run }     moves a few products per call: { done, left, skipped }
+     * { op: undo, id } puts one product back as it was before its move.
+     */
+    private static function action_options_tidy( array $params ) {
+        $op = (string) ( $params['op'] ?? 'report' );
+        if ( $op === 'undo' ) {
+            return self::tidy_undo( absint( $params['id'] ?? 0 ) );
+        }
+        $ids = self::tidy_product_ids();
+        if ( $op !== 'run' ) {
+            return self::tidy_report( $ids );
+        }
+        if ( class_exists( 'Qwoo_Owner_Alerts' ) && method_exists( 'Qwoo_Owner_Alerts', 'mute' ) ) {
+            Qwoo_Owner_Alerts::mute();
+        }
+        $start = microtime( true );
+        $done  = 0;
+        foreach ( $ids as $i => $id ) {
+            if ( $done >= 15 || microtime( true ) - $start > 12 ) {
+                break;
+            }
+            $product = wc_get_product( $id );
+            $result  = $product ? self::tidy_product( $product ) : self::bad( 'The product is gone.' );
+            if ( is_wp_error( $result ) ) {
+                update_post_meta( $id, self::$tidy_skip_meta, $result->get_error_message() );
+            } else {
+                $done++;
+            }
+            unset( $ids[ $i ] );
+        }
+        return [ 'done' => $done, 'left' => count( $ids ), 'skipped' => self::tidy_skipped() ];
+    }
+
+    /** Products (not in the trash, not skipped before) that keep an attribute for themselves. */
+    private static function tidy_product_ids() {
+        global $wpdb;
+        $ids = $wpdb->get_col( $wpdb->prepare(
+            "SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_product_attributes'
+             WHERE p.post_type = 'product' AND p.post_status <> 'trash' AND ( m.meta_value LIKE %s OR m.meta_value LIKE %s )
+             ORDER BY p.ID ASC LIMIT 5000",
+            '%' . $wpdb->esc_like( '"is_taxonomy";i:0;' ) . '%',
+            '%' . $wpdb->esc_like( '"is_taxonomy";s:1:"0";' ) . '%'
+        ) );
+        $out = [];
+        foreach ( array_map( 'intval', $ids ) as $id ) {
+            if ( get_post_meta( $id, self::$tidy_skip_meta, true ) === '' ) {
+                $out[] = $id;
+            }
+        }
+        return $out;
+    }
+
+    private static function tidy_skipped() {
+        global $wpdb;
+        $rows = $wpdb->get_results( $wpdb->prepare( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s LIMIT 200", self::$tidy_skip_meta ) );
+        $out  = [];
+        foreach ( $rows ?: [] as $row ) {
+            if ( get_post_status( (int) $row->post_id ) && get_post_status( (int) $row->post_id ) !== 'trash' ) {
+                $out[] = [ 'id' => (int) $row->post_id, 'name' => html_entity_decode( get_the_title( (int) $row->post_id ), ENT_QUOTES ), 'why' => (string) $row->meta_value ];
+            }
+        }
+        return $out;
+    }
+
+    private static function tidy_report( array $ids ) {
+        $groups = []; // lower-case name => [ name, products, values ]
+        $count  = 0;
+        foreach ( $ids as $id ) {
+            $product = wc_get_product( $id );
+            if ( ! $product ) {
+                continue;
+            }
+            $has = false;
+            foreach ( $product->get_attributes() as $attr ) {
+                if ( $attr->is_taxonomy() ) {
+                    continue;
+                }
+                $has   = true;
+                $name  = trim( (string) $attr->get_name() );
+                $lower = mb_strtolower( $name );
+                $groups[ $lower ] ??= [ 'name' => $name, 'products' => 0, 'values' => [] ];
+                $groups[ $lower ]['products']++;
+                foreach ( $attr->get_options() as $option ) {
+                    $groups[ $lower ]['values'][ mb_strtolower( trim( (string) $option ) ) ] = trim( (string) $option );
+                }
+            }
+            $count += $has ? 1 : 0;
+        }
+        $out = [];
+        foreach ( $groups as $lower => $g ) {
+            $shared = self::attr_by_label( $g['name'] );
+            $have   = [];
+            if ( $shared ) {
+                foreach ( self::attr_terms( self::attr_registered( $shared->attribute_name ) ) as $term ) {
+                    $have[ mb_strtolower( html_entity_decode( $term->name, ENT_QUOTES ) ) ] = true;
+                }
+            }
+            $new   = array_values( array_diff_key( $g['values'], $have ) );
+            $out[] = [
+                'name'       => $g['name'],
+                'products'   => $g['products'],
+                'target'     => $shared ? html_entity_decode( $shared->attribute_label ?: $shared->attribute_name, ENT_QUOTES ) : '',
+                'new_values' => array_slice( $new, 0, 12 ),
+                'new_count'  => count( $new ),
+            ];
+        }
+        usort( $out, static fn( $x, $y ) => $y['products'] <=> $x['products'] );
+        return [ 'products' => $count, 'groups' => array_slice( $out, 0, 100 ), 'skipped' => self::tidy_skipped() ];
+    }
+
+    /**
+     * Moves one product's own attributes to the shared list: the attribute
+     * with the same name (or a new one), its values added, and every
+     * variation's choice pointed at the shared value. Prices, stock, photos
+     * and everything else stay. Nothing is written when anything doesn't fit.
+     */
+    private static function tidy_product( WC_Product $p ) {
+        $attributes = $p->get_attributes();
+        $taken      = []; // taxonomies the product already uses
+        foreach ( $attributes as $attr ) {
+            if ( $attr->is_taxonomy() ) {
+                $taken[ $attr->get_name() ] = true;
+            }
+        }
+        $new = [];
+        $map = []; // old key => [ taxonomy, [ old value (sanitized / lower-case) => slug ] ]
+        foreach ( $attributes as $key => $attr ) {
+            if ( $attr->is_taxonomy() ) {
+                $new[] = clone $attr;
+                continue;
+            }
+            $name = self::attr_clean_name( $attr->get_name() );
+            if ( is_wp_error( $name ) ) {
+                return $name;
+            }
+            $shared = self::attr_by_label( $name );
+            $id     = $shared ? (int) $shared->attribute_id : self::attr_create( $name );
+            if ( is_wp_error( $id ) ) {
+                return $id;
+            }
+            $taxonomy = self::attr_registered( wc_get_attribute( $id )->slug );
+            if ( isset( $taken[ $taxonomy ] ) ) {
+                return self::bad( "It has \"$name\" twice. Open the product and keep one." );
+            }
+            $taken[ $taxonomy ] = true;
+            $ids                = [];
+            $values             = [];
+            foreach ( $attr->get_options() as $option ) {
+                $value = self::attr_clean_value( $option );
+                if ( is_wp_error( $value ) ) {
+                    return $value;
+                }
+                if ( $value === '' ) {
+                    continue;
+                }
+                $term = self::attr_term( $taxonomy, $value );
+                if ( is_wp_error( $term ) ) {
+                    return $term;
+                }
+                $slug                                        = get_term( $term, $taxonomy )->slug;
+                $ids[ $term ]                                = (int) $term;
+                $values[ sanitize_title( (string) $option ) ] = $slug;
+                $values[ mb_strtolower( (string) $option ) ]  = $slug;
+            }
+            if ( ! $ids ) {
+                continue; // an attribute with no values: dropped
+            }
+            $moved = new WC_Product_Attribute();
+            $moved->set_id( $id );
+            $moved->set_name( $taxonomy );
+            $moved->set_options( array_values( $ids ) );
+            $moved->set_position( $attr->get_position() );
+            $moved->set_visible( $attr->get_visible() );
+            $moved->set_variation( $attr->get_variation() );
+            $new[]       = $moved;
+            $map[ $key ] = [ $taxonomy, $values ];
+        }
+        if ( ! $map ) {
+            return true;
+        }
+        $pick = static function ( $stored, array $values ) {
+            $stored = (string) $stored;
+            return $stored === '' ? '' : ( $values[ sanitize_title( $stored ) ] ?? $values[ mb_strtolower( $stored ) ] ?? null );
+        };
+
+        // Every variation's new choices, checked before anything is written.
+        $copy   = [ 'time' => time(), 'attributes' => get_post_meta( $p->get_id(), '_product_attributes', true ), 'defaults' => get_post_meta( $p->get_id(), '_default_attributes', true ), 'variations' => [] ];
+        $writes = [];
+        foreach ( $p->is_type( 'variable' ) ? $p->get_children() : [] as $child ) {
+            $variation = wc_get_product( $child );
+            if ( ! $variation ) {
+                continue;
+            }
+            $old                          = (array) $variation->get_attributes( 'edit' );
+            $copy['variations'][ $child ] = $old;
+            $next                         = [];
+            foreach ( $old as $key => $stored ) {
+                if ( ! isset( $map[ $key ] ) ) {
+                    $next[ $key ] = $stored;
+                    continue;
+                }
+                $slug = $pick( $stored, $map[ $key ][1] );
+                if ( $slug === null ) {
+                    return self::bad( 'One of its variants has a choice ("' . sanitize_text_field( (string) $stored ) . '") that isn\'t in the option\'s list.' );
+                }
+                $next[ $map[ $key ][0] ] = $slug;
+            }
+            $writes[] = [ $variation, $next ];
+        }
+        $defaults = [];
+        foreach ( (array) $p->get_default_attributes( 'edit' ) as $key => $stored ) {
+            if ( ! isset( $map[ $key ] ) ) {
+                $defaults[ $key ] = $stored;
+            } elseif ( ( $slug = $pick( $stored, $map[ $key ][1] ) ) ) {
+                $defaults[ $map[ $key ][0] ] = $slug;
+            }
+        }
+
+        try {
+            update_post_meta( $p->get_id(), self::$tidy_copy_meta, $copy );
+            $p->set_attributes( $new );
+            $p->set_default_attributes( $defaults );
+            $p->save();
+            foreach ( $writes as [ $variation, $next ] ) {
+                $variation->set_attributes( $next );
+                $variation->save();
+            }
+            if ( $p->is_type( 'variable' ) ) {
+                WC_Product_Variable::sync( $p->get_id() );
+            }
+            wc_delete_product_transients( $p->get_id() );
+        } catch ( Exception $e ) {
+            return self::bad( $e->getMessage() );
+        }
+        return true;
+    }
+
+    /** Puts a product back as it was before its move (the shared attributes and values it added stay in the list). */
+    private static function tidy_undo( $id ) {
+        $product = self::find_product( $id );
+        if ( is_wp_error( $product ) ) {
+            return $product;
+        }
+        $copy = get_post_meta( $id, self::$tidy_copy_meta, true );
+        if ( ! is_array( $copy ) || ! is_array( $copy['attributes'] ?? null ) ) {
+            return self::bad( 'There is nothing to put back for this product.' );
+        }
+        update_post_meta( $id, '_product_attributes', $copy['attributes'] );
+        update_post_meta( $id, '_default_attributes', is_array( $copy['defaults'] ?? null ) ? $copy['defaults'] : [] );
+        foreach ( (array) ( $copy['variations'] ?? [] ) as $child => $old ) {
+            $variation = wc_get_product( (int) $child );
+            if ( $variation && $variation->is_type( 'variation' ) && (int) $variation->get_parent_id() === (int) $id ) {
+                $variation->set_attributes( (array) $old );
+                $variation->save();
+            }
+        }
+        delete_post_meta( $id, self::$tidy_copy_meta );
+        if ( $product->is_type( 'variable' ) ) {
+            WC_Product_Variable::sync( $id );
+        }
+        wc_delete_product_transients( $id );
+        clean_post_cache( $id );
+        return [ 'restored' => (int) $id ];
     }
 
     /* ---------------- helpers ---------------- */
@@ -348,6 +625,15 @@ trait Qwoo_Platform_Attributes {
             return self::bad( 'Values can\'t contain "' . WC_DELIMITER . '".' );
         }
         return $value;
+    }
+
+    /** A product attribute's name. A shared one's comes straight from the list: WooCommerce's label cache misses one made in this request. */
+    private static function attr_label( WC_Product_Attribute $attr ) {
+        if ( ! $attr->is_taxonomy() ) {
+            return (string) $attr->get_name();
+        }
+        $shared = $attr->get_id() ? wc_get_attribute( $attr->get_id() ) : null;
+        return html_entity_decode( $shared ? $shared->name : wc_attribute_label( $attr->get_name() ), ENT_QUOTES );
     }
 
     /** The shared attribute with this name (any letter case), or null. */
@@ -390,16 +676,21 @@ trait Qwoo_Platform_Attributes {
 
     /** A value's term id (added when missing). */
     private static function attr_term( $taxonomy, $value ) {
+        $orders = [];
         foreach ( self::attr_terms( $taxonomy ) as $term ) {
             if ( mb_strtolower( html_entity_decode( $term->name, ENT_QUOTES ) ) === mb_strtolower( $value ) ) {
                 return (int) $term->term_id;
             }
+            $orders[] = get_term_meta( $term->term_id, 'order', true );
         }
         $new = wp_insert_term( $value, $taxonomy );
         if ( is_wp_error( $new ) ) {
             return self::bad( "\"$value\" couldn't be added: " . $new->get_error_message() );
         }
-        update_term_meta( $new['term_id'], 'order', 9999 ); // after the owner's order
+        // After the owner's order, and in the order they were typed (S, M, L stays S, M, L).
+        // Beside values that have no order yet: last, by name, as those are.
+        $next = in_array( '', $orders, true ) ? 9999 : ( $orders ? max( array_map( 'intval', $orders ) ) + 1 : 0 );
+        update_term_meta( $new['term_id'], 'order', $next );
         return (int) $new['term_id'];
     }
 

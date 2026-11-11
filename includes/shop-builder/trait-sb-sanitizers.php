@@ -1006,7 +1006,9 @@ trait SB_Sanitizers {
             ];
             // Moving between pages (2026-11-11): how a new page starts (scroll up smoothly, or at the
             // top right away) and the page animation with its speed. wp-admin's form doesn't send them.
-            $motion = [ 'page_scroll' => [ 'smooth', 'jump' ], 'page_animation' => [ 'none', 'fade', 'rise', 'slide', 'zoom' ], 'page_speed' => [ 'normal', 'fast', 'slow' ] ];
+            $motion = [ 'page_scroll' => [ 'smooth', 'jump' ], 'page_animation' => [ 'none', 'fade', 'rise', 'slide', 'zoom' ], 'page_speed' => [ 'normal', 'fast', 'slow' ],
+                // What a product page opens with on products with options: nothing chosen, or the first variant.
+                'product_start' => [ 'none', 'first' ] ];
             foreach ( $motion as $key => $allowed ) {
                 $value = (string) ( $input['branding'][ $key ] ?? ( $existing['branding'][ $key ] ?? '' ) );
                 $clean['branding'][ $key ] = in_array( $value, $allowed, true ) ? $value : $allowed[0];
