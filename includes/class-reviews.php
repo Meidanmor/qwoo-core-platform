@@ -415,8 +415,34 @@ class Qwoo_Reviews {
         } );
     }
 
-    /** Sends one order's review request (or drops it when nothing is left to review). Returns whether it was sent. */
-    public static function send_request( $order_id ) {
+    /** When this order's review request goes out by itself (0: none is waiting). */
+    public static function waiting( $order_id ): int {
+        return (int) ( self::queue()[ (int) $order_id ] ?? 0 );
+    }
+
+    /** The waiting request of this order won't be sent. */
+    public static function cancel_waiting( $order_id ): void {
+        $queue = self::queue();
+        if ( isset( $queue[ (int) $order_id ] ) ) {
+            unset( $queue[ (int) $order_id ] );
+            update_option( self::QUEUE_OPTION, $queue, false );
+        }
+    }
+
+    /** The owner sends it from the order page: now, to $to, also when it was sent before or automatic requests are off. */
+    public static function send_now( $order_id, string $to ) {
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) {
+            return false;
+        }
+        self::cancel_waiting( $order_id );
+        $order->delete_meta_data( self::SENT_META );
+        $order->save_meta_data();
+        return self::send_request( $order_id, $to, true );
+    }
+
+    /** Sends one order's review request (or drops it when nothing is left to review). Returns whether it was sent. $to, $manual: send_now(). */
+    public static function send_request( $order_id, string $to = '', bool $manual = false ) {
         $order = wc_get_order( $order_id );
         if ( ! $order || $order->get_meta( self::SENT_META ) ) {
             return false;
@@ -448,7 +474,8 @@ class Qwoo_Reviews {
 
         $store = html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES );
         // The owner's design; only if it can't be made, the plain email below.
-        $done  = Qwoo_Store_Emails::send_own( 'review_request', $email, Qwoo_I18n::t( 'How was your order from {store}?', [ 'store' => $store ] ), [ 'review_links' => array_map( static fn( $link ) => [ 'label' => Qwoo_I18n::t( 'Review {name}', [ 'name' => $link['name'] ] ), 'url' => $link['url'] ], array_values( $links ) ) ], $order );
+        $send_to = $to !== '' ? $to : $email;
+        $done  = Qwoo_Store_Emails::send_own( 'review_request', $send_to, Qwoo_I18n::t( 'How was your order from {store}?', [ 'store' => $store ] ), [ 'review_links' => array_map( static fn( $link ) => [ 'label' => Qwoo_I18n::t( 'Review {name}', [ 'name' => $link['name'] ] ), 'url' => $link['url'] ], array_values( $links ) ) ], $order, $manual );
         if ( $done !== null ) return $done;
         $first = $order->get_billing_first_name();
         $html  = '<p>' . esc_html( $first !== '' ? Qwoo_I18n::t( 'Hi {name},', [ 'name' => $first ] ) : Qwoo_I18n::t( 'Hi,' ) ) . '</p>';
@@ -460,7 +487,7 @@ class Qwoo_Reviews {
         $html .= '<p style="color:#888888;font-size:12px;">' . esc_html( Qwoo_I18n::t( 'You\'re getting this one-time email because you ordered from us.' ) ) . '</p>';
 
         $mailer = WC()->mailer();
-        return (bool) $mailer->send( $email, Qwoo_I18n::t( 'How was your order from {store}?', [ 'store' => $store ] ), $mailer->wrap_message( Qwoo_I18n::t( 'How was your order?' ), $html ) );
+        return (bool) $mailer->send( $send_to, Qwoo_I18n::t( 'How was your order from {store}?', [ 'store' => $store ] ), $mailer->wrap_message( Qwoo_I18n::t( 'How was your order?' ), $html ) );
     }
 
     /* ---------------- helpers ---------------- */

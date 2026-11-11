@@ -111,6 +111,9 @@ class Qwoo_Platform_Dashboard {
         'order_status'    => 'action_order_status',
         'order_note'      => 'action_order_note',
         'order_refund'    => 'action_order_refund',
+        'order_email'     => 'action_order_email',
+        'order_auto_cancel' => 'action_order_auto_cancel',
+        'usage'           => 'action_usage',
         'settings_get'    => 'action_settings_get',
         'settings_save'   => 'action_settings_save',
         'store_language'  => 'action_store_language',
@@ -139,6 +142,7 @@ class Qwoo_Platform_Dashboard {
         'zone_delete'     => 'action_zone_delete',
         'method_save'     => 'action_method_save',
         'method_delete'   => 'action_method_delete',
+        'methods_order'   => 'action_methods_order',
         'design_get'      => 'action_design_get',
         'design_save'     => 'action_design_save',
         'design_publish'  => 'action_design_publish',
@@ -2549,6 +2553,208 @@ class Qwoo_Platform_Dashboard {
         return self::action_shipping_get();
     }
 
+    /** { zone_id, order: [ instance ids ] }: the order customers see the zone's methods in at checkout. */
+    private static function action_methods_order( array $params ) {
+        global $wpdb;
+        $zone_id = absint( $params['zone_id'] ?? 0 );
+        if ( $zone_id && ! self::zone_exists( $zone_id ) ) {
+            return self::error( 'qwoo_dashboard_not_found', 'This shipping zone doesn\'t exist any more.', 404 );
+        }
+        $zone = new WC_Shipping_Zone( $zone_id );
+        $have = array_values( array_map( static fn( $m ) => (int) $m->instance_id, $zone->get_shipping_methods( false ) ) );
+        $want = array_values( array_unique( array_map( 'absint', array_slice( (array) ( $params['order'] ?? [] ), 0, 100 ) ) ) );
+        // Methods the list doesn't name keep their place after the named ones.
+        $order = array_merge( array_values( array_intersect( $want, $have ) ), array_values( array_diff( $have, $want ) ) );
+        foreach ( $order as $i => $instance_id ) {
+            $wpdb->update( "{$wpdb->prefix}woocommerce_shipping_zone_methods", [ 'method_order' => $i + 1 ], [ 'instance_id' => $instance_id, 'zone_id' => $zone_id ] );
+        }
+        WC_Cache_Helper::get_transient_version( 'shipping', true );
+        return self::action_shipping_get();
+    }
+
+    /* ---------------- emails from an order ---------------- */
+
+    /** The emails the owner can send from this order now, and the automatic ones still waiting for it. */
+    private static function order_emails( WC_Order $o ): array {
+        $status  = $o->get_status();
+        $reviews = class_exists( 'Qwoo_Reviews' );
+        $auto    = [];
+        if ( $reviews && Qwoo_Reviews::waiting( $o->get_id() ) ) {
+            $auto[] = [ 'key' => 'review', 'type' => 'review', 'name' => '', 'next' => 'email', 'at' => Qwoo_Reviews::waiting( $o->get_id() ) ];
+        }
+        if ( class_exists( 'Qwoo_Automations' ) ) {
+            $auto = array_merge( $auto, Qwoo_Automations::waiting_for_order( (int) $o->get_id() ) );
+        }
+        return [
+            'kinds' => [
+                'confirm'   => ! in_array( $status, [ 'cancelled', 'failed' ], true ),
+                'details'   => true,
+                'pay'       => (bool) $o->needs_payment(),
+                'completed' => $status === 'completed',
+                'review'    => $status === 'completed' && $reviews && ! empty( Qwoo_Reviews::settings()['enabled'] ),
+                'own'       => true,
+            ],
+            'auto'        => $auto,
+            'review_sent' => $reviews ? (int) $o->get_meta( Qwoo_Reviews::SENT_META ) : 0,
+        ];
+    }
+
+    /** For one send: this address, turned on, and (the owner's own message) this subject. Returns what puts it back. */
+    private static function mail_override( string $wc_id, string $to, string $subject ): callable {
+        $recipient = static fn() => $to;
+        $enabled   = static fn() => true;
+        $title     = static fn( $old ) => $subject !== '' ? $subject : $old;
+        add_filter( 'woocommerce_email_recipient_' . $wc_id, $recipient, 99 );
+        add_filter( 'woocommerce_email_enabled_' . $wc_id, $enabled, 99 );
+        add_filter( 'woocommerce_email_subject_' . $wc_id, $title, 99 );
+        return static function () use ( $wc_id, $recipient, $enabled, $title ) {
+            remove_filter( 'woocommerce_email_recipient_' . $wc_id, $recipient, 99 );
+            remove_filter( 'woocommerce_email_enabled_' . $wc_id, $enabled, 99 );
+            remove_filter( 'woocommerce_email_subject_' . $wc_id, $title, 99 );
+        };
+    }
+
+    /** Stops one waiting automatic email of this order: 'review', or an automation's run ('run12'). */
+    private static function order_auto_stop( WC_Order $order, string $key ): void {
+        if ( $key === 'review' && class_exists( 'Qwoo_Reviews' ) ) {
+            Qwoo_Reviews::cancel_waiting( $order->get_id() );
+        } elseif ( preg_match( '/^run(\d+)$/', $key, $m ) && class_exists( 'Qwoo_Automations' ) ) {
+            Qwoo_Automations::stop_run( (int) $m[1], (int) $order->get_id() );
+        }
+    }
+
+    /**
+     * { id, kind, to?, copy_to?, subject?, message?, cancel[]? }. kind: confirm
+     * (the order confirmation again), details (items and totals), pay (the
+     * same email, for an order that waits for payment: it has the Pay
+     * button), completed, review (a review request now), own (the owner's
+     * message, kept as a customer note). cancel: waiting automatic emails to
+     * stop for this order. Each send is written into the order's notes.
+     */
+    private static function action_order_email( array $params ) {
+        $order = self::find_order( $params['id'] ?? 0 );
+        if ( is_wp_error( $order ) ) {
+            return $order;
+        }
+        $kind = (string) ( $params['kind'] ?? '' );
+        if ( empty( self::order_emails( $order )['kinds'][ $kind ] ) ) {
+            return self::bad( 'This email can\'t be sent for this order now.' );
+        }
+        $to = trim( (string) ( $params['to'] ?? '' ) );
+        if ( $to === '' ) {
+            $to = (string) $order->get_billing_email();
+        }
+        if ( ! is_email( $to ) ) {
+            return self::bad( 'Enter a valid email address.' );
+        }
+        $copy = trim( (string) ( $params['copy_to'] ?? '' ) );
+        $list = $to . ( is_email( $copy ) && strtolower( $copy ) !== strtolower( $to ) ? ',' . $copy : '' );
+
+        foreach ( array_slice( (array) ( $params['cancel'] ?? [] ), 0, 20 ) as $key ) {
+            self::order_auto_stop( $order, (string) $key );
+        }
+
+        $names = [ 'confirm' => 'Order confirmation', 'details' => 'Order details', 'pay' => 'Payment request', 'completed' => 'Order completed', 'review' => 'Review request' ];
+        if ( $kind === 'review' ) {
+            if ( ! Qwoo_Reviews::send_now( $order->get_id(), $list ) ) {
+                return self::bad( 'The review request wasn\'t sent. Every product in this order may already have a review.' );
+            }
+        } elseif ( $kind === 'own' ) {
+            $message = trim( sanitize_textarea_field( (string) ( $params['message'] ?? '' ) ) );
+            $subject = mb_substr( trim( sanitize_text_field( (string) ( $params['subject'] ?? '' ) ) ), 0, 150 );
+            if ( $message === '' || mb_strlen( $message ) > 2000 ) {
+                return self::bad( 'Write a message (up to 2,000 characters).' );
+            }
+            // A note for the customer: WooCommerce emails it, and it stays on the order.
+            $undo = self::mail_override( 'customer_note', $list, $subject );
+            $order->add_order_note( esc_html( $message ), 1 );
+            $undo();
+        } else {
+            $wc_id = [ 'confirm' => $order->get_status() === 'on-hold' ? 'customer_on_hold_order' : 'customer_processing_order', 'details' => 'customer_invoice', 'pay' => 'customer_invoice', 'completed' => 'customer_completed_order' ][ $kind ];
+            $mail  = null;
+            foreach ( WC()->mailer()->get_emails() as $email ) {
+                if ( $email->id === $wc_id ) {
+                    $mail = $email;
+                }
+            }
+            if ( ! $mail ) {
+                return self::bad( 'This email isn\'t available on your store.' );
+            }
+            $undo = self::mail_override( $wc_id, $list, '' );
+            $mail->trigger( $order->get_id(), $order );
+            $undo();
+        }
+        if ( $kind !== 'own' ) {
+            $order->add_order_note( Qwoo_I18n::t( 'Email sent from the dashboard: {name}, to {to}', [ 'name' => Qwoo_I18n::t( $names[ $kind ] ), 'to' => str_replace( ',', ', ', $list ) ] ) );
+        }
+        return self::order_full( wc_get_order( $order->get_id() ) );
+    }
+
+    /** { id, key }: stops one waiting automatic email of this order. */
+    private static function action_order_auto_cancel( array $params ) {
+        $order = self::find_order( $params['id'] ?? 0 );
+        if ( is_wp_error( $order ) ) {
+            return $order;
+        }
+        self::order_auto_stop( $order, (string) ( $params['key'] ?? '' ) );
+        return self::order_full( wc_get_order( $order->get_id() ) );
+    }
+
+    /* ---------------- usage ---------------- */
+
+    /** What the store holds and did this month, for the dashboard's Usage screen. Counts only: nothing here limits the store. */
+    private static function action_usage() {
+        global $wpdb;
+        $tz    = wp_timezone();
+        $start = new DateTimeImmutable( 'first day of this month 00:00:00', $tz );
+        $utc   = gmdate( 'Y-m-d H:i:s', $start->getTimestamp() );
+        $old   = $wpdb->suppress_errors( true ); // a store without one of the tables just shows nothing for it
+
+        $orders = wc_get_orders( [ 'type' => 'shop_order', 'status' => array_keys( wc_get_order_statuses() ), 'date_created' => '>=' . $start->getTimestamp(), 'limit' => 1, 'paginate' => true, 'return' => 'ids' ] );
+        $subs   = class_exists( 'Qwoo_Email_Marketing' ) ? $wpdb->get_var( 'SELECT COUNT(*) FROM ' . Qwoo_Email_Marketing::subs_table() . " WHERE status = 'sub'" ) : null;
+        $push   = class_exists( 'Qwoo_Push_Engine' ) ? $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . Qwoo_Push_Engine::log_table() . " WHERE status = 'sent' AND sent_at >= %s", $utc ) ) : null;
+        $seen   = null;
+        if ( class_exists( 'Qwoo_Personalization' ) && Qwoo_Personalization::enabled() ) {
+            $seen = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . Qwoo_Personalization::table() . ' WHERE updated_at >= %s', gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ) ) );
+        }
+        $wpdb->suppress_errors( $old );
+
+        // The uploads folder is measured at most every 6 hours, and for 4 seconds at most.
+        $files = get_transient( 'qwoo_usage_files' );
+        if ( ! is_array( $files ) ) {
+            $files = [ 'bytes' => 0, 'count' => 0, 'partial' => false ];
+            $base  = (string) ( wp_upload_dir( null, false )['basedir'] ?? '' );
+            $until = microtime( true ) + 4;
+            if ( $base !== '' && is_dir( $base ) ) {
+                try {
+                    foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $base, FilesystemIterator::SKIP_DOTS ) ) as $file ) {
+                        if ( $file->isFile() ) {
+                            $files['bytes'] += $file->getSize();
+                            $files['count']++;
+                        }
+                        if ( ( $files['count'] % 500 ) === 0 && microtime( true ) > $until ) {
+                            $files['partial'] = true;
+                            break;
+                        }
+                    }
+                } catch ( \Throwable $e ) {
+                    $files['partial'] = true;
+                }
+            }
+            set_transient( 'qwoo_usage_files', $files, 6 * HOUR_IN_SECONDS );
+        }
+
+        return [
+            'products'     => (int) ( wp_count_posts( 'product' )->publish ?? 0 ),
+            'orders_month' => (int) $orders->total,
+            'subscribers'  => $subs === null ? null : (int) $subs,
+            'push_month'   => $push === null ? null : (int) $push,
+            'visitors_30'  => $seen === null ? null : (int) $seen,
+            'images'       => (int) ( wp_count_posts( 'attachment' )->inherit ?? 0 ),
+            'files'        => $files,
+        ];
+    }
+
     /* ---------------- settings helpers ---------------- */
 
     private static function zone_exists( $id ) {
@@ -2739,6 +2945,8 @@ class Qwoo_Platform_Dashboard {
             'refunds'      => $refunds,
             // Cards that paid for this order, and cards bought in it.
             'gift_cards'   => Qwoo_Gift_Cards::for_order( $o ),
+            // What can be emailed from this order now, and the automatic emails still waiting for it.
+            'emails'       => self::order_emails( $o ),
         ];
     }
 

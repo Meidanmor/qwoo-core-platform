@@ -413,8 +413,9 @@ class Qwoo_Store_Emails {
      * Back in stock and review requests. True or false: sent or not. Null: the
      * design failed, the caller sends its plain version.
      */
-    public static function send_own( string $id, string $to, string $default_subject, array $args, ?WC_Order $order = null ) {
-        if ( ! self::is_on( $id ) ) return false;
+    public static function send_own( string $id, string $to, string $default_subject, array $args, ?WC_Order $order = null, bool $force = false ) {
+        // $force: the owner sends it by hand from an order, also when the automatic one is off.
+        if ( ! $force && ! self::is_on( $id ) ) return false;
         try {
             $html    = Qwoo_Email_Render::html( self::design_for( $id ), self::context( $id, $order, null, $args ) );
             $mine    = trim( (string) ( self::saved( $id )['subject'] ?? '' ) );

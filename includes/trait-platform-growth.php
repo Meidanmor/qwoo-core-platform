@@ -163,7 +163,7 @@ trait Qwoo_Platform_Growth {
 
             /* Tracked links */
             case 'tracked_links':
-                return [ 'links' => self::tracked_links() ];
+                return [ 'links' => self::tracked_links(), 'results' => self::tracked_results(), 'currency' => get_woocommerce_currency() ];
             case 'tracked_links_add':
                 return self::tracked_links_add( (array) ( $p['links'] ?? [] ) );
             case 'tracked_link_delete':
@@ -183,6 +183,18 @@ trait Qwoo_Platform_Growth {
     private static function tracked_links(): array {
         $list = get_option( 'qwoo_tracked_links', [] );
         return is_array( $list ) ? array_values( $list ) : [];
+    }
+
+    /** Paid orders and net sales of the last 30 days per source / medium / campaign, for the tracked links list. */
+    private static function tracked_results(): array {
+        global $wpdb;
+        if ( ! class_exists( 'Qwoo_Analytics' ) ) return [];
+        $o    = Qwoo_Analytics::orders_table();
+        $from = wp_date( 'Y-m-d', time() - 29 * DAY_IN_SECONDS, wp_timezone() );
+        $old  = $wpdb->suppress_errors( true );
+        $rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT source, medium, campaign, COUNT(*) AS n, COALESCE(SUM(total - refunded),0) AS net FROM $o WHERE paid = 1 AND day >= %s AND source <> '' GROUP BY source, medium, campaign ORDER BY net DESC LIMIT 300", $from ), ARRAY_A );
+        $wpdb->suppress_errors( $old );
+        return array_map( static fn( $r ) => [ 'source' => (string) $r['source'], 'medium' => (string) $r['medium'], 'campaign' => (string) $r['campaign'], 'orders' => (int) $r['n'], 'sales' => round( (float) $r['net'], 2 ) ], $rows );
     }
 
     /** One row per platform, newest first. The same address isn't kept twice. */

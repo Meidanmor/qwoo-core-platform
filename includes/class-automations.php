@@ -416,6 +416,34 @@ class Qwoo_Automations {
         if ( $items ) Qwoo_Push_Engine::deliver( $items );
     }
 
+    /** This order's runs that still wait to do something: for the order page. at: when the next step is due. */
+    public static function waiting_for_order( int $order_id ): array {
+        global $wpdb;
+        if ( ! self::allowed() ) return [];
+        $flows = array_column( self::flows(), null, 'id' );
+        $out   = [];
+        foreach ( (array) $wpdb->get_results( $wpdb->prepare( 'SELECT id, flow_id, step, next_at FROM ' . self::table() . " WHERE order_id = %d AND status = 'wait' ORDER BY next_at LIMIT 20", $order_id ), ARRAY_A ) as $row ) {
+            $flow = $flows[ $row['flow_id'] ] ?? null;
+            if ( ! $flow || empty( $flow['on'] ) ) continue;
+            $next = '';
+            foreach ( array_slice( (array) $flow['steps'], (int) $row['step'] ) as $step ) {
+                if ( in_array( $step['type'], [ 'email', 'push', 'webhook' ], true ) ) {
+                    $next = $step['type'];
+                    break;
+                }
+            }
+            if ( $next === '' ) continue;
+            $out[] = [ 'key' => 'run' . (int) $row['id'], 'type' => 'flow', 'flow' => (string) $flow['id'], 'name' => (string) $flow['name'], 'next' => $next, 'at' => (int) strtotime( $row['next_at'] . ' UTC' ) ];
+        }
+        return $out;
+    }
+
+    /** The owner stops one waiting run of an order (the order page). */
+    public static function stop_run( int $run_id, int $order_id ): void {
+        global $wpdb;
+        $wpdb->update( self::table(), [ 'status' => 'stopped' ], [ 'id' => $run_id, 'order_id' => $order_id, 'status' => 'wait' ] );
+    }
+
     public static function next_due( $due ) {
         global $wpdb;
         $next = $wpdb->get_var( 'SELECT MIN(next_at) FROM ' . self::table() . " WHERE status = 'wait'" );
