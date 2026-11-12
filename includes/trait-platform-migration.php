@@ -4,7 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 /**
  * "Move your store in" for the platform dashboard (used by
  * Qwoo_Platform_Dashboard): brings an old WordPress / WooCommerce store in
- * through its YallaFlow Mover plugin (Qwoo_Migration holds the connection).
+ * through its Openly Mover plugin (Qwoo_Migration holds the connection).
  *
  *   migrate_check   { code }   connects and reads what the old store has
  *   migrate_start   { what }   starts (or resumes) the move; what: orders,
@@ -208,7 +208,7 @@ trait Qwoo_Platform_Migration {
             return $summary;
         }
         if ( empty( $summary['site'] ) || ! is_array( $summary['counts'] ?? null ) ) {
-            return self::bad( 'Your old site didn\'t answer like YallaFlow Mover. Update the plugin there and try again.' );
+            return self::bad( 'Your old site didn\'t answer like Openly Mover. Update the plugin there and try again.' );
         }
         if ( empty( $summary['site']['woocommerce'] ) ) {
             return self::bad( 'WooCommerce isn\'t active on your old site, so there\'s nothing to bring in. Activate it there and try again.' );
@@ -270,7 +270,7 @@ trait Qwoo_Platform_Migration {
     private static function action_migrate_start( array $params ) {
         $s = self::mig_state();
         if ( empty( $s['source'] ) || empty( $s['secret'] ) || self::mig_secret( $s ) === '' ) {
-            return self::bad( 'Connect your old store first: paste a new code from YallaFlow Mover.' );
+            return self::bad( 'Connect your old store first: paste a new code from Openly Mover.' );
         }
         if ( ( $s['status'] ?? '' ) === 'running' ) {
             return self::mig_public( $s );
@@ -1111,11 +1111,11 @@ trait Qwoo_Platform_Migration {
         $name = trim( wp_specialchars_decode( self::mig_text( $p['name'] ?? '', 200 ), ENT_QUOTES ) );
         if ( ! in_array( $type, self::EDITABLE_TYPES, true ) ) {
             if ( $type === 'grouped' ) {
-                self::mig_problem( sprintf( '“%s” is a grouped product, which YallaFlow doesn\'t support yet: it wasn\'t copied.', $name ) );
+                self::mig_problem( sprintf( '“%s” is a grouped product, which Openly doesn\'t support yet: it wasn\'t copied.', $name ) );
             } elseif ( $type === 'external' ) {
-                self::mig_problem( sprintf( '“%s” is an external (affiliate) product, which YallaFlow doesn\'t support yet: it wasn\'t copied.', $name ) );
+                self::mig_problem( sprintf( '“%s” is an external (affiliate) product, which Openly doesn\'t support yet: it wasn\'t copied.', $name ) );
             } else {
-                self::mig_problem( sprintf( '“%s” is a “%s” product (from another plugin), which YallaFlow doesn\'t support yet: it wasn\'t copied.', $name, $type ) );
+                self::mig_problem( sprintf( '“%s” is a “%s” product (from another plugin), which Openly doesn\'t support yet: it wasn\'t copied.', $name, $type ) );
             }
             return 'skipped';
         }

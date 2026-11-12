@@ -15,7 +15,7 @@ class Qwoo_Cardcom_Gateway extends WC_Payment_Gateway {
         $this->cardcom_key        = $key;
         $this->id                 = 'cardcom_' . $key;
         $this->method_title       = 'Cardcom: ' . Qwoo_Cardcom::METHODS[ $key ];
-        $this->method_description = 'Payments through Cardcom. Set up in the YallaFlow dashboard: Settings → Payments.';
+        $this->method_description = 'Payments through Cardcom. Set up in the Openly dashboard: Settings → Payments.';
         $this->has_fields         = false;
         $this->supports           = [ 'products', 'refunds' ];
 

@@ -16,7 +16,7 @@ class Qwoo_Grow_Gateway extends WC_Payment_Gateway {
         $this->grow_key           = $key;
         $this->id                 = 'grow_' . $key;
         $this->method_title       = 'Grow: ' . Qwoo_Grow::METHODS[ $key ][1];
-        $this->method_description = 'Payments through Grow (Meshulam). Set up in the YallaFlow dashboard: Settings → Payments.';
+        $this->method_description = 'Payments through Grow (Meshulam). Set up in the Openly dashboard: Settings → Payments.';
         $this->has_fields         = false;
         $this->supports           = [ 'products', 'refunds' ];
 

@@ -2175,7 +2175,7 @@ class Qwoo_Platform_Dashboard {
     }
 
     /**
-     * The Free plan: "Made with YallaFlow" on the storefront, no push notifications to
+     * The Free plan: "Made with Openly" on the storefront, no push notifications to
      * shoppers. Only when the platform said so (a store it never told keeps everything).
      */
     public static function is_free_plan(): bool {

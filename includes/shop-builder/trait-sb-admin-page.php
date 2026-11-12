@@ -327,7 +327,7 @@ trait SB_Admin_Page {
                         <div id="tab-header" class="tab-content active">
                             <h2>Header Settings</h2>
 
-                            <!-- The announcement bar became the header's "Above header" sections (YallaFlow dashboard → Store builder → Header). -->
+                            <!-- The announcement bar became the header's "Above header" sections (Openly dashboard → Store builder → Header). -->
 
                             <hr>
 
@@ -459,7 +459,7 @@ trait SB_Admin_Page {
                         <div id="tab-checkout" class="tab-content">
                             <h2>Checkout Settings</h2>
 
-                            <p class="description">The checkout page is built from blocks in the YallaFlow dashboard (Store builder → Shop pages → Checkout).</p>
+                            <p class="description">The checkout page is built from blocks in the Openly dashboard (Store builder → Shop pages → Checkout).</p>
                         </div>
 
                         <!-- ===================== BRANDING TAB ===================== -->

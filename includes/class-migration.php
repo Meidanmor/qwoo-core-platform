@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * Moving an existing WordPress / WooCommerce store in ("Move your store
- * in" in the dashboard). The old site runs the YallaFlow Mover plugin,
+ * in" in the dashboard). The old site runs the Openly Mover plugin,
  * whose connection code holds its address and a secret; this store asks it
  * for the data page by page (signed requests) and brings it in
  * (Qwoo_Platform_Migration, run by the platform in steps).
@@ -139,7 +139,7 @@ class Qwoo_Migration {
     public static function parse_code( $code ) {
         $code = preg_replace( '/\s+/', '', (string) $code );
         if ( strpos( $code, 'YFM1-' ) !== 0 || strlen( $code ) > 3000 ) {
-            return new WP_Error( 'qwoo_migration_code', 'That isn\'t a YallaFlow Mover code. Copy it again from Tools → YallaFlow Mover on your old site.', [ 'status' => 400 ] );
+            return new WP_Error( 'qwoo_migration_code', 'That isn\'t a Openly Mover code. Copy it again from Tools → Openly Mover on your old site.', [ 'status' => 400 ] );
         }
         $json = self::b64url_decode( substr( $code, 5 ) );
         $data = $json !== false ? json_decode( $json, true ) : null;
@@ -165,7 +165,7 @@ class Qwoo_Migration {
 
     /** A request to an address someone gave us: never to this server's private network. */
     public static function http( $method, $url, array $args ) {
-        $args += [ 'redirection' => 0, 'user-agent' => 'YallaFlow store (' . home_url() . ')' ];
+        $args += [ 'redirection' => 0, 'user-agent' => 'Openly store (' . home_url() . ')' ];
         if ( self::allow_local() ) {
             return $method === 'POST' ? wp_remote_post( $url, $args ) : wp_remote_get( $url, $args );
         }
@@ -202,10 +202,10 @@ class Qwoo_Migration {
         }
         $said = is_array( $data ) && ! empty( $data['message'] ) ? mb_substr( wp_strip_all_tags( (string) $data['message'] ), 0, 300 ) : '';
         if ( $code === 401 ) {
-            return new WP_Error( 'qwoo_migration_code', 'The connection code doesn\'t work anymore. Create a new one in YallaFlow Mover on your old site.', [ 'status' => 400 ] );
+            return new WP_Error( 'qwoo_migration_code', 'The connection code doesn\'t work anymore. Create a new one in Openly Mover on your old site.', [ 'status' => 400 ] );
         }
         if ( $code === 404 ) {
-            return new WP_Error( 'qwoo_migration_missing', 'YallaFlow Mover isn\'t active on your old site. Install and activate it, then try again.', [ 'status' => 400 ] );
+            return new WP_Error( 'qwoo_migration_missing', 'Openly Mover isn\'t active on your old site. Install and activate it, then try again.', [ 'status' => 400 ] );
         }
         if ( $code >= 300 && $code < 400 ) {
             return new WP_Error( 'qwoo_migration_moved', 'Your old site sent us to another address. Create the code again on the site itself (with https).', [ 'status' => 400 ] );

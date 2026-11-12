@@ -7,9 +7,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * happens.
  *
  * Each delivery is a POST of { id, event, created, data } with
- *   X-YallaFlow-Event: order.created
- *   X-YallaFlow-Delivery: the delivery's id (the same on retries)
- *   X-YallaFlow-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<body>" with the hook's secret>
+ *   X-Openly-Event: order.created
+ *   X-Openly-Delivery: the delivery's id (the same on retries)
+ *   X-Openly-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<body>" with the hook's secret>
  *
  * Events wait in a table and go out in the push engine's run (no cron on
  * shared hosting), with retries, and only to https addresses that aren't
@@ -307,10 +307,10 @@ class Qwoo_Webhooks {
             'blocking'    => true,
             'headers'     => [
                 'Content-Type'          => 'application/json',
-                'User-Agent'            => 'YallaFlow-Webhooks/1',
-                'X-YallaFlow-Event'     => $event,
-                'X-YallaFlow-Delivery'  => $delivery,
-                'X-YallaFlow-Signature' => 't=' . $time . ',v1=' . hash_hmac( 'sha256', $time . '.' . $body, (string) $hook['secret'] ),
+                'User-Agent'            => 'Openly-Webhooks/1',
+                'X-Openly-Event'     => $event,
+                'X-Openly-Delivery'  => $delivery,
+                'X-Openly-Signature' => 't=' . $time . ',v1=' . hash_hmac( 'sha256', $time . '.' . $body, (string) $hook['secret'] ),
             ],
             'body'        => $body,
         ] );

@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * Inside the zip:
  *   manifest.json            { format, app, made, source, parts, counts, index }
  *   builder.json, settings.json, attributes.json
- *   data/{type}/{n}.json     items in the YallaFlow Mover's shape (the import
+ *   data/{type}/{n}.json     items in the Openly Mover's shape (the import
  *                            runs through the same importer as a move), in
  *                            ID order: index[type] = [ { file, first, last } ]
  *   media.json               { id: { file, mime, name, alt, title } }
@@ -660,7 +660,7 @@ class Qwoo_Store_Package {
         $counts = (array) self::$ex['counts'];
         self::put( 'manifest.json', [
             'format' => self::FORMAT,
-            'app'    => 'yallaflow',
+            'app'    => 'openly',
             'made'   => time(),
             'source' => [
                 'name' => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
@@ -800,7 +800,7 @@ class Qwoo_Store_Package {
         }
         $zip = new ZipArchive();
         if ( $zip->open( $path, ZipArchive::RDONLY ) !== true ) {
-            throw new RuntimeException( 'This isn\'t a YallaFlow store file.' );
+            throw new RuntimeException( 'This isn\'t a Openly store file.' );
         }
         return self::$zip = $zip;
     }
@@ -836,7 +836,7 @@ class Qwoo_Store_Package {
                 $stat = $zip->statIndex( $i );
                 $name = (string) ( $stat['name'] ?? '' );
                 if ( ! preg_match( '#^(manifest|builder|settings|attributes|media)\.json$|^data/[a-z_]{3,20}/\d{4}\.json$|^media/\d{1,12}\.(jpe?g|png|webp|gif|svg|mp4|webm)$#', $name ) ) {
-                    throw new RuntimeException( 'This isn\'t a YallaFlow store file (it has other files in it).' );
+                    throw new RuntimeException( 'This isn\'t a Openly store file (it has other files in it).' );
                 }
                 $total += (int) $stat['size'];
                 if ( (int) $stat['size'] > self::MAX_FILE || $total > 3 * self::MAX_FILE ) {
@@ -844,15 +844,15 @@ class Qwoo_Store_Package {
                 }
             }
             $m = self::json( 'manifest.json', 5242880 );
-            if ( ! $m || ( $m['app'] ?? '' ) !== 'yallaflow' ) {
-                throw new RuntimeException( 'This isn\'t a YallaFlow store file.' );
+            if ( ! $m || ! in_array( $m['app'] ?? '', [ 'openly', 'yallaflow' ], true ) ) {
+                throw new RuntimeException( 'This isn\'t a Openly store file.' );
             }
             if ( (int) ( $m['format'] ?? 0 ) > self::FORMAT ) {
-                throw new RuntimeException( 'This file was made by a newer version of YallaFlow. Update your store first.' );
+                throw new RuntimeException( 'This file was made by a newer version of Openly. Update your store first.' );
             }
             $key = (string) ( $m['source']['key'] ?? '' );
             if ( ! preg_match( '/^pk[a-f0-9]{8}$/', $key ) ) {
-                throw new RuntimeException( 'This isn\'t a YallaFlow store file.' );
+                throw new RuntimeException( 'This isn\'t a Openly store file.' );
             }
             if ( $key === self::source_key() ) {
                 throw new RuntimeException( 'This file was made from this store. Bring it into another store.' );

@@ -516,7 +516,7 @@ class Qwoo_Automations {
                 wp_safe_remote_post( $step['url'], [
                     'timeout'     => 8,
                     'redirection' => 0,
-                    'headers'     => [ 'Content-Type' => 'application/json', 'User-Agent' => 'YallaFlow-Automations/1' ],
+                    'headers'     => [ 'Content-Type' => 'application/json', 'User-Agent' => 'Openly-Automations/1' ],
                     'body'        => wp_json_encode( [ 'automation' => $flow['name'], 'email' => $row['email'], 'order' => $order ? Qwoo_Webhooks::order_data( $order ) : null ] ),
                 ] );
                 break;
