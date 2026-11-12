@@ -121,6 +121,7 @@ class Qwoo_Platform_Dashboard {
         'languages_get'   => 'action_languages_get',
         'languages_save'  => 'action_languages_save',
         'plan_set'        => 'action_plan_set',
+        'platform_url'    => 'action_platform_url',
         'activity'        => 'action_activity',
         'visibility_get'  => 'action_visibility_get',
         'visibility_save' => 'action_visibility_save',
@@ -2082,6 +2083,32 @@ class Qwoo_Platform_Dashboard {
         $features = array_values( array_filter( array_map( 'sanitize_key', (array) ( $params['features'] ?? [] ) ) ) );
         update_option( 'qwoo_plan', [ 'plan' => sanitize_key( (string) ( $params['plan'] ?? 'basic' ) ), 'features' => $features ], false );
         return [ 'plan' => get_option( 'qwoo_plan' ) ];
+    }
+
+    /**
+     * { url }: the platform moved to a new address (wp-admin → Stores → Tell all stores the new address).
+     * Only from a signed platform call, only https. The old address is kept for a while
+     * (Qwoo_Platform_Connection::platform_hosts) so payment returns made during the move still count.
+     */
+    private static function action_platform_url( array $params ) {
+        $url   = esc_url_raw( trim( (string) ( $params['url'] ?? '' ) ), [ 'https' ] );
+        $parts = $url !== '' ? wp_parse_url( $url ) : false;
+        if ( ! $parts || ( $parts['scheme'] ?? '' ) !== 'https' || empty( $parts['host'] ) || ! empty( $parts['user'] ) || ! empty( $parts['query'] ) ) {
+            return self::error( 'qwoo_platform_url', 'That isn\'t a valid https address.', 400 );
+        }
+        $c = get_option( Qwoo_Platform_Connection::OPTION );
+        if ( ! is_array( $c ) || empty( $c['platform_url'] ) ) {
+            return self::error( 'qwoo_platform_url', 'This store isn\'t connected to a platform.', 409 );
+        }
+        $new = untrailingslashit( 'https://' . strtolower( $parts['host'] ) . ( isset( $parts['port'] ) ? ':' . (int) $parts['port'] : '' ) . ( $parts['path'] ?? '' ) );
+        $old = untrailingslashit( (string) $c['platform_url'] );
+        if ( $new !== $old ) {
+            $before            = array_values( array_diff( (array) ( $c['platform_old_urls'] ?? [] ), [ $new ] ) );
+            $c['platform_old_urls'] = array_slice( array_values( array_unique( array_merge( [ $old ], $before ) ) ), 0, 3 );
+            $c['platform_url'] = $new;
+            update_option( Qwoo_Platform_Connection::OPTION, $c, false );
+        }
+        return [ 'platform_url' => $new, 'old' => $c['platform_old_urls'] ?? [] ];
     }
 
     /** { hidden, since, key }: Coming soon (Qwoo_Store_Visibility). */

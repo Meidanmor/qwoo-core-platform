@@ -401,12 +401,18 @@ trait Qwoo_Platform_Payments {
         if ( ! $connection || $url === '' ) {
             return false;
         }
-        $want = wp_parse_url( (string) $connection['platform_url'] );
-        $got  = wp_parse_url( $url );
-        return isset( $want['host'], $got['host'], $got['scheme'] )
-            && strtolower( $got['host'] ) === strtolower( $want['host'] )
-            && ( $got['port'] ?? null ) === ( $want['port'] ?? null )
-            && $got['scheme'] === ( $want['scheme'] ?? 'https' );
+        $got = wp_parse_url( $url );
+        // The current address, and the ones before a platform move (action_platform_url keeps up to 3).
+        foreach ( array_merge( [ (string) $connection['platform_url'] ], (array) ( $connection['platform_old_urls'] ?? [] ) ) as $base ) {
+            $want = wp_parse_url( (string) $base );
+            if ( isset( $want['host'], $got['host'], $got['scheme'] )
+                && strtolower( $got['host'] ) === strtolower( $want['host'] )
+                && ( $got['port'] ?? null ) === ( $want['port'] ?? null )
+                && $got['scheme'] === ( $want['scheme'] ?? 'https' ) ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static function bank_accounts() {
