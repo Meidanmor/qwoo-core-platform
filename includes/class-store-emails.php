@@ -164,7 +164,6 @@ class Qwoo_Store_Emails {
             if ( $id === 'customer_note' ) {
                 $rows[] = self::row( self::b( 'text', [ 'html' => '<p><b>{customer_note}</b></p>', 'size' => 15, 'padV' => 8 ] ) );
             }
-            if ( $id === 'customer_invoice' ) $rows[] = $button( self::l( 'Pay for this order', 'לתשלום על ההזמנה' ), 'pay' );
             $rows[] = self::row( self::b( 'order_button', [ 'label' => $def['group'] === 'team' ? self::l( 'Open the order', 'פתיחת ההזמנה' ) : self::l( 'View your order', 'צפייה בהזמנה' ), 'padV' => 14, 'align' => 'center' ] ) );
             $rows[] = $line;
             $rows[] = self::row( self::b( 'order_info', [ 'padV' => 4 ] ) );
@@ -278,17 +277,27 @@ class Qwoo_Store_Emails {
         $urls  = [ 'shop' => $front . '/', 'account' => $front . '/my-account' ];
         if ( $order ) {
             $urls['order'] = $urls['account'];
-            if ( $order->needs_payment() ) $urls['pay'] = $order->get_checkout_payment_url();
+            // No 'pay': WooCommerce's pay page lives on the backend and the storefront has none, so a
+            // button with that target isn't drawn (user, 2026-11-12: no email links to the backend).
             if ( $admin ) {
+                // The owner's emails open the order in the dashboard; without a platform address, no button.
                 $platform = get_option( 'qwoo_platform_connection', [] );
                 $base     = is_array( $platform ) ? rtrim( (string) ( $platform['platform_url'] ?? '' ), '/' ) : '';
-                $urls['order'] = $base !== '' ? $base . '/app/orders/' . $order->get_id() : $order->get_edit_order_url();
+                $urls['order'] = $base !== '' ? $base . '/app/orders/' . $order->get_id() : '';
             }
         }
+        // Choosing a password happens on the storefront's /reset-password (it takes the same key).
+        $reset = static fn( $key, $login ) => $front !== '' && (string) $key !== '' && (string) $login !== '' ? $front . '/reset-password?key=' . rawurlencode( (string) $key ) . '&login=' . rawurlencode( (string) $login ) : '';
         if ( isset( $args['reset_key'], $args['user_login'] ) ) {
-            $urls['reset'] = add_query_arg( [ 'key' => $args['reset_key'], 'id' => (int) ( $args['user_id'] ?? 0 ), 'login' => rawurlencode( (string) $args['user_login'] ) ], wc_get_endpoint_url( 'lost-password', '', wc_get_page_permalink( 'myaccount' ) ) );
+            $urls['reset'] = $reset( $args['reset_key'], $args['user_login'] );
         }
-        if ( is_object( $email ) && ! empty( $email->set_password_url ) ) $urls['account'] = (string) $email->set_password_url;
+        // A new account that still has to choose a password: WooCommerce's link carries the key and the login.
+        if ( is_object( $email ) && ! empty( $email->set_password_url ) ) {
+            $query = [];
+            parse_str( (string) wp_parse_url( (string) $email->set_password_url, PHP_URL_QUERY ), $query );
+            $set = $reset( $query['key'] ?? '', rawurldecode( (string) ( $query['login'] ?? '' ) ) );
+            if ( $set !== '' ) $urls['account'] = $set;
+        }
         if ( ! empty( $args['product_url'] ) ) $urls['product'] = (string) $args['product_url'];
         return $urls;
     }
@@ -494,7 +503,7 @@ class Qwoo_Store_Emails {
                 $tokens  = [ 'first_name', 'last_name', 'order_number', 'order_total', 'order_date', 'store_name' ];
                 if ( $id === 'customer_note' ) $tokens[] = 'customer_note';
                 $blocks  = [ 'order_items', 'order_totals', 'order_info', 'addresses', 'order_button', 'downloads' ];
-                $targets = [ 'shop', 'account', 'pay' ];
+                $targets = [ 'shop', 'account' ];
                 break;
             case 'account':
                 $tokens = [ 'first_name', 'last_name', 'user_login', 'store_name' ];
@@ -646,7 +655,7 @@ class Qwoo_Store_Emails {
             $args += [ 'recipient_name' => 'Noa', 'recipient_email' => 'noa@example.com', 'sender_name' => self::l( 'Dana and Yoni', 'דנה ויוני' ), 'gift_amount' => html_entity_decode( wp_strip_all_tags( wc_price( 200 ) ), ENT_QUOTES ) ];
         }
         $ctx = self::context( $id, $order, null, $args );
-        $ctx['urls'] += [ 'reset' => $home, 'pay' => $home, 'order' => $home ];
+        $ctx['urls'] += [ 'reset' => $home, 'order' => $home ];
         if ( ! $order ) $ctx['tokens']['{first_name}'] = 'Dana';
         if ( $def['kind'] === 'gift' && class_exists( 'Qwoo_Gift_Cards' ) ) {
             $d = Qwoo_Gift_Cards::default_designs()[0];

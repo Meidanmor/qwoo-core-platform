@@ -2656,7 +2656,6 @@ class Qwoo_Platform_Dashboard {
             'kinds' => [
                 'confirm'   => ! in_array( $status, [ 'cancelled', 'failed' ], true ),
                 'details'   => true,
-                'pay'       => (bool) $o->needs_payment(),
                 'completed' => $status === 'completed',
                 'review'    => $status === 'completed' && $reviews && ! empty( Qwoo_Reviews::settings()['enabled'] ),
                 'own'       => true,
@@ -2692,9 +2691,8 @@ class Qwoo_Platform_Dashboard {
 
     /**
      * { id, kind, to?, copy_to?, subject?, message?, cancel[]? }. kind: confirm
-     * (the order confirmation again), details (items and totals), pay (the
-     * same email, for an order that waits for payment: it has the Pay
-     * button), completed, review (a review request now), own (the owner's
+     * (the order confirmation again), details (items and totals; no Pay
+     * button: emails never link to the backend), completed, review (a review request now), own (the owner's
      * message, kept as a customer note). cancel: waiting automatic emails to
      * stop for this order. Each send is written into the order's notes.
      */
@@ -2721,7 +2719,7 @@ class Qwoo_Platform_Dashboard {
             self::order_auto_stop( $order, (string) $key );
         }
 
-        $names = [ 'confirm' => 'Order confirmation', 'details' => 'Order details', 'pay' => 'Payment request', 'completed' => 'Order completed', 'review' => 'Review request' ];
+        $names = [ 'confirm' => 'Order confirmation', 'details' => 'Order details', 'completed' => 'Order completed', 'review' => 'Review request' ];
         if ( $kind === 'review' ) {
             if ( ! Qwoo_Reviews::send_now( $order->get_id(), $list ) ) {
                 return self::bad( 'The review request wasn\'t sent. Every product in this order may already have a review.' );
@@ -2737,7 +2735,7 @@ class Qwoo_Platform_Dashboard {
             $order->add_order_note( esc_html( $message ), 1 );
             $undo();
         } else {
-            $wc_id = [ 'confirm' => $order->get_status() === 'on-hold' ? 'customer_on_hold_order' : 'customer_processing_order', 'details' => 'customer_invoice', 'pay' => 'customer_invoice', 'completed' => 'customer_completed_order' ][ $kind ];
+            $wc_id = [ 'confirm' => $order->get_status() === 'on-hold' ? 'customer_on_hold_order' : 'customer_processing_order', 'details' => 'customer_invoice', 'completed' => 'customer_completed_order' ][ $kind ];
             $mail  = null;
             foreach ( WC()->mailer()->get_emails() as $email ) {
                 if ( $email->id === $wc_id ) {
