@@ -28,7 +28,7 @@ class Qwoo_Automations {
     const OPTION    = 'qwoo_flows';
     const MAX_FLOWS = 20;
     const MAX_STEPS = 12;
-    const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed', 'audience_joined' ];
+    const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed', 'audience_joined', 'event_done' ];
     const SCAN_KEY  = 'qwoo_flows_scanned';
 
     public static function init() {
@@ -127,7 +127,7 @@ class Qwoo_Automations {
     const CHECKS = [
         'first_order', 'order_over', 'order_under', 'not_ordered_since',
         'order_has_product', 'order_has_category', 'coupon_used', 'shipping_method', 'country',
-        'orders_count', 'spent_total', 'subscribed', 'in_audience', 'has_account',
+        'orders_count', 'spent_total', 'subscribed', 'in_audience', 'has_account', 'did_event',
     ];
 
     private static function add_rule( array &$rules, array $raw ) {
@@ -166,6 +166,13 @@ class Qwoo_Automations {
             case 'has_account':
                 $rule['is'] = $yes;
                 break;
+            case 'did_event':
+                // Did (or didn't do) one of the owner's events (Analytics → Events) in the last N days.
+                $rule['event_id'] = is_scalar( $raw['event_id'] ?? null ) ? (string) $raw['event_id'] : '';
+                $rule['days']     = min( 90, max( 1, (int) ( $raw['days'] ?? 30 ) ) );
+                $rule['is']       = $yes;
+                if ( ! class_exists( 'Qwoo_Events' ) || ! Qwoo_Events::exists( $rule['event_id'] ) ) return;
+                break;
             case 'in_audience':
                 $rule['audience_id'] = sanitize_key( (string) ( $raw['audience_id'] ?? '' ) );
                 $rule['is']          = $yes;
@@ -181,7 +188,7 @@ class Qwoo_Automations {
         foreach ( WC()->shipping() ? WC()->shipping()->get_shipping_methods() : [] as $method ) {
             $methods[] = [ 'id' => (string) $method->id, 'name' => html_entity_decode( wp_strip_all_tags( (string) $method->get_method_title() ), ENT_QUOTES ) ];
         }
-        return [ 'countries' => WC()->countries->get_countries(), 'shipping_methods' => $methods ];
+        return [ 'countries' => WC()->countries->get_countries(), 'shipping_methods' => $methods, 'events' => class_exists( 'Qwoo_Events' ) ? (object) Qwoo_Events::names() : (object) [] ];
     }
 
     public static function save( array $in ) {
@@ -201,6 +208,11 @@ class Qwoo_Automations {
             $joined = sanitize_key( (string) ( $in['trigger']['audience_id'] ?? '' ) );
             if ( ! Qwoo_Personalization::exists( $joined ) ) return new WP_Error( 'audience', 'Choose the audience that starts this automation.' );
             $trigger['audience_id'] = $joined;
+        }
+        if ( $type === 'event_done' ) {
+            $done = is_scalar( $in['trigger']['event_id'] ?? null ) ? (string) $in['trigger']['event_id'] : '';
+            if ( ! class_exists( 'Qwoo_Events' ) || ! Qwoo_Events::exists( $done ) ) return new WP_Error( 'event', 'Choose the event that starts this automation.' );
+            $trigger['event_id'] = $done;
         }
         $audience_id = sanitize_key( (string) ( $in['audience_id'] ?? '' ) );
         if ( $audience_id && ! Qwoo_Personalization::exists( $audience_id ) ) return new WP_Error( 'audience', 'Choose an audience that still exists.' );
@@ -278,6 +290,7 @@ class Qwoo_Automations {
             if ( $type === 'order_status' && ( $flow['trigger']['status'] ?? '' ) !== ( $match['status'] ?? '' ) ) continue;
             if ( $type === 'no_order' && (int) ( $flow['trigger']['days'] ?? 0 ) !== (int) ( $match['days'] ?? 0 ) ) continue;
             if ( $type === 'audience_joined' && ( $flow['trigger']['audience_id'] ?? '' ) !== ( $match['audience_id'] ?? '' ) ) continue;
+            if ( $type === 'event_done' && ( $flow['trigger']['event_id'] ?? '' ) !== ( $match['event_id'] ?? '' ) ) continue;
             if ( $type === 'product_view' ) {
                 if ( (int) ( $match['seconds'] ?? 0 ) < (int) ( $flow['trigger']['seconds'] ?? 30 ) ) continue;
                 if ( ! empty( $flow['trigger']['category_id'] ) && ! in_array( (int) $flow['trigger']['category_id'], array_map( 'absint', (array) ( $match['category_ids'] ?? [] ) ), true ) ) continue;
@@ -309,7 +322,7 @@ class Qwoo_Automations {
 
     public static function on_personalization_event( string $type, array $profile, array $event, string $visitor_key = '' ): void {
         if ( ! self::allowed() ) return;
-        $trigger = [ 'view' => 'product_view', 'cart' => 'cart_changed', 'wishlist' => 'wishlist_changed' ][ $type ] ?? '';
+        $trigger = [ 'view' => 'product_view', 'cart' => 'cart_changed', 'wishlist' => 'wishlist_changed', 'event' => 'event_done' ][ $type ] ?? '';
         if ( $trigger === '' ) return;
         $email = '';
         $customer_id = (int) ( $profile['customer_id'] ?? 0 );
@@ -322,7 +335,7 @@ class Qwoo_Automations {
             $email = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT email FROM ' . Qwoo_Email_Marketing::subs_table() . " WHERE id = %d AND status = 'sub'", (int) $profile['subscriber_id'] ) );
         }
         if ( ! is_email( $email ) ) return;
-        $key = 'persona:' . $type . ':' . substr( hash( 'sha256', $visitor_key ), 0, 18 ) . ':' . (int) ( $event['product_id'] ?? 0 ) . ':' . gmdate( 'Ymd' );
+        $key = 'persona:' . $type . ':' . substr( hash( 'sha256', $visitor_key ), 0, 18 ) . ':' . ( $type === 'event' ? substr( (string) ( $event['event_id'] ?? '' ), 3 ) : (int) ( $event['product_id'] ?? 0 ) ) . ':' . gmdate( 'Ymd' );
         self::start( $trigger, $key, $email, 0, $event );
     }
 
@@ -478,6 +491,8 @@ class Qwoo_Automations {
                 return ( $status === 'sub' ) === $is;
             case 'has_account':
                 return (bool) get_user_by( 'email', $email ) === $is;
+            case 'did_event':
+                return Qwoo_Personalization::email_did_event( $email, (string) ( $step['event_id'] ?? '' ), (int) ( $step['days'] ?? 30 ) ) === $is;
             case 'in_audience':
                 return (bool) Qwoo_Personalization::audience_for_email( (string) ( $step['audience_id'] ?? '' ), $email ) === $is;
             case 'not_ordered_since':

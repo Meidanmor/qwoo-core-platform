@@ -52,6 +52,12 @@ trait Qwoo_Platform_Growth {
                 return Qwoo_Events::state();
             case 'events_save':
                 return Qwoo_Events::save( $p );
+            case 'event_save':
+                return Qwoo_Events::save_own( $p );
+            case 'event_delete':
+                return Qwoo_Events::delete_own( (string) ( $p['id'] ?? '' ) );
+            case 'event_detail':
+                return Qwoo_Events::detail( (string) ( $p['id'] ?? '' ) );
 
             /* Customers → Inbox: shoppers' messages (Qwoo_Inbox). */
             case 'inbox_list':

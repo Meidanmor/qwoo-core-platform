@@ -47,6 +47,7 @@ class Qwoo_Personalization {
         'products_viewed_at_least' => [ 'value', 'days' ],
         'searched'                 => [ 'text', 'days' ],
         'visited_page'             => [ 'text', 'days' ],
+        'did_event'                => [ 'event_id', 'min', 'days' ], // an event the owner defined (Analytics → Events)
         'visits_at_least'          => [ 'value' ],
         'first_visit_within'       => [ 'days' ],
         'last_seen_within'         => [ 'days' ],
@@ -223,6 +224,11 @@ class Qwoo_Personalization {
                     if ( ! $id || ! function_exists( 'wc_get_product' ) || ! wc_get_product( $id ) ) return null;
                     $out[ $key ] = $id;
                     break;
+                case 'event_id':
+                    $id = is_scalar( $raw ) ? (string) $raw : '';
+                    if ( ! class_exists( 'Qwoo_Events' ) || ! Qwoo_Events::exists( $id ) ) return null;
+                    $out[ $key ] = $id;
+                    break;
                 case 'days':
                     $out[ $key ] = min( 730, max( 1, absint( $raw ?: 30 ) ) );
                     break;
@@ -380,6 +386,10 @@ class Qwoo_Personalization {
                     if ( $path === $needle || ( $needle !== '/' && strpos( $path, $needle . '/' ) === 0 ) ) return true;
                 }
                 return false;
+            case 'did_event':
+                // [ times, last time ]: at least N times, the last one within the days.
+                $done = $s['ev'][ (string) $rule['event_id'] ] ?? null;
+                return is_array( $done ) && (int) ( $done[1] ?? 0 ) >= $since( $rule['days'] ?? 30 ) && (int) ( $done[0] ?? 0 ) >= (int) ( $rule['min'] ?? 1 );
             case 'visits_at_least':      return (int) $s['visits'] >= (int) $rule['value'];
             case 'first_visit_within':   return (int) $s['first'] > 0 && (int) $s['first'] >= $since( $rule['days'] );
             case 'last_seen_within':     return (int) $s['last'] > 0 && (int) $s['last'] >= $since( $rule['days'] );
@@ -604,7 +614,7 @@ class Qwoo_Personalization {
             $s['visits'] = $last ? 1 : 0;
         }
         return $s + [ 'v' => 2, 'first' => 0, 'last' => 0, 'visit' => 0, 'visits' => 0, 'day' => '', 'fd' => [], 'src' => [], 'dev' => '', 'lang' => '', 'cc' => '',
-            'pages' => [], 'views' => [], 'cats' => [], 'search' => [], 'cart' => [], 'wish' => [], 'ordered' => 0, 'seen' => [], 'in' => [], 'q' => [] ];
+            'pages' => [], 'views' => [], 'cats' => [], 'search' => [], 'cart' => [], 'wish' => [], 'ordered' => 0, 'seen' => [], 'in' => [], 'q' => [], 'ev' => [] ];
     }
 
     private static function trim_map( array $map, int $max, string $time_key = 't' ): array {
@@ -716,6 +726,7 @@ class Qwoo_Personalization {
         if ( preg_match( '/^[A-Z]{2}$/', $country ) ) $s['cc'] = $country;
 
         $hooks = [];
+        $own_left = 10; // the owner's own events counted per request
         foreach ( $events as $e ) {
             $type = sanitize_key( (string) ( $e['type'] ?? '' ) );
             switch ( $type ) {
@@ -795,6 +806,19 @@ class Qwoo_Personalization {
                     if ( preg_match( '/^pp_[A-Za-z0-9]{3,20}$/', $pid ) ) self::bump( 'pseen', $pid );
                     break;
 
+                case 'ev':
+                    // An event the owner defined (Analytics → Events): the day's totals and this visitor's own count.
+                    $eid = is_scalar( $e['id'] ?? null ) ? (string) $e['id'] : '';
+                    if ( $own_left < 1 || ! class_exists( 'Qwoo_Events' ) || ! Qwoo_Events::exists( $eid ) ) break;
+                    $own_left--;
+                    $prev = is_array( $s['ev'][ $eid ] ?? null ) ? $s['ev'][ $eid ] : [ 0, 0 ];
+                    if ( wp_date( 'Y-m-d', (int) ( $prev[1] ?? 0 ) ) !== $day ) self::bump( 'evu', $eid );
+                    $s['ev'][ $eid ] = [ min( 9999, (int) ( $prev[0] ?? 0 ) + 1 ), $now ];
+                    self::bump( 'ev', $eid );
+                    self::bump( 'evp', $eid . '|' . mb_substr( self::clean_path( $e['path'] ?? '/' ), 0, 100 ) );
+                    $hooks[] = [ 'event', [ 'event_id' => $eid ] ];
+                    break;
+
                 case 'click':
                     $pid = (string) ( $e['popup_id'] ?? '' );
                     if ( preg_match( '/^pp_[A-Za-z0-9]{3,20}$/', $pid ) ) self::bump( 'pclick', $pid );
@@ -812,6 +836,7 @@ class Qwoo_Personalization {
         $s['views'] = self::trim_map( $s['views'], self::MAX_VIEWS );
         $s['cats']  = self::trim_map( $s['cats'], self::MAX_CATS );
         $s['pages'] = self::trim_map( $s['pages'], self::MAX_PAGES );
+        $s['ev']    = self::trim_map( is_array( $s['ev'] ) ? $s['ev'] : [], 30 );
         $s['seen']  = array_filter( $s['seen'], static fn( $t ) => (int) $t > $now - 7 * DAY_IN_SECONDS );
 
         $f = self::facts( array_merge( $row, [ 'signals' => $s ] ) );
@@ -937,6 +962,7 @@ class Qwoo_Personalization {
             'categories'     => self::categories(),
             'templates'      => array_keys( self::TEMPLATES ),
             'rules'          => array_map( static fn( $keys ) => $keys, self::RULES ),
+            'events'         => class_exists( 'Qwoo_Events' ) ? (object) Qwoo_Events::names() : (object) [],
             'sources'        => self::SOURCES,
             'devices'        => self::DEVICES,
             'consent_mode'   => is_array( $c = get_option( 'qwoo_custom_code', [] ) ) ? ( $c['consent']['mode'] ?? 'ask' ) : 'ask',
@@ -1354,6 +1380,29 @@ class Qwoo_Personalization {
         $row = $row ?: [ 'customer_id' => $user ? (int) $user->ID : 0, 'subscriber_id' => 0, 'signals' => [] ];
         $row['email'] = $email;
         return self::$people[ $cache ] = self::matches_facts( $aud, self::facts( $row ) );
+    }
+
+    /** Whether the person with this email did one of the owner's events in the last days (automation rules). */
+    public static function email_did_event( string $email, string $event_id, int $days = 30 ): bool {
+        global $wpdb;
+        $email = strtolower( $email );
+        if ( ! is_email( $email ) || ! class_exists( 'Qwoo_Events' ) || ! Qwoo_Events::exists( $event_id ) ) return false;
+        $user = get_user_by( 'email', $email );
+        $rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT signals FROM ' . self::table() . ' WHERE ( email = %s OR customer_id = %d ) AND expires_at > %s ORDER BY updated_at DESC LIMIT 5', $email, $user ? (int) $user->ID : -1, gmdate( 'Y-m-d H:i:s' ) ) );
+        $since = time() - max( 1, $days ) * DAY_IN_SECONDS;
+        foreach ( $rows as $json ) {
+            $s = json_decode( (string) $json, true );
+            if ( is_array( $s ) && (int) ( $s['ev'][ $event_id ][1] ?? 0 ) >= $since ) return true;
+        }
+        return false;
+    }
+
+    /** A deleted event: its daily totals go (visitors' own counts fade out with their rows). */
+    public static function forget_event( string $event_id ): void {
+        global $wpdb;
+        $t = self::stats_table();
+        $wpdb->query( $wpdb->prepare( "DELETE FROM $t WHERE metric IN ('ev','evu') AND item = %s", $event_id ) );
+        $wpdb->query( $wpdb->prepare( "DELETE FROM $t WHERE metric = 'evp' AND item LIKE %s", $wpdb->esc_like( $event_id . '|' ) . '%' ) );
     }
 
     public static function audience_for_customer( int $customer_id, string $audience_id ): bool {

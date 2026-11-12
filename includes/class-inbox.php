@@ -5,8 +5,10 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * The store's Inbox: messages from shoppers, answered by the owner from the
  * dashboard (Customers → Inbox).
  *
- *   in    contact forms set to "Collect in your Inbox" (trait-sb-forms.php), and
- *         the shopper's own replies on their conversation page
+ *   in    contact forms set to "Collect in your Inbox" (trait-sb-forms.php), the
+ *         storefront's Help button ("Write to us"), and the shopper's own
+ *         replies: on their conversation page, in the Help panel, or in
+ *         My account → Messages
  *   out   the owner's answer goes to the shopper by email, with a link to the
  *         conversation page, where they read the thread and answer
  *   alert a new message or reply tells the owner: on their phone (the owner
@@ -21,6 +23,13 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * Conversations are personal data: removed after "keep_months", and with the
  * shopper's account.
  *
+ * The Help button (settings → help; Pro and Plus): the storefront gets its look
+ * and texts with the tracking settings (Qwoo_Custom_Code::storefront_payload →
+ * help), and talks to the routes at the end of this file: write a message,
+ * read and answer a conversation (by its key), the signed-in shopper's own
+ * conversations, and "Where is my order?" (order number + the order's email,
+ * the same answer for any wrong pair, status only).
+ *
  *   tables  qwoo_conversations, qwoo_inbox_messages
  *   option  qwoo_inbox_settings
  */
@@ -33,6 +42,9 @@ class Qwoo_Inbox {
     const MAX_TEXT   = 4000;
     const LINK_DAYS  = 180;
     const STATUSES   = [ 'open', 'waiting', 'solved' ];
+    const HELP_STYLES = [ 'pill', 'round', 'tab' ];
+    const HELP_EDGES  = [ 'start', 'end', 'bottom' ];
+    const DAY_CAP     = 300; // messages a day from the Help button, per store
 
     public static function init() {
         add_action( 'init', [ __CLASS__, 'maybe_install' ] );
@@ -94,11 +106,62 @@ class Qwoo_Inbox {
             'answer_time'  => (string) ( $s['answer_time'] ?? '' ),
             'saved'        => array_values( array_filter( (array) ( $s['saved'] ?? [] ), 'is_array' ) ),
             'keep_months'  => min( 60, max( 3, (int) ( $s['keep_months'] ?? 24 ) ) ),
+            'help'         => self::clean_help( $s['help'] ?? [] ),
+            'help_allowed' => self::help_allowed(),
         ];
     }
 
+    /** The Help button is part of the Pro and Plus plans (like Audiences). */
+    private static function help_allowed(): bool {
+        return ! class_exists( 'Qwoo_Personalization' ) || Qwoo_Personalization::plan_allows();
+    }
+
+    /** The Help button's settings, cleaned (saving and reading use the same rules). */
+    private static function clean_help( $h ): array {
+        $h    = is_array( $h ) ? $h : [];
+        $text = static fn( $v, $max ) => mb_substr( sanitize_text_field( is_scalar( $v ) ? (string) $v : '' ), 0, $max );
+        $on   = static fn( $key ) => ! array_key_exists( $key, $h ) || ! empty( $h[ $key ] );
+        $topics = [];
+        foreach ( array_slice( (array) ( $h['topics'] ?? [] ), 0, 8 ) as $topic ) {
+            $topic = $text( $topic, 40 );
+            if ( $topic !== '' ) $topics[] = $topic;
+        }
+        $faq = [];
+        foreach ( array_slice( (array) ( $h['faq'] ?? [] ), 0, 20 ) as $row ) {
+            if ( ! is_array( $row ) ) continue;
+            $q = $text( $row['q'] ?? '', 120 );
+            $a = mb_substr( trim( sanitize_textarea_field( is_scalar( $row['a'] ?? '' ) ? (string) $row['a'] : '' ) ), 0, 800 );
+            if ( $q !== '' && $a !== '' ) $faq[] = [ 'q' => $q, 'a' => $a ];
+        }
+        return [
+            'on'       => ! empty( $h['on'] ),
+            'style'    => in_array( $h['style'] ?? '', self::HELP_STYLES, true ) ? $h['style'] : 'tab',
+            'edge'     => in_array( $h['edge'] ?? '', self::HELP_EDGES, true ) ? $h['edge'] : 'end',
+            'position' => min( 88, max( 12, (int) ( $h['position'] ?? 50 ) ) ),
+            'label'    => $text( $h['label'] ?? '', 30 ),
+            'title'    => $text( $h['title'] ?? '', 60 ),
+            'bg'       => (string) ( sanitize_hex_color( is_scalar( $h['bg'] ?? '' ) ? (string) $h['bg'] : '' ) ?: '' ),
+            'color'    => (string) ( sanitize_hex_color( is_scalar( $h['color'] ?? '' ) ? (string) $h['color'] : '' ) ?: '' ),
+            'answers'  => $on( 'answers' ),
+            'order'    => $on( 'order' ),
+            'write'    => $on( 'write' ),
+            'topics'   => $topics,
+            'faq'      => $faq,
+        ];
+    }
+
+    /** For the storefront (with the tracking settings): the Help button, or null when it's off. */
+    public static function help_payload(): ?array {
+        $s = get_option( self::OPTION, [] );
+        $h = self::clean_help( is_array( $s ) ? ( $s['help'] ?? [] ) : [] );
+        if ( ! $h['on'] || ! self::help_allowed() ) return null;
+        unset( $h['on'] );
+        return $h + [ 'answer_time' => mb_substr( sanitize_text_field( (string) ( is_array( $s ) ? ( $s['answer_time'] ?? '' ) : '' ) ), 0, 80 ) ];
+    }
+
     public static function save_settings( array $in ) {
-        $saved = [];
+        $before = get_option( self::OPTION, [] );
+        $saved  = [];
         foreach ( array_slice( (array) ( $in['saved'] ?? [] ), 0, 20 ) as $row ) {
             $title = mb_substr( sanitize_text_field( (string) ( $row['title'] ?? '' ) ), 0, 60 );
             $text  = self::clean( (string) ( $row['text'] ?? '' ) );
@@ -112,7 +175,11 @@ class Qwoo_Inbox {
             'answer_time'  => mb_substr( sanitize_text_field( (string) ( $in['answer_time'] ?? '' ) ), 0, 80 ),
             'saved'        => $saved,
             'keep_months'  => min( 60, max( 3, (int) ( $in['keep_months'] ?? 24 ) ) ),
+            // Not sent (an older dashboard): the Help button stays as it is.
+            'help'         => self::clean_help( array_key_exists( 'help', $in ) ? $in['help'] : ( is_array( $before ) ? ( $before['help'] ?? [] ) : [] ) ),
         ], false );
+        // The storefront reads its settings again (the Help button travels with them).
+        if ( class_exists( 'Qwoo_Custom_Code' ) ) Qwoo_Custom_Code::touch();
         return self::settings();
     }
 
@@ -286,6 +353,8 @@ class Qwoo_Inbox {
             'source'      => $c['source'],
             'page'        => $c['page'],
             'order_id'    => (int) $c['order_id'],
+            'product_id'  => (int) $c['product_id'],
+            'product'     => (int) $c['product_id'] ? html_entity_decode( (string) get_the_title( (int) $c['product_id'] ), ENT_QUOTES ) : '',
             'status'      => $c['status'],
             'unread'      => (bool) $c['unread'],
             'preview'     => $c['preview'],
@@ -438,6 +507,179 @@ class Qwoo_Inbox {
 
     public static function routes() {
         register_rest_route( self::NS, '/inbox/t', [ 'methods' => [ 'GET', 'POST' ], 'callback' => [ __CLASS__, 'rest_thread' ], 'permission_callback' => '__return_true' ] );
+        // The storefront's Help panel and My account → Messages. Limits are checked inside each callback.
+        register_rest_route( self::NS, '/inbox/write', [ 'methods' => 'POST', 'callback' => [ __CLASS__, 'rest_write' ], 'permission_callback' => '__return_true' ] );
+        register_rest_route( self::NS, '/inbox/order', [ 'methods' => 'POST', 'callback' => [ __CLASS__, 'rest_order' ], 'permission_callback' => '__return_true' ] );
+        register_rest_route( self::NS, '/inbox/thread', [ 'methods' => [ 'GET', 'POST' ], 'callback' => [ __CLASS__, 'rest_thread_json' ], 'permission_callback' => '__return_true' ] );
+        register_rest_route( self::NS, '/inbox/mine', [ 'methods' => 'GET', 'callback' => [ __CLASS__, 'rest_mine' ], 'permission_callback' => 'qwoo_require_login' ] );
+    }
+
+    /* ---------------- the storefront: Help panel, My account → Messages ---------------- */
+
+    private static function limited( string $action, int $max, int $seconds, ?string $who = null ): bool {
+        return function_exists( 'qwoo_rate_limit_check' ) && is_wp_error( qwoo_rate_limit_check( $action, $max, $seconds, $who ) );
+    }
+
+    private static function too_many() {
+        return new WP_Error( 'rate', self::he() ? 'יותר מדי ניסיונות בזמן קצר. נסו שוב בעוד כמה דקות.' : 'Too many tries in a short time. Try again in a few minutes.', [ 'status' => 429 ] );
+    }
+
+    /** What a shopper may know about an order they proved is theirs: its status. Never the address, the items or the amounts. */
+    private static function order_view( $order ): array {
+        $status = (string) $order->get_status();
+        $made   = $order->get_date_created();
+        $method = '';
+        foreach ( $order->get_shipping_methods() as $m ) { $method = html_entity_decode( wp_strip_all_tags( (string) $m->get_name() ), ENT_QUOTES ); break; }
+        return [
+            'number'   => (string) $order->get_order_number(),
+            'date'     => $made ? wp_date( get_option( 'date_format' ), $made->getTimestamp() ) : '',
+            'status'   => $status,
+            'label'    => html_entity_decode( (string) wc_get_order_status_name( $status ), ENT_QUOTES ),
+            'paid'     => (bool) $order->is_paid(),
+            'done'     => $status === 'completed',
+            'stopped'  => in_array( $status, [ 'cancelled', 'refunded', 'failed' ], true ),
+            'delivery' => $method,
+        ];
+    }
+
+    /** The order of a number + email pair, or null. The same null for "no such order" and "not that email". */
+    private static function order_for( string $number, string $email ) {
+        $id = (int) preg_replace( '/\D/', '', $number );
+        if ( ! $id || ! is_email( $email ) || ! function_exists( 'wc_get_order' ) ) return null;
+        $order = wc_get_order( $id );
+        if ( ! $order || ! ( $order instanceof WC_Order ) || $order->get_type() !== 'shop_order' ) return null;
+        $owner = strtolower( (string) $order->get_billing_email() );
+        return $owner !== '' && hash_equals( $owner, strtolower( $email ) ) ? $order : null;
+    }
+
+    /**
+     * "Where is my order?": { number, email } → { found, order }. Limited per
+     * visitor, per email and per order number, and a wrong pair always gets the
+     * same answer, so nobody can find out which orders or emails exist.
+     */
+    public static function rest_order( WP_REST_Request $r ) {
+        $help   = self::help_payload();
+        if ( ! $help || empty( $help['order'] ) ) return new WP_Error( 'off', 'Not available.', [ 'status' => 404 ] );
+        $number = mb_substr( preg_replace( '/[^0-9]/', '', (string) $r->get_param( 'number' ) ), 0, 12 );
+        $email  = strtolower( sanitize_email( (string) $r->get_param( 'email' ) ) );
+        if ( self::limited( 'inbox_order', 8, 10 * MINUTE_IN_SECONDS, $email ?: null ) || self::limited( 'inbox_order_n', 12, HOUR_IN_SECONDS, 'n' . $number ) ) return self::too_many();
+        $order  = $number !== '' ? self::order_for( $number, $email ) : null;
+        return rest_ensure_response( $order ? [ 'found' => true, 'order' => self::order_view( $order ) ] : [ 'found' => false ] );
+    }
+
+    /**
+     * "Write to us": { message, topic, email, name, page, product_id, order,
+     * order_email, website (the bot field) } → { ok, k }. k is the key of the new
+     * conversation, so the panel can show it and wait for the answer.
+     */
+    public static function rest_write( WP_REST_Request $r ) {
+        $he   = self::he();
+        $help = self::help_payload();
+        if ( ! $help || empty( $help['write'] ) ) return new WP_Error( 'off', 'Not available.', [ 'status' => 404 ] );
+        // A bot filled the hidden field: it hears "sent" and nothing is kept.
+        if ( (string) $r->get_param( 'website' ) !== '' ) return rest_ensure_response( [ 'ok' => true ] );
+        $user  = is_user_logged_in() ? wp_get_current_user() : null;
+        $email = $user ? strtolower( (string) $user->user_email ) : strtolower( sanitize_email( (string) $r->get_param( 'email' ) ) );
+        if ( ! is_email( $email ) ) return new WP_Error( 'email', $he ? 'צריך כתובת אימייל תקינה כדי שנוכל לענות.' : 'We need a valid email address to answer you.', [ 'status' => 400 ] );
+        $body = self::clean( (string) $r->get_param( 'message' ) );
+        if ( mb_strlen( $body ) < 2 ) return new WP_Error( 'message', $he ? 'כתבו את ההודעה שלכם.' : 'Write your message.', [ 'status' => 400 ] );
+        if ( self::limited( 'inbox_write', 5, 10 * MINUTE_IN_SECONDS, $email ) ) return self::too_many();
+        // The whole store, per day: a flood can't fill the Inbox or the owner's mailbox.
+        $day_key = 'qwoo_inbox_day_' . gmdate( 'Ymd' );
+        $today   = (int) get_transient( $day_key );
+        if ( $today >= self::DAY_CAP ) return new WP_Error( 'busy', $he ? 'לא הצלחנו לקבל את ההודעה כרגע. נסו שוב מאוחר יותר.' : 'We couldn\'t take your message right now. Please try again later.', [ 'status' => 429 ] );
+        set_transient( $day_key, $today + 1, DAY_IN_SECONDS );
+
+        // Only a topic from the owner's list (or the ready-made ones the panel shows).
+        $topic  = mb_substr( sanitize_text_field( (string) $r->get_param( 'topic' ) ), 0, 40 );
+        $topics = $help['topics'] ?: [ 'Before buying', 'An order', 'Returns', 'לפני קנייה', 'הזמנה', 'החזרות' ];
+        if ( ! in_array( $topic, $topics, true ) ) $topic = '';
+        $path = (string) wp_parse_url( '/' . ltrim( (string) $r->get_param( 'page' ), '/' ), PHP_URL_PATH );
+        $product_id = absint( $r->get_param( 'product_id' ) );
+        if ( $product_id && ( get_post_type( $product_id ) !== 'product' || get_post_status( $product_id ) !== 'publish' ) ) $product_id = 0;
+        if ( ! $product_id && preg_match( '#/product/([^/]+)/?$#', $path, $m ) ) {
+            $found = get_page_by_path( sanitize_title( rawurldecode( $m[1] ) ), OBJECT, 'product' );
+            if ( $found && $found->post_status === 'publish' ) $product_id = (int) $found->ID;
+        }
+        // An order is attached only when it is theirs: their account's, or the number with its email.
+        $order_id = 0;
+        $number   = preg_replace( '/[^0-9]/', '', (string) $r->get_param( 'order' ) );
+        if ( $number !== '' && function_exists( 'wc_get_order' ) ) {
+            $order = $user ? wc_get_order( (int) $number ) : self::order_for( $number, strtolower( sanitize_email( (string) $r->get_param( 'order_email' ) ) ) ?: $email );
+            if ( $order instanceof WC_Order && ( ! $user || (int) $order->get_customer_id() === (int) $user->ID || strtolower( (string) $order->get_billing_email() ) === $email ) ) $order_id = (int) $order->get_id();
+        }
+        $name = $user ? trim( $user->first_name . ' ' . $user->last_name ) ?: (string) $user->display_name : (string) $r->get_param( 'name' );
+        $id = self::open( [
+            'email'      => $email,
+            'name'       => mb_substr( sanitize_text_field( $name ), 0, 120 ),
+            'topic'      => $topic,
+            'source'     => 'help',
+            'page'       => mb_substr( sanitize_text_field( rawurldecode( $path ) ), 0, 190 ),
+            'order_id'   => $order_id,
+            'product_id' => $product_id,
+        ], $body );
+        if ( ! $id ) return new WP_Error( 'failed', $he ? 'לא הצלחנו לשמור את ההודעה. נסו שוב.' : 'We couldn\'t save your message. Please try again.', [ 'status' => 500 ] );
+        return rest_ensure_response( [ 'ok' => true, 'k' => self::key( $id, $email ) ] );
+    }
+
+    /** A conversation as the shopper sees it: no notes, no email, nothing about other shoppers. */
+    private static function thread_view( array $conv ): array {
+        global $wpdb;
+        $rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, author, body, created FROM ' . self::messages() . " WHERE conv_id = %d AND author <> 'note' ORDER BY id ASC LIMIT 500", (int) $conv['id'] ), ARRAY_A ) ?: [];
+        return [
+            'k'        => self::key( (int) $conv['id'], (string) $conv['email'] ),
+            'topic'    => (string) $conv['topic'],
+            'status'   => (string) $conv['status'],
+            'order'    => (int) $conv['order_id'] ? (string) $conv['order_id'] : '',
+            'updated'  => strtotime( $conv['updated'] . ' UTC' ),
+            'messages' => array_map( static fn( $m ) => [ 'id' => (int) $m['id'], 'mine' => $m['author'] === 'shopper', 'body' => (string) $m['body'], 'at' => strtotime( $m['created'] . ' UTC' ) ], $rows ),
+        ];
+    }
+
+    /** GET ?k= → the conversation; POST { k, message, website } → the shopper's answer, then the conversation. */
+    public static function rest_thread_json( WP_REST_Request $r ) {
+        global $wpdb;
+        // The open panel asks every few seconds; guessing keys still gets nowhere.
+        if ( self::limited( 'inbox_thread_json', 200, 10 * MINUTE_IN_SECONDS ) ) return self::too_many();
+        $conv = self::conv_by_key( (string) $r->get_param( 'k' ) );
+        if ( ! $conv ) return new WP_Error( 'missing', self::he() ? 'השיחה הזאת כבר לא זמינה.' : 'This conversation isn\'t available any more.', [ 'status' => 404 ] );
+        if ( $r->get_method() === 'POST' && (string) $r->get_param( 'website' ) === '' ) {
+            $body = self::clean( (string) $r->get_param( 'message' ) );
+            if ( $body === '' ) return new WP_Error( 'message', self::he() ? 'כתבו את ההודעה שלכם.' : 'Write your message.', [ 'status' => 400 ] );
+            if ( self::limited( 'inbox_shopper_reply', 8, 10 * MINUTE_IN_SECONDS ) ) return self::too_many();
+            self::add_message( (int) $conv['id'], 'shopper', $body );
+            $wpdb->update( self::conversations(), [ 'status' => 'open', 'unread' => 1 ], [ 'id' => $conv['id'] ] );
+            $conv = self::conv( (int) $conv['id'] );
+            self::tell_owner( $conv, $body, false );
+        }
+        return rest_ensure_response( self::thread_view( $conv ) );
+    }
+
+    /** The signed-in shopper's conversations (newest first) and their last orders, for the Help panel and My account → Messages. */
+    public static function rest_mine() {
+        global $wpdb;
+        $user  = wp_get_current_user();
+        $email = strtolower( (string) $user->user_email );
+        $t     = self::conversations();
+        $since = gmdate( 'Y-m-d H:i:s', time() - self::LINK_DAYS * DAY_IN_SECONDS );
+        $rows  = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE ( user_id = %d OR email = %s ) AND updated > %s ORDER BY updated DESC LIMIT 30", (int) $user->ID, $email, $since ), ARRAY_A ) ?: [];
+        $list  = [];
+        foreach ( $rows as $c ) {
+            $list[] = [
+                'k'       => self::key( (int) $c['id'], (string) $c['email'] ),
+                'topic'   => (string) $c['topic'],
+                'preview' => (string) $c['preview'],
+                'status'  => (string) $c['status'],
+                'answered' => $c['last_author'] === 'owner',
+                'order'   => (int) $c['order_id'] ? (string) $c['order_id'] : '',
+                'updated' => strtotime( $c['updated'] . ' UTC' ),
+            ];
+        }
+        $orders = [];
+        if ( function_exists( 'wc_get_orders' ) ) {
+            foreach ( wc_get_orders( [ 'customer_id' => (int) $user->ID, 'limit' => 5, 'orderby' => 'date', 'order' => 'DESC', 'type' => 'shop_order' ] ) as $order ) $orders[] = self::order_view( $order );
+        }
+        return rest_ensure_response( [ 'conversations' => $list, 'orders' => $orders ] );
     }
 
     public static function rest_thread( WP_REST_Request $r ) {

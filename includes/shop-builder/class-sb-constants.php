@@ -444,6 +444,17 @@ abstract class Shop_Builder_Constants {
                     'help' => 'Shows a moment after the page opens, once the store knows the visitor. Put two versions one after the other: one for the audience, one for everyone except it.' ],
     ];
 
+    /**
+     * "Count clicks as an event": one of the owner's events (Analytics →
+     * Events) counts when a shopper clicks this section or block (a Form
+     * block: when it is sent). The storefront marks the element with the
+     * event's id (class sb-ev-{id}) and one listener on the page does the rest.
+     */
+    const EVENT_FIELDS = [
+            'click_event' => [ 'type' => 'event', 'label' => 'Count Clicks As An Event', 'tab' => 'advanced', 'group' => 'Events', 'default' => '',
+                    'help' => 'Analytics → Events. Make an event that starts with "A button or block you choose", then pick it here. On a Form block it counts when the form is sent.' ],
+    ];
+
     /* ------------------------------------------------------------------
        Container (section) style fields — top-level sections AND nested
        `section` blocks share this exact list.
@@ -509,7 +520,7 @@ abstract class Shop_Builder_Constants {
                     'options' => [ 'visible' => 'Show everything', 'hidden' => 'Cut off what sticks out' ],
                     'help' => 'For items placed partly outside the section. Sticky items inside it keep working.' ],
             'hide_on' => [ 'type' => 'devices', 'label' => 'Hide On', 'tab' => 'advanced' ],
-    ] + self::AUDIENCE_FIELDS + [
+    ] + self::AUDIENCE_FIELDS + self::EVENT_FIELDS + [
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced',
                     'help' => 'Lets a button link to this section with #your-id.' ],
             // Entrance animation of the whole section (blocks have their own: BLOCK_COMMON_FIELDS).
@@ -538,7 +549,7 @@ abstract class Shop_Builder_Constants {
                     'help' => 'Mostly useful when the parent section arranges blocks horizontally.' ],
             'max_width' => [ 'type' => 'length', 'label' => 'Max Width', 'tab' => 'advanced', 'group' => 'Size', 'responsive' => true, 'placeholder' => 'e.g. 640px' ],
             'hide_on' => [ 'type' => 'devices', 'label' => 'Hide On', 'tab' => 'advanced', 'group' => 'Visibility' ],
-    ] + self::AUDIENCE_FIELDS + [
+    ] + self::AUDIENCE_FIELDS + self::EVENT_FIELDS + [
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced', 'group' => 'Visibility' ],
             // Entrance animation: this block, once, when it scrolls into view (sections: SECTION_STYLE_FIELDS).
             'animation' => [ 'type' => 'select', 'label' => 'Entrance Animation', 'tab' => 'advanced', 'group' => 'Animation', 'default' => 'none',

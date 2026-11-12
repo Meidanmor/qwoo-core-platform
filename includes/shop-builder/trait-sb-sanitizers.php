@@ -245,6 +245,11 @@ trait SB_Sanitizers {
                 $value = sanitize_key( is_scalar( $value ) ? (string) $value : '' );
                 return class_exists( 'Qwoo_Personalization' ) && Qwoo_Personalization::exists( $value ) ? $value : '';
 
+            case 'event':
+                // Analytics → Events: one of the owner's events that still exists ('' = none).
+                $value = is_scalar( $value ) ? (string) $value : '';
+                return class_exists( 'Qwoo_Events' ) && Qwoo_Events::exists( $value ) ? $value : '';
+
             case 'coupon':
                 // A discount code (Marketing → Discounts); WooCommerce checks it again in the cart.
                 return mb_substr( sanitize_text_field( is_scalar( $value ) ? (string) $value : '' ), 0, 50 );

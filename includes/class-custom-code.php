@@ -275,6 +275,11 @@ class Qwoo_Custom_Code {
             'shortcuts' => $active,
             // Analytics → Events: per shop event, the tools the owner turned off ({ event: [ tool ] }).
             'events_off' => class_exists( 'Qwoo_Events' ) ? (object) Qwoo_Events::payload() : (object) [],
+            // The owner's own events (what starts each one, and the tools it goes to).
+            'events'     => class_exists( 'Qwoo_Events' ) ? Qwoo_Events::own_payload() : [],
+            'currency'   => function_exists( 'get_woocommerce_currency' ) ? (string) get_woocommerce_currency() : '',
+            // Customers → Inbox → Settings: the storefront's Help button (null = off).
+            'help'       => class_exists( 'Qwoo_Inbox' ) ? Qwoo_Inbox::help_payload() : null,
             'csp'       => array_map( 'array_keys', $csp ),
             'eval'      => ! empty( $v['allow_eval'] ),
             'test'      => ! empty( $v['test_key'] ) ? hash( 'sha256', (string) $v['test_key'] ) : '',

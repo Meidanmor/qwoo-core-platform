@@ -93,6 +93,8 @@ trait SB_Platform {
                 'audiences'        => class_exists( 'Qwoo_Personalization' ) ? array_map( static fn( $a ) => [ 'id' => $a['id'], 'name' => $a['name'] ], Qwoo_Personalization::audiences() ) : [],
                 'audiences_state'  => class_exists( 'Qwoo_Personalization' ) ? [ 'enabled' => Qwoo_Personalization::enabled(), 'allowed' => Qwoo_Personalization::plan_allows() ] : [ 'enabled' => false, 'allowed' => false ],
                 'coupons'          => self::coupon_choices(),
+                // Analytics → Events: the owner's own events that start with a click on a block.
+                'events'           => class_exists( 'Qwoo_Events' ) ? array_values( array_map( static fn( $e ) => [ 'id' => $e['id'], 'name' => $e['name'], 'start' => (string) ( $e['start']['type'] ?? '' ) ], Qwoo_Events::own() ) ) : [],
                 'max_popups'       => self::MAX_POPUPS,
                 'chrome_targets'   => self::CHROME_TARGETS,
                 'padding_presets'  => self::SECTION_PADDING_PRESETS,
