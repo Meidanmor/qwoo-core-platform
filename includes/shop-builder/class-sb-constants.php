@@ -93,7 +93,7 @@ abstract class Shop_Builder_Constants {
     const ALIGN_OPTIONS = [ 'default' => 'Default', 'left' => 'Left', 'center' => 'Center', 'right' => 'Right' ];
 
     // Shown under cart buttons' text: what products with no price get is a store setting, not the block's.
-    const ZERO_PRICE_LINK = [ 'href' => '#/settings/general', 'label' => 'Products with no price: choose what they show instead (Settings → General)' ];
+    const ZERO_PRICE_LINK = [ 'href' => '#/products/settings', 'label' => 'Products with no price: choose what they show instead (Products → Product settings)' ];
     const BACK_FORM_LINK  = [ 'href' => '#/notifications/settings', 'label' => 'Turn the form on or off (Notifications → Settings)' ];
 
     const FLEX_DIRECTION_OPTIONS = [
