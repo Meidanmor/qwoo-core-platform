@@ -268,6 +268,12 @@ trait SB_Forms {
             error_log( 'Qwoo: failed to store form entry — ' . $post_id->get_error_message() );
         }
 
+        // "Collect in your Inbox": the message becomes a conversation the owner answers from the dashboard
+        // (Customers → Inbox), who is told on their phone and by email there. It needs the shopper's email.
+        if ( $form_type !== 'newsletter' && ! empty( $data['to_inbox'] ) && $reply_to && class_exists( 'Qwoo_Inbox' ) && Qwoo_Inbox::from_form( $clean, $reply_to, $page, $data ) ) {
+            return rest_ensure_response( [ 'success' => true, 'message' => $success_message ] );
+        }
+
         if ( $form_type !== 'newsletter' ) {
             $to      = is_email( $data['recipient_email'] ?? '' ) ? $data['recipient_email'] : get_option( 'admin_email' );
             $subject = ( $data['email_subject'] ?? '' ) ?: Qwoo_I18n::t( 'New form submission' );

@@ -1051,6 +1051,7 @@ abstract class Shop_Builder_Constants {
                     'category' => 'interactive',
                     'icon'   => 'feedback',
                     'summary' => 'form_type',
+                    'start'  => [ 'data' => [ 'to_inbox' => true ] ],
                     'fields' => [
                             'form_type' => [ 'type' => 'select', 'label' => 'Form Type', 'tab' => 'content', 'default' => 'newsletter',
                                     'options' => [ 'newsletter' => 'Newsletter signup', 'contact' => 'Contact form', 'custom' => 'Custom fields' ] ],
@@ -1072,6 +1073,11 @@ abstract class Shop_Builder_Constants {
                                     'help' => 'Leave empty to use the site admin email. Never published to the storefront.',
                                     'show_if' => [ 'form_type' => [ 'contact', 'custom' ] ] ],
                             'email_subject' => [ 'type' => 'text', 'label' => 'Email Subject', 'tab' => 'content', 'private' => true, 'default' => 'New form submission',
+                                    'show_if' => [ 'form_type' => [ 'contact', 'custom' ] ] ],
+                            // On: a message becomes a conversation in the dashboard's Inbox (Qwoo_Inbox) instead of a plain email.
+                            // Off on forms saved before it (they keep emailing); new forms start with it on (`start`).
+                            'to_inbox' => [ 'type' => 'toggle', 'label' => 'Collect In Your Inbox', 'tab' => 'content', 'private' => true,
+                                    'help' => 'Messages arrive in Customers → Inbox in your dashboard, where you answer them, instead of a plain email. The form needs an Email field.',
                                     'show_if' => [ 'form_type' => [ 'contact', 'custom' ] ] ],
                             'submit_text' => [ 'type' => 'text', 'label' => 'Submit Button Text', 'tab' => 'content', 'default' => 'Submit' ],
                             'success_message' => [ 'type' => 'text', 'label' => 'Success Message', 'tab' => 'content', 'default' => 'Thanks! We got your message.' ],

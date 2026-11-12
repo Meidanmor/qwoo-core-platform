@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *               (paid card orders, cash on delivery, bank transfer); once per
  *               order (meta _qwoo_owner_alerted)
  *   review      a shopper's review saved (Qwoo_Reviews::rest_submit)
+ *   message     a shopper wrote to the store, or answered (Qwoo_Inbox)
  *   low stock   WooCommerce's own low / no stock notice (the product's
  *               threshold, else the store's), only when an order took the
  *               stock: the owner's own stock edits don't alert
@@ -78,6 +79,19 @@ class Qwoo_Owner_Alerts {
             'product_id' => (int) $product->get_id(),
             'product'    => wp_strip_all_tags( $product->get_name() ),
             'rating'     => (int) $rating,
+        ] );
+    }
+
+    /** A shopper's message reached the Inbox (a new conversation, or a reply). */
+    public static function message( $conversation_id, $from, $text ) {
+        if ( self::$muted ) {
+            return;
+        }
+        self::add( [
+            'type' => 'message',
+            'id'   => (int) $conversation_id,
+            'from' => mb_substr( wp_strip_all_tags( (string) $from ), 0, 80 ),
+            'text' => mb_substr( preg_replace( '/\s+/', ' ', wp_strip_all_tags( (string) $text ) ), 0, 140 ),
         ] );
     }
 

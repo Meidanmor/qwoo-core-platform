@@ -47,6 +47,24 @@ trait Qwoo_Platform_Growth {
                 Qwoo_Personalization::clear_all();
                 return [ 'ok' => true ];
 
+            /* Customers → Inbox: shoppers' messages (Qwoo_Inbox). */
+            case 'inbox_list':
+                return Qwoo_Inbox::listing( $p );
+            case 'inbox_count':
+                return Qwoo_Inbox::counts();
+            case 'inbox_get':
+                return Qwoo_Inbox::get( $id );
+            case 'inbox_reply':
+                return Qwoo_Inbox::reply( $p );
+            case 'inbox_note':
+                return Qwoo_Inbox::note( $p );
+            case 'inbox_status':
+                return Qwoo_Inbox::set_status( $p );
+            case 'inbox_settings':
+                return Qwoo_Inbox::settings();
+            case 'inbox_settings_save':
+                return Qwoo_Inbox::save_settings( $p );
+
             /* Subscribers */
             case 'subscribers':
                 return Qwoo_Email_Marketing::subscribers( $p ) + [ 'counts' => Qwoo_Email_Marketing::counts() ];
