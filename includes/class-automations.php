@@ -119,10 +119,69 @@ class Qwoo_Automations {
     }
 
     /** One rule per kind of check. */
+    /**
+     * What a rule can check ("Only continue if"). The order ones look at the
+     * order that started the automation, or the cart of a checkout that was
+     * left; with neither, they don't pass.
+     */
+    const CHECKS = [
+        'first_order', 'order_over', 'order_under', 'not_ordered_since',
+        'order_has_product', 'order_has_category', 'coupon_used', 'shipping_method', 'country',
+        'orders_count', 'spent_total', 'subscribed', 'in_audience', 'has_account',
+    ];
+
     private static function add_rule( array &$rules, array $raw ) {
         $check = (string) ( $raw['check'] ?? '' );
-        if ( ! in_array( $check, [ 'first_order', 'order_over', 'not_ordered_since' ], true ) || isset( $rules[ $check ] ) ) return;
-        $rules[ $check ] = [ 'check' => $check, 'amount' => max( 0, (float) ( $raw['amount'] ?? 0 ) ) ];
+        if ( ! in_array( $check, self::CHECKS, true ) || isset( $rules[ $check ] ) ) return;
+        $rule = [ 'check' => $check, 'amount' => max( 0, (float) ( $raw['amount'] ?? 0 ) ) ];
+        $yes  = ! array_key_exists( 'is', $raw ) || ! empty( $raw['is'] );
+        switch ( $check ) {
+            case 'order_has_product':
+            case 'order_has_category':
+                $rule['ids'] = array_slice( array_values( array_unique( array_filter( array_map( 'absint', (array) ( $raw['ids'] ?? [] ) ) ) ) ), 0, 20 );
+                // The names the owner picked, to show the rule again (the check uses the ids).
+                $rule['names'] = array_slice( array_map( static fn( $n ) => mb_substr( sanitize_text_field( is_scalar( $n ) ? (string) $n : '' ), 0, 80 ), array_values( (array) ( $raw['names'] ?? [] ) ) ), 0, 20 );
+                if ( ! $rule['ids'] ) return;
+                break;
+            case 'coupon_used':
+                $rule['code'] = mb_substr( wc_format_coupon_code( (string) ( $raw['code'] ?? '' ) ), 0, 60 ); // '' = any code
+                break;
+            case 'shipping_method':
+                $rule['method'] = sanitize_key( (string) ( $raw['method'] ?? '' ) );
+                if ( $rule['method'] === '' ) return;
+                break;
+            case 'country':
+                $codes = array_map( static fn( $c ) => strtoupper( preg_replace( '/[^a-zA-Z]/', '', is_scalar( $c ) ? (string) $c : '' ) ), (array) ( $raw['countries'] ?? [] ) );
+                $rule['countries'] = array_slice( array_values( array_unique( array_filter( $codes, static fn( $c ) => strlen( $c ) === 2 ) ) ), 0, 60 );
+                if ( ! $rule['countries'] ) return;
+                break;
+            case 'orders_count':
+                $rule['op'] = ( $raw['op'] ?? '' ) === 'max' ? 'max' : 'min';
+                $rule['n']  = min( 1000, max( 0, (int) ( $raw['n'] ?? 1 ) ) );
+                break;
+            case 'spent_total':
+                $rule['op'] = ( $raw['op'] ?? '' ) === 'max' ? 'max' : 'min';
+                break;
+            case 'subscribed':
+            case 'has_account':
+                $rule['is'] = $yes;
+                break;
+            case 'in_audience':
+                $rule['audience_id'] = sanitize_key( (string) ( $raw['audience_id'] ?? '' ) );
+                $rule['is']          = $yes;
+                if ( ! Qwoo_Personalization::exists( $rule['audience_id'] ) ) return;
+                break;
+        }
+        $rules[ $check ] = $rule;
+    }
+
+    /** What the editor's rule fields choose from: countries and the store's shipping method kinds. */
+    public static function rule_choices(): array {
+        $methods = [];
+        foreach ( WC()->shipping() ? WC()->shipping()->get_shipping_methods() : [] as $method ) {
+            $methods[] = [ 'id' => (string) $method->id, 'name' => html_entity_decode( wp_strip_all_tags( (string) $method->get_method_title() ), ENT_QUOTES ) ];
+        }
+        return [ 'countries' => WC()->countries->get_countries(), 'shipping_methods' => $methods ];
     }
 
     public static function save( array $in ) {
@@ -366,13 +425,61 @@ class Qwoo_Automations {
 
     private static function passes( array $step, array $row ): bool {
         global $wpdb;
-        $o = Qwoo_Analytics::orders_table();
+        $o     = Qwoo_Analytics::orders_table();
+        $order = (int) $row['order_id'] ? wc_get_order( (int) $row['order_id'] ) : null;
+        $email = strtolower( (string) $row['email'] );
+        $is    = ! array_key_exists( 'is', $step ) || ! empty( $step['is'] );
         switch ( $step['check'] ) {
             case 'first_order':
                 return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $o WHERE paid = 1 AND email = %s", $row['email'] ) ) <= 1;
             case 'order_over':
-                $order = (int) $row['order_id'] ? wc_get_order( (int) $row['order_id'] ) : null;
                 return $order && (float) $order->get_total() >= (float) $step['amount'];
+            case 'order_under':
+                return $order && (float) $order->get_total() <= (float) $step['amount'];
+            case 'order_has_product':
+            case 'order_has_category':
+                if ( ! $order ) return false;
+                $ids = array_map( 'intval', (array) ( $step['ids'] ?? [] ) );
+                foreach ( $order->get_items() as $item ) {
+                    $product_id = (int) $item->get_product_id();
+                    if ( $step['check'] === 'order_has_product' ) {
+                        if ( in_array( $product_id, $ids, true ) || in_array( (int) $item->get_variation_id(), $ids, true ) ) return true;
+                        continue;
+                    }
+                    // A product in a sub category counts for its parent categories too.
+                    foreach ( wc_get_product_term_ids( $product_id, 'product_cat' ) as $cat ) {
+                        if ( array_intersect( array_merge( [ (int) $cat ], array_map( 'intval', get_ancestors( (int) $cat, 'product_cat' ) ) ), $ids ) ) return true;
+                    }
+                }
+                return false;
+            case 'coupon_used':
+                if ( ! $order ) return false;
+                $codes = array_map( 'wc_format_coupon_code', $order->get_coupon_codes() );
+                return ( $step['code'] ?? '' ) === '' ? (bool) $codes : in_array( (string) $step['code'], $codes, true );
+            case 'shipping_method':
+                foreach ( $order ? $order->get_shipping_methods() : [] as $method ) {
+                    if ( $method->get_method_id() === ( $step['method'] ?? '' ) ) return true;
+                }
+                return false;
+            case 'country':
+                $country = $order ? ( $order->get_shipping_country() ?: $order->get_billing_country() ) : '';
+                if ( $country === '' && ( $user = get_user_by( 'email', $email ) ) ) {
+                    $country = (string) ( get_user_meta( $user->ID, 'shipping_country', true ) ?: get_user_meta( $user->ID, 'billing_country', true ) );
+                }
+                return $country !== '' && in_array( strtoupper( $country ), (array) ( $step['countries'] ?? [] ), true );
+            case 'orders_count':
+                $n = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $o WHERE paid = 1 AND email = %s", $email ) );
+                return ( $step['op'] ?? 'min' ) === 'max' ? $n <= (int) ( $step['n'] ?? 0 ) : $n >= (int) ( $step['n'] ?? 0 );
+            case 'spent_total':
+                $spent = (float) $wpdb->get_var( $wpdb->prepare( "SELECT SUM(total - refunded) FROM $o WHERE paid = 1 AND email = %s", $email ) );
+                return ( $step['op'] ?? 'min' ) === 'max' ? $spent <= (float) $step['amount'] : $spent >= (float) $step['amount'];
+            case 'subscribed':
+                $status = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM ' . Qwoo_Email_Marketing::subs_table() . ' WHERE email = %s', $email ) );
+                return ( $status === 'sub' ) === $is;
+            case 'has_account':
+                return (bool) get_user_by( 'email', $email ) === $is;
+            case 'in_audience':
+                return (bool) Qwoo_Personalization::audience_for_email( (string) ( $step['audience_id'] ?? '' ), $email ) === $is;
             case 'not_ordered_since':
                 $since = wp_date( 'Y-m-d', strtotime( $row['created'] . ' UTC' ), wp_timezone() );
                 $found = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $o WHERE paid = 1 AND email = %s AND day >= %s AND order_id <> %d", $row['email'], $since, (int) $row['order_id'] ) );

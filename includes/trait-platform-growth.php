@@ -47,6 +47,12 @@ trait Qwoo_Platform_Growth {
                 Qwoo_Personalization::clear_all();
                 return [ 'ok' => true ];
 
+            /* Analytics → Events: which tracking tools hear each shop event (Qwoo_Events). */
+            case 'events_get':
+                return Qwoo_Events::state();
+            case 'events_save':
+                return Qwoo_Events::save( $p );
+
             /* Customers → Inbox: shoppers' messages (Qwoo_Inbox). */
             case 'inbox_list':
                 return Qwoo_Inbox::listing( $p );
@@ -159,7 +165,7 @@ trait Qwoo_Platform_Growth {
             case 'flow_test':
                 return Qwoo_Automations::test( sanitize_key( (string) ( $p['id'] ?? '' ) ), (string) ( $p['to'] ?? '' ) );
             case 'flows':
-                return [ 'flows' => Qwoo_Automations::overview(), 'allowed' => Qwoo_Automations::allowed(), 'statuses' => array_keys( wc_get_order_statuses() ), 'audiences' => Qwoo_Personalization::audiences(), 'categories' => Qwoo_Personalization::categories() ];
+                return [ 'flows' => Qwoo_Automations::overview(), 'allowed' => Qwoo_Automations::allowed(), 'statuses' => array_keys( wc_get_order_statuses() ), 'audiences' => Qwoo_Personalization::audiences(), 'categories' => Qwoo_Personalization::categories() ] + Qwoo_Automations::rule_choices();
             case 'flow_save':
                 return Qwoo_Automations::save( $p );
             case 'flow_delete':

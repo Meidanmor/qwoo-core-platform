@@ -273,6 +273,8 @@ class Qwoo_Custom_Code {
             'audiences' => class_exists( 'Qwoo_Personalization' ) && Qwoo_Personalization::active(),
             'snippets'  => $list,
             'shortcuts' => $active,
+            // Analytics → Events: per shop event, the tools the owner turned off ({ event: [ tool ] }).
+            'events_off' => class_exists( 'Qwoo_Events' ) ? (object) Qwoo_Events::payload() : (object) [],
             'csp'       => array_map( 'array_keys', $csp ),
             'eval'      => ! empty( $v['allow_eval'] ),
             'test'      => ! empty( $v['test_key'] ) ? hash( 'sha256', (string) $v['test_key'] ) : '',
