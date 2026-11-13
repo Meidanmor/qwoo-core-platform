@@ -19,7 +19,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class Qwoo_Analytics {
 
-    const FILL_OPTION = 'qwoo_analytics_fill'; // the next page of old orders to copy, 0 when done
+    const FILL_OPTION = 'qwoo_analytics_fill'; // missing = not started, 0 = done, anything else = copying
+    const FILL_CURSOR = 'qwoo_analytics_fill_cursor'; // { at: copy orders made at or before this time, done, total }
     const FILL_BATCH  = 100;
     const MAX_DAYS    = 732;
 
@@ -156,34 +157,57 @@ class Qwoo_Analytics {
         }
     }
 
-    /** Copies a batch of older orders. Returns how far it got, 0–100 (100 = done). */
+    /**
+     * Copies a batch of older orders, newest first, so the periods owners look at (this one and the one before)
+     * are whole first. Copying oldest first left the current period short on big stores, so "vs previous" read low.
+     * Returns how far it got, 0–100 (100 = done).
+     */
     public static function fill(): int {
-        $page = get_option( self::FILL_OPTION, null );
-        if ( $page === null ) {
-            $page = 1;
-            add_option( self::FILL_OPTION, 1, '', false );
+        $state = get_option( self::FILL_OPTION, null );
+        if ( $state !== null && (int) $state <= 0 ) return 100;
+        $cursor = get_option( self::FILL_CURSOR, null );
+        if ( $state === null || ! is_array( $cursor ) ) {
+            // A new copy, or one started by the older oldest-first code: start again from now (copying twice is harmless).
+            $count  = wc_get_orders( [ 'type' => 'shop_order', 'status' => array_keys( wc_get_order_statuses() ), 'limit' => 1, 'return' => 'ids', 'paginate' => true ] );
+            $cursor = [ 'at' => time() + 60, 'done' => 0, 'total' => (int) $count->total ];
+            update_option( self::FILL_OPTION, 1, false );
         }
-        $page = (int) $page;
-        if ( $page <= 0 ) return 100;
-        $result = wc_get_orders( [
-            'type'     => 'shop_order',
-            'status'   => array_keys( wc_get_order_statuses() ),
-            'limit'    => self::FILL_BATCH,
-            'paged'    => $page,
-            'orderby'  => 'ID',
-            'order'    => 'ASC',
-            'return'   => 'ids',
-            'paginate' => true,
+        $ids = wc_get_orders( [
+            'type'         => 'shop_order',
+            'status'       => array_keys( wc_get_order_statuses() ),
+            'limit'        => self::FILL_BATCH,
+            'date_created' => '<=' . (int) $cursor['at'],
+            'orderby'      => 'date',
+            'order'        => 'DESC',
+            'return'       => 'ids',
         ] );
-        foreach ( $result->orders as $id ) {
+        $oldest = null;
+        foreach ( $ids as $id ) {
             self::sync_order( (int) $id );
+            $order   = wc_get_order( $id );
+            $created = $order ? $order->get_date_created() : null;
+            if ( $created ) $oldest = $created->getTimestamp();
         }
-        if ( $page >= (int) $result->max_num_pages ) {
+        if ( count( $ids ) < self::FILL_BATCH || $oldest === null ) {
             update_option( self::FILL_OPTION, 0, false );
+            delete_option( self::FILL_CURSOR );
             return 100;
         }
-        update_option( self::FILL_OPTION, $page + 1, false );
-        return (int) floor( $page / max( 1, (int) $result->max_num_pages ) * 99 );
+        // Next batch: orders made at or before the oldest one here (the same second may hold more of them).
+        // A whole batch inside one second moves on a second, so the copy can't loop.
+        $cursor['at']   = $oldest < (int) $cursor['at'] ? $oldest : (int) $cursor['at'] - 1;
+        $cursor['done'] = (int) $cursor['done'] + count( $ids );
+        update_option( self::FILL_CURSOR, $cursor, false );
+        return (int) min( 99, floor( $cursor['done'] / max( 1, (int) $cursor['total'] ) * 99 ) );
+    }
+
+    /** True when every order made on or after this day (store time) is copied. */
+    private static function copied_since( string $day ): bool {
+        if ( (int) get_option( self::FILL_OPTION, 1 ) <= 0 ) return true;
+        $cursor = get_option( self::FILL_CURSOR, null );
+        if ( ! is_array( $cursor ) ) return false;
+        $start = new DateTimeImmutable( $day, wp_timezone() );
+        return (int) $cursor['at'] < $start->getTimestamp();
     }
 
     /* ---------------- the report ---------------- */
@@ -290,6 +314,8 @@ class Qwoo_Analytics {
 
         return [
             'filling'   => $filling,
+            // While older orders are still being copied, a period that isn't whole yet would make "vs previous" wrong.
+            'ready'     => [ 'current' => $filling >= 100 || self::copied_since( $p['from'] ), 'previous' => $filling >= 100 || self::copied_since( $p['prev_from'] ) ],
             'period'    => $p,
             'currency'  => get_woocommerce_currency(),
             'timezone'  => wp_timezone_string(),

@@ -284,6 +284,7 @@ abstract class Shop_Builder_Constants {
                     'options' => [ 'center' => 'Middle of the screen', 'top' => 'Top', 'bottom' => 'Bottom', 'left' => 'Left side', 'right' => 'Right side' ] ],
             'full_screen' => [ 'type' => 'toggle', 'label' => 'Cover the whole screen', 'group' => 'Look' ],
             'width'       => [ 'type' => 'length', 'label' => 'Width', 'group' => 'Look', 'responsive' => true, 'placeholder' => '560px' ],
+            'max_width'   => [ 'type' => 'length', 'label' => 'Max Width', 'group' => 'Look', 'responsive' => true, 'placeholder' => '100%', 'help' => 'The popup never gets wider than this, e.g. 90vw on phones.' ],
             'radius'      => [ 'type' => 'length', 'label' => 'Corner Radius', 'group' => 'Look', 'placeholder' => '16px' ],
             'bg'          => [ 'type' => 'color', 'label' => 'Background', 'group' => 'Look' ],
             'backdrop'    => [ 'type' => 'select', 'label' => 'Behind the Popup', 'group' => 'Look', 'default' => 'dim',
