@@ -46,6 +46,8 @@ class Qwoo_Appointments_Shop {
         // The hidden products behind paid services stay out of product lists and search.
         add_filter( 'rest_request_before_callbacks', [ __CLASS__, 'mark_product_list' ], 10, 3 );
         add_action( 'pre_get_posts', [ __CLASS__, 'hide_from_lists' ] );
+        // A service shown as a product: grids say "Book" and open its page (the Booking calendar there).
+        add_filter( 'woocommerce_product_has_options', static fn( $has, $product = null ) => $has || ( $product instanceof WC_Product && self::is_booking_product( $product ) ), 10, 2 );
     }
 
     private static function l( string $en, string $he ): string { return Qwoo_Appointments::l( $en, $he ); }
@@ -298,6 +300,17 @@ class Qwoo_Appointments_Shop {
             'data_callback'   => [ __CLASS__, 'cart_item_ext' ],
             'schema_callback' => static fn() => [],
         ] );
+        // Products that are services: the storefront draws the Booking calendar for them.
+        woocommerce_store_api_register_endpoint_data( [
+            'endpoint'        => \Automattic\WooCommerce\StoreApi\Schemas\V1\ProductSchema::IDENTIFIER,
+            'namespace'       => 'qwoo_booking',
+            'data_callback'   => static function ( $product ) {
+                if ( ! $product instanceof WC_Product || ! self::is_booking_product( $product ) ) return [];
+                $svc = Qwoo_Appointments::service_of_product( $product->get_id() );
+                return $svc ? [ 'service_id' => (int) $svc['id'], 'duration' => (int) $svc['duration'], 'pay' => $svc['pay'] ] : [];
+            },
+            'schema_callback' => static fn() => [],
+        ] );
     }
 
     public static function cart_item_ext( $item ): array {
@@ -450,7 +463,7 @@ class Qwoo_Appointments_Shop {
         if ( $type !== 'product' && ! in_array( 'product', (array) $type, true ) ) return;
         // Product lists and searches on the storefront (the Store API), never a product asked for by id.
         if ( ! self::$listing && ! ( $query->is_search() && ! is_admin() ) ) return;
-        $hidden = Qwoo_Appointments::product_ids();
+        $hidden = Qwoo_Appointments::hidden_product_ids();
         if ( $hidden ) $query->set( 'post__not_in', array_merge( (array) $query->get( 'post__not_in' ), $hidden ) );
     }
 }

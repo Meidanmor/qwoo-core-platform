@@ -39,6 +39,7 @@ class Qwoo_Appointments {
     const BUSY_GEN    = 'qwoo_appt_busy_gen'; // bumped when Google says something changed
     const BUSY_TTL    = 120;
     const PRODUCTS    = 'qwoo_appt_products';
+    const LISTED      = 'qwoo_appt_listed'; // service products shown in the shop
     const LOCK        = 'qwoo_appt_lock';
     const FEATURE     = 'appointments';
     const UNIT        = 300; // 5 minutes
@@ -382,6 +383,9 @@ class Qwoo_Appointments {
             'times'         => [ 'mode' => ( $times['mode'] ?? '' ) === 'fixed' ? 'fixed' : 'step', 'fixed' => $fixed ],
             'rules'         => $own,
             'questions'     => $questions,
+            // Also a product in the shop (grids, search, its own page), in these categories.
+            'in_shop'       => ! array_key_exists( 'in_shop', $in ) ? (bool) ( $old['in_shop'] ?? false ) : ! empty( $in['in_shop'] ),
+            'shop_categories' => array_slice( array_values( array_filter( array_map( 'absint', (array) $g( 'shop_categories', [] ) ) ) ), 0, 20 ),
         ];
     }
 
@@ -449,6 +453,7 @@ class Qwoo_Appointments {
         if ( $future ) return new WP_Error( 'busy', sprintf( 'This service has %d upcoming bookings. Cancel or move them first, or turn the service off.', $future ) );
         if ( $svc['product_id'] ) wp_trash_post( $svc['product_id'] );
         self::forget_product( (int) $svc['product_id'] );
+        update_option( self::LISTED, array_values( array_diff( array_map( 'intval', (array) get_option( self::LISTED, [] ) ), [ (int) $svc['product_id'] ] ) ), false );
         $wpdb->delete( self::services_table(), [ 'id' => $id ] );
         return [ 'ok' => true ];
     }
@@ -472,26 +477,38 @@ class Qwoo_Appointments {
         update_option( self::PRODUCTS, array_values( array_diff( self::product_ids(), [ $id ] ) ), false );
     }
 
-    /** A paid service gets a hidden virtual product named after it (the cart line); one that stops being paid keeps it, unused. */
+    /**
+     * A paid service gets a hidden virtual product named after it (the cart line); one that
+     * stops being paid keeps it, unused. "Show in the shop" makes that product a visible one
+     * (product grids, search, its own page with the Booking calendar in Add to Cart's place),
+     * with the service's description, photo, price and chosen categories.
+     */
     private static function sync_product( ?array $svc ): void {
         if ( ! $svc || ! function_exists( 'wc_get_product' ) ) return;
         $paid    = in_array( $svc['pay'], [ 'full', 'deposit' ], true );
+        $shown   = ! empty( $svc['in_shop'] ) && $svc['status'] !== 'off';
         $product = $svc['product_id'] ? wc_get_product( $svc['product_id'] ) : null;
-        if ( ! $paid && ! $product ) return;
+        if ( ! $paid && ! $shown && ! $product ) return;
         if ( ! $product || $product->get_status() === 'trash' ) {
             $product = new WC_Product_Simple();
         }
         $product->set_name( $svc['name'] );
         $product->set_status( 'publish' );
-        $product->set_catalog_visibility( 'hidden' );
+        $product->set_catalog_visibility( $shown && $svc['status'] === 'active' ? 'visible' : 'hidden' );
+        if ( $shown ) {
+            $product->set_description( wpautop( esc_html( $svc['description'] ) ) );
+            $product->set_short_description( '' );
+        }
         $product->set_virtual( true );
         $product->set_sold_individually( true );
         $product->set_manage_stock( false );
         $product->set_stock_status( 'instock' );
         $product->set_tax_status( 'taxable' );
-        $product->set_regular_price( (string) $svc['price'] );
-        $product->set_price( (string) $svc['price'] );
-        $product->set_reviews_allowed( false );
+        // A free service shows no price (it's never bought through the cart).
+        $price = (float) $svc['price'] > 0 ? (string) $svc['price'] : '';
+        $product->set_regular_price( $price );
+        $product->set_price( $price );
+        $product->set_reviews_allowed( $shown );
         $product->update_meta_data( '_qwoo_appt_service', (int) $svc['id'] );
         if ( $svc['image'] ) $product->set_image_id( (int) $svc['image'] );
         $pid = (int) $product->save();
@@ -499,9 +516,17 @@ class Qwoo_Appointments {
             global $wpdb;
             $wpdb->update( self::services_table(), [ 'product_id' => $pid ], [ 'id' => (int) $svc['id'] ] );
         }
-        // A booking product has no category (WooCommerce puts "Uncategorized" on every save).
-        if ( $pid ) wp_set_object_terms( $pid, [], 'product_cat' );
+        // Categories: the chosen ones when shown in the shop, else none (WooCommerce puts "Uncategorized" on every save).
+        if ( $pid ) wp_set_object_terms( $pid, $shown ? array_values( array_filter( array_map( 'absint', (array) ( $svc['shop_categories'] ?? [] ) ), static fn( $t ) => term_exists( $t, 'product_cat' ) ) ) : [], 'product_cat' );
         if ( $pid && ! in_array( $pid, self::product_ids(), true ) ) update_option( self::PRODUCTS, array_merge( self::product_ids(), [ $pid ] ), false );
+        $listed = array_values( array_diff( (array) get_option( self::LISTED, [] ), [ $pid ] ) );
+        if ( $pid && $shown && $svc['status'] === 'active' ) $listed[] = $pid;
+        update_option( self::LISTED, array_map( 'intval', $listed ), false );
+    }
+
+    /** The service products kept out of product lists and searches (all but the ones shown in the shop). */
+    public static function hidden_product_ids(): array {
+        return array_values( array_diff( self::product_ids(), array_map( 'intval', (array) get_option( self::LISTED, [] ) ) ) );
     }
 
     public static function service_of_product( int $product_id ): ?array {
@@ -976,7 +1001,7 @@ class Qwoo_Appointments {
         $res = Qwoo_Platform_Connection::post( 'calendar', [ 'do' => 'write', 'staff' => $link, 'event' => self::cal_event( $b, $link ) ], 10 );
         if ( is_array( $res ) && ! empty( $res['event_id'] ) ) {
             $set = [ 'cal_event' => mb_substr( (string) $res['event_id'], 0, 255 ), 'cal_state' => 'ok', 'cal_tries' => 0 ];
-            if ( ! empty( $res['meet'] ) && preg_match( '#^https://meet\.google\.com/#', (string) $res['meet'] ) ) $set['video'] = mb_substr( (string) $res['meet'], 0, 500 );
+            if ( ! empty( $res['meet'] ) && preg_match( '#^https://(meet\.google\.com|teams\.microsoft\.com|teams\.live\.com)/#', (string) $res['meet'] ) ) $set['video'] = mb_substr( (string) $res['meet'], 0, 500 );
             $wpdb->update( self::bookings_table(), $set, [ 'id' => $id ] );
             return;
         }
@@ -1054,6 +1079,11 @@ class Qwoo_Appointments {
         $flagged = 0;
         foreach ( array_slice( (array) ( $p['events'] ?? [] ), 0, 250 ) as $e ) {
             $b = is_array( $e ) ? self::booking( absint( $e['booking'] ?? 0 ) ) : null;
+            // Outlook can only say which event was deleted (not whose): found by its event id.
+            if ( ! $b && is_array( $e ) && (string) ( $e['event'] ?? '' ) !== '' ) {
+                $row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::bookings_table() . ' WHERE cal_event = %s LIMIT 1', (string) $e['event'] ), ARRAY_A );
+                $b   = $row ?: null;
+            }
             if ( ! $b || ! in_array( $b['status'], [ 'confirmed', 'pending' ], true ) || $b['cal_event'] !== (string) ( $e['event'] ?? '' ) ) continue;
             $flag = '';
             $note = '';
@@ -1883,6 +1913,8 @@ class Qwoo_Appointments {
             'services'  => array_map( [ __CLASS__, 'service_view' ], self::services() ),
             'staff'     => $only ? array_values( array_filter( $staff, static fn( $p ) => $p['id'] === $only ) ) : $staff,
             'staff_limit' => self::staff_limit(),
+            // For "Show in the shop as a product": the store's product categories.
+            'categories' => $only ? [] : array_values( array_map( static fn( $t ) => [ 'id' => (int) $t->term_id, 'name' => html_entity_decode( $t->name, ENT_QUOTES ) ], (array) get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => false, 'number' => 200 ] ) ) ),
             'feed_url'  => $only ? '' : self::feed_url(),
             'calendar'  => self::calendar(),
             'flagged'   => $count( "cal_flag <> '' AND status IN ('confirmed','pending') AND start_utc > %s", $now ),
@@ -2013,7 +2045,7 @@ class Qwoo_Appointments {
         $only = absint( $p['_staff'] ?? 0 );
         if ( $only ) {
             if ( ! self::staff_one( $only ) ) return new WP_Error( 'access', 'Your place on the team was removed. Ask the store owner.' );
-            if ( ! in_array( $op, [ 'appt_state', 'appt_list', 'appt_get', 'appt_times', 'appt_create', 'appt_update', 'appt_staff_save' ], true ) ) {
+            if ( ! in_array( $op, [ 'appt_state', 'appt_list', 'appt_get', 'appt_times', 'appt_create', 'appt_update', 'appt_staff_save', 'appt_insights' ], true ) ) {
                 return new WP_Error( 'access', 'Only the store owner can change this.' );
             }
             $p['staff']    = $only;
@@ -2055,12 +2087,55 @@ class Qwoo_Appointments {
                 return self::owner_create( $p );
             case 'appt_update':
                 return self::owner_update( $p, $only );
+            case 'appt_insights':
+                return self::insights( (int) ( $p['days'] ?? 30 ), $only );
             case 'appt_cal_link':
                 return self::cal_link( $p );
             case 'appt_cal_changed':
                 return self::cal_changed( $p );
         }
         return new WP_Error( 'op', 'Unknown action.' );
+    }
+
+    /**
+     * Appointments → Insights: the last $days days (bookings that started in them): how many,
+     * cancelled, no-shows, takings (price of what took place or is confirmed), per service, per
+     * person, per weekday and hour, and how many customers came back.
+     */
+    public static function insights( int $days, int $only = 0 ): array {
+        global $wpdb;
+        $days = in_array( $days, [ 7, 30, 90, 365 ], true ) ? $days : 30;
+        $from = self::sql_time( time() - $days * DAY_IN_SECONDS );
+        $to   = self::now();
+        $mine = $only ? $wpdb->prepare( ' AND staff_id = %d', $only ) : '';
+        $rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT id, service_id, staff_id, status, start_utc, price, email, seats FROM ' . self::bookings_table() . " WHERE start_utc >= %s AND start_utc < %s AND status IN ('confirmed','done','noshow','cancelled')" . $mine . ' LIMIT 20000', $from, $to ), ARRAY_A );
+        $out  = [ 'days' => $days, 'total' => 0, 'done' => 0, 'cancelled' => 0, 'noshow' => 0, 'takings' => 0.0, 'currency' => get_woocommerce_currency(), 'services' => [], 'staff' => [], 'weekdays' => array_fill( 0, 7, 0 ), 'hours' => array_fill( 0, 24, 0 ), 'customers' => 0, 'returning' => 0 ];
+        $people = [];
+        foreach ( $rows as $r ) {
+            $out['total']++;
+            $st = (string) $r['status'];
+            if ( $st === 'cancelled' ) { $out['cancelled']++; continue; }
+            if ( $st === 'noshow' ) { $out['noshow']++; continue; }
+            $out['done']++;
+            $out['takings'] += (float) $r['price'];
+            $sid = (int) $r['service_id'];
+            $out['services'][ $sid ] = ( $out['services'][ $sid ] ?? 0 ) + 1;
+            if ( (int) $r['staff_id'] ) $out['staff'][ (int) $r['staff_id'] ] = ( $out['staff'][ (int) $r['staff_id'] ] ?? 0 ) + 1;
+            $ts = self::ts( $r['start_utc'] );
+            $out['weekdays'][ (int) wp_date( 'w', $ts ) ]++;
+            $out['hours'][ (int) wp_date( 'G', $ts ) ]++;
+            if ( $r['email'] !== '' ) $people[ strtolower( $r['email'] ) ] = ( $people[ strtolower( $r['email'] ) ] ?? 0 ) + 1;
+        }
+        $out['customers'] = count( $people );
+        $out['returning'] = count( array_filter( $people, static fn( $n ) => $n > 1 ) );
+        $names = [];
+        foreach ( self::services() as $s ) $names[ $s['id'] ] = $s['name'];
+        $out['services'] = array_values( array_map( static fn( $id, $n ) => [ 'id' => $id, 'name' => $names[ $id ] ?? '—', 'count' => $n ], array_keys( $out['services'] ), $out['services'] ) );
+        usort( $out['services'], static fn( $a, $b ) => $b['count'] <=> $a['count'] );
+        $out['staff'] = array_values( array_map( static fn( $id, $n ) => [ 'id' => $id, 'name' => self::staff_one( $id )['name'] ?? '—', 'count' => $n ], array_keys( $out['staff'] ), $out['staff'] ) );
+        usort( $out['staff'], static fn( $a, $b ) => $b['count'] <=> $a['count'] );
+        $out['takings'] = round( $out['takings'], 2 );
+        return $out;
     }
 
     /** A booking as webhooks and automation webhooks send it. */
