@@ -89,6 +89,9 @@ trait Qwoo_Platform_Growth {
             case 'appt_times':
             case 'appt_create':
             case 'appt_update':
+            // From the platform's calendar sync (QP_Calendars): connected or not, and Google's change notices.
+            case 'appt_cal_link':
+            case 'appt_cal_changed':
                 return Qwoo_Appointments::dashboard( $op, $p );
 
             /* Subscribers */

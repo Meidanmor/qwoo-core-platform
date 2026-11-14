@@ -197,7 +197,7 @@ class Qwoo_Appointments_Shop {
             'id' => (int) $b['id'], 'service_id' => (int) $b['service_id'], 'service' => $s ? $s['name'] : '', 'status' => (string) $b['status'],
             'start' => gmdate( 'Y-m-d\TH:i:s\Z', $start ), 'end' => gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $b['end_utc'] . ' UTC' ) ),
             'local' => wp_date( 'Y-m-d H:i', $start ), 'tz' => wp_timezone_string(), 'seats' => (int) $b['seats'], 'place' => (string) $b['place'],
-            'video' => $s && $s['place']['type'] === 'video' && $b['status'] === 'confirmed' ? (string) $s['place']['link'] : '',
+            'video' => $s && $s['place']['type'] === 'video' && $b['status'] === 'confirmed' ? ( (string) $b['video'] ?: (string) $s['place']['link'] ) : '',
             'price' => (float) $b['price'], 'due_now' => (float) $b['due_now'], 'currency' => (string) $b['currency'], 'paid' => (bool) $b['order_id'],
             'name' => (string) $b['name'], 'rows' => $card['rows'],
             'can_cancel' => $on && $in_time, 'can_move' => $on && $in_time && (int) $b['moves'] < $moves && $s && $s['status'] !== 'off',

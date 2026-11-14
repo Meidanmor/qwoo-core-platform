@@ -34,7 +34,10 @@ class Qwoo_Appointments {
 
     const OPTION      = 'qwoo_appt_settings';
     const DB_OPTION   = 'qwoo_appt_db';
-    const DB_VERSION  = '1';
+    const DB_VERSION  = '2';
+    const CALENDAR    = 'qwoo_appt_calendar'; // { connected, provider, email, invite } (the platform sets it)
+    const BUSY_GEN    = 'qwoo_appt_busy_gen'; // bumped when Google says something changed
+    const BUSY_TTL    = 120;
     const PRODUCTS    = 'qwoo_appt_products';
     const LOCK        = 'qwoo_appt_lock';
     const FEATURE     = 'appointments';
@@ -127,6 +130,12 @@ class Qwoo_Appointments {
         moves TINYINT UNSIGNED NOT NULL DEFAULT 0,
         reminded TINYINT UNSIGNED NOT NULL DEFAULT 0,
         source VARCHAR(10) NOT NULL DEFAULT 'store',
+        video VARCHAR(500) NOT NULL DEFAULT '',
+        cal_event VARCHAR(255) NOT NULL DEFAULT '',
+        cal_state VARCHAR(10) NOT NULL DEFAULT '',
+        cal_tries TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        cal_flag VARCHAR(10) NOT NULL DEFAULT '',
+        cal_note VARCHAR(120) NOT NULL DEFAULT '',
         note TEXT NULL,
         log LONGTEXT NULL,
         created DATETIME NOT NULL,
@@ -350,6 +359,8 @@ class Qwoo_Appointments {
                 'type'    => in_array( $place['type'] ?? '', self::PLACES, true ) ? $place['type'] : 'business',
                 'address' => mb_substr( sanitize_text_field( (string) ( $place['address'] ?? '' ) ), 0, 255 ),
                 'link'    => mb_substr( esc_url_raw( (string) ( $place['link'] ?? '' ), [ 'https' ] ), 0, 500 ),
+                // Video calls: a Google Meet link made for each booking (needs Google Calendar connected).
+                'meet'    => ! empty( $place['meet'] ),
                 'note'    => mb_substr( sanitize_text_field( (string) ( $place['note'] ?? '' ) ), 0, 255 ),
             ],
             'times'         => [ 'mode' => ( $times['mode'] ?? '' ) === 'fixed' ? 'fixed' : 'step', 'fixed' => $fixed ],
@@ -581,6 +592,10 @@ class Qwoo_Appointments {
         $u0      = intdiv( $start->getTimestamp() - DAY_IN_SECONDS, self::UNIT );
         $u1      = intdiv( $end->modify( '+2 days' )->getTimestamp(), self::UNIT );
         $taken   = self::taken( $u0, $u1, $exclude, $ex_sess );
+        // The owner's own calendar (Google): its busy times take the same units.
+        foreach ( self::busy( $u0 * self::UNIT, $u1 * self::UNIT, ! empty( $opt['fresh'] ) ) as [ $a, $b ] ) {
+            for ( $u = max( $u0, intdiv( $a, self::UNIT ) ); $u < min( $u1, (int) ceil( $b / self::UNIT ) ); $u++ ) $taken[ $u ] = '';
+        }
         $places  = $svc['capacity'] > 1 ? self::seats_taken( $u0, $u1, $exclude ) : [];
         $per_day = self::day_counts( $start->getTimestamp(), $end->modify( '+1 day' )->getTimestamp(), $exclude );
         $max_day = (int) $s['rules']['max_per_day'];
@@ -645,10 +660,185 @@ class Qwoo_Appointments {
     private static function is_free( array $svc, int $start, array $opt = [] ): bool {
         $date = wp_date( 'Y-m-d', $start );
         $want = gmdate( 'Y-m-d\TH:i:s\Z', $start );
-        foreach ( self::free_times( $svc, $date, $date, $opt )[ $date ] ?? [] as $slot ) {
+        foreach ( self::free_times( $svc, $date, $date, $opt + [ 'fresh' => true ] )[ $date ] ?? [] as $slot ) {
             if ( $slot['start'] === $want ) return true;
         }
         return false;
+    }
+
+    /* ---------------- the owner's calendar (Google, through the platform) ---------------- */
+
+    public static function calendar(): array {
+        $c = get_option( self::CALENDAR, [] );
+        $c = is_array( $c ) ? $c : [];
+        return [ 'connected' => ! empty( $c['connected'] ), 'provider' => (string) ( $c['provider'] ?? '' ), 'email' => (string) ( $c['email'] ?? '' ), 'invite' => ! empty( $c['invite'] ), 'error' => (string) ( $c['error'] ?? '' ) ];
+    }
+
+    private static function calendar_error( string $error ): void {
+        $c = get_option( self::CALENDAR, [] );
+        if ( ! is_array( $c ) || ( $c['error'] ?? '' ) === $error ) return;
+        $c['error'] = $error;
+        update_option( self::CALENDAR, $c, false );
+    }
+
+    /**
+     * Busy times of the owner's calendar between two moments: [ [ start, end ] ] (unix).
+     * Kept for 2 minutes (and dropped when Google says something changed); $fresh asks
+     * again (before a time is held). When the calendar can't be reached, nothing is
+     * busy: bookings still work.
+     */
+    public static function busy( int $from, int $to, bool $fresh = false ): array {
+        if ( ! self::calendar()['connected'] || ! class_exists( 'Qwoo_Platform_Connection' ) ) return [];
+        $a   = intdiv( $from, DAY_IN_SECONDS ) * DAY_IN_SECONDS;
+        $b   = (int) ceil( $to / DAY_IN_SECONDS ) * DAY_IN_SECONDS;
+        $key = 'qwoo_appt_busy_' . md5( (int) get_option( self::BUSY_GEN, 0 ) . '|' . $a . '|' . $b );
+        $hit = $fresh ? false : get_transient( $key );
+        if ( is_array( $hit ) ) return $hit;
+        $res = Qwoo_Platform_Connection::post( 'calendar', [ 'do' => 'busy', 'from' => gmdate( 'c', $a ), 'to' => gmdate( 'c', $b ) ], 8 );
+        if ( ! is_array( $res ) || empty( $res['connected'] ) || ! is_array( $res['busy'] ?? null ) ) {
+            self::calendar_error( is_array( $res ) && array_key_exists( 'connected', $res ) && ! $res['connected'] ? 'disconnected' : 'unreachable' );
+            set_transient( $key, [], 30 );
+            return [];
+        }
+        self::calendar_error( '' );
+        $tz  = wp_timezone();
+        $out = [];
+        foreach ( $res['busy'] as $iv ) {
+            if ( ! is_array( $iv ) || count( $iv ) < 2 ) continue;
+            if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) $iv[0] ) ) {
+                // An all-day event: whole days in the store's time zone.
+                $s = date_create_immutable( $iv[0] . ' 00:00', $tz );
+                $e = date_create_immutable( $iv[1] . ' 00:00', $tz );
+                if ( $s && $e ) $out[] = [ $s->getTimestamp(), $e->getTimestamp() ];
+                continue;
+            }
+            $s = strtotime( (string) $iv[0] );
+            $e = strtotime( (string) $iv[1] );
+            if ( $s && $e && $e > $s ) $out[] = [ $s, $e ];
+        }
+        set_transient( $key, $out, self::BUSY_TTL );
+        return $out;
+    }
+
+    /**
+     * Puts the booking in the owner's calendar, moves it there, or takes it out.
+     * Failed tries are tried again on the tick chain (5 times).
+     */
+    public static function cal_sync( int $id ): void {
+        global $wpdb;
+        $b = self::booking( $id );
+        if ( ! $b || ! self::calendar()['connected'] || ! class_exists( 'Qwoo_Platform_Connection' ) ) return;
+        $live = in_array( $b['status'], [ 'confirmed', 'done', 'noshow', 'blocked' ], true );
+        if ( ! $live ) {
+            if ( $b['cal_event'] === '' ) return;
+            $res = Qwoo_Platform_Connection::post( 'calendar', [ 'do' => 'delete', 'event_id' => $b['cal_event'] ], 8 );
+            $ok  = is_array( $res ) && ( ! empty( $res['ok'] ) || ( array_key_exists( 'connected', $res ) && ! $res['connected'] ) );
+            $wpdb->update( self::bookings_table(), $ok ? [ 'cal_event' => '', 'cal_state' => 'ok', 'cal_tries' => 0 ] : [ 'cal_state' => 'retry', 'cal_tries' => (int) $b['cal_tries'] + 1 ], [ 'id' => $id ] );
+            return;
+        }
+        if ( in_array( $b['status'], [ 'done', 'noshow' ], true ) && $b['cal_event'] !== '' ) return; // nothing to change for a past one
+        $res = Qwoo_Platform_Connection::post( 'calendar', [ 'do' => 'write', 'event' => self::cal_event( $b ) ], 10 );
+        if ( is_array( $res ) && ! empty( $res['event_id'] ) ) {
+            $set = [ 'cal_event' => mb_substr( (string) $res['event_id'], 0, 255 ), 'cal_state' => 'ok', 'cal_tries' => 0 ];
+            if ( ! empty( $res['meet'] ) && preg_match( '#^https://meet\.google\.com/#', (string) $res['meet'] ) ) $set['video'] = mb_substr( (string) $res['meet'], 0, 500 );
+            $wpdb->update( self::bookings_table(), $set, [ 'id' => $id ] );
+            return;
+        }
+        if ( is_array( $res ) && array_key_exists( 'connected', $res ) && ! $res['connected'] ) return;
+        $wpdb->update( self::bookings_table(), [ 'cal_state' => 'retry', 'cal_tries' => (int) $b['cal_tries'] + 1 ], [ 'id' => $id ] );
+    }
+
+    /** The event as the owner sees it in their calendar (the customer sees only the title, place and link when invited). */
+    private static function cal_event( array $b ): array {
+        $svc     = self::service( (int) $b['service_id'] );
+        $invite  = self::calendar()['invite'] && $b['email'] !== '' && $b['status'] !== 'blocked';
+        if ( $b['status'] === 'blocked' ) {
+            $summary = self::l( 'Busy', 'תפוס' ) . ( $b['note'] ? ' · ' . $b['note'] : '' );
+            $desc    = '';
+        } else {
+            $summary = ( $svc ? $svc['name'] : self::l( 'Booking', 'תור' ) ) . ' · ' . $b['name'] . ( (int) $b['seats'] > 1 ? ' (' . (int) $b['seats'] . ')' : '' );
+            $lines   = [];
+            if ( ! $invite ) {
+                // Only in the owner's own copy: the guest would see the description too.
+                $lines = array_filter( [ $b['phone'], $b['email'] ] );
+                foreach ( (array) json_decode( (string) $b['answers'], true ) as $a ) $lines[] = ( $a['label'] ?? '' ) . ': ' . ( $a['value'] ?? '' );
+                if ( $b['note'] ) $lines[] = $b['note'];
+            }
+            $owner = self::owner_link( (int) $b['id'] );
+            if ( $owner !== '' && ! $invite ) $lines[] = $owner;
+            if ( $invite ) $lines[] = self::l( 'Move or cancel:', 'הזזה או ביטול:' ) . ' ' . self::manage_url( $b );
+            $desc = implode( "\n", $lines );
+        }
+        $meet = $svc && $svc['place']['type'] === 'video' && ! empty( $svc['place']['meet'] ) && $b['status'] !== 'blocked';
+        return [
+            'booking' => (int) $b['id'], 'event_id' => (string) $b['cal_event'],
+            'start' => gmdate( 'c', self::ts( $b['start_utc'] ) ), 'end' => gmdate( 'c', self::ts( $b['end_utc'] ) ),
+            'summary' => $summary, 'description' => $desc, 'location' => $meet ? '' : (string) $b['place'],
+            'attendee' => $invite ? (string) $b['email'] : '', 'attendee_name' => (string) $b['name'], 'meet' => $meet && $b['video'] === '',
+        ];
+    }
+
+    /** From the platform: the owner connected or disconnected a calendar. */
+    public static function cal_link( array $p ): array {
+        update_option( self::CALENDAR, [
+            'connected' => ! empty( $p['connected'] ), 'provider' => sanitize_key( (string) ( $p['provider'] ?? '' ) ),
+            'email' => sanitize_email( (string) ( $p['email'] ?? '' ) ), 'invite' => ! empty( $p['invite'] ), 'error' => '',
+        ], false );
+        update_option( self::BUSY_GEN, (int) get_option( self::BUSY_GEN, 0 ) + 1, false );
+        // Upcoming bookings go into a newly connected calendar (the tick chain does the rest).
+        if ( ! empty( $p['connected'] ) ) {
+            global $wpdb;
+            $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::bookings_table() . " SET cal_state = 'retry', cal_tries = 0 WHERE status IN ('confirmed','blocked') AND cal_event = '' AND start_utc > %s", self::now() ) );
+        }
+        return [ 'ok' => true ];
+    }
+
+    /**
+     * From the platform: Google said the calendar changed. Busy times are read again;
+     * our events that were moved or deleted there are flagged on their booking (the
+     * booking itself never changes by itself: the customer wasn't told).
+     */
+    public static function cal_changed( array $p ): array {
+        global $wpdb;
+        update_option( self::BUSY_GEN, (int) get_option( self::BUSY_GEN, 0 ) + 1, false );
+        $flagged = 0;
+        foreach ( array_slice( (array) ( $p['events'] ?? [] ), 0, 250 ) as $e ) {
+            $b = is_array( $e ) ? self::booking( absint( $e['booking'] ?? 0 ) ) : null;
+            if ( ! $b || ! in_array( $b['status'], [ 'confirmed', 'pending' ], true ) || $b['cal_event'] !== (string) ( $e['event'] ?? '' ) ) continue;
+            $flag = '';
+            $note = '';
+            if ( ( $e['status'] ?? '' ) === 'cancelled' ) {
+                $flag = 'deleted';
+            } else {
+                $s = strtotime( (string) ( $e['start'] ?? '' ) );
+                $f = strtotime( (string) ( $e['end'] ?? '' ) );
+                if ( $s && $f && ( $s !== self::ts( $b['start_utc'] ) || $f !== self::ts( $b['end_utc'] ) ) ) {
+                    $flag = 'moved';
+                    $note = wp_date( 'Y-m-d H:i', $s ) . '–' . wp_date( 'H:i', $f );
+                }
+            }
+            if ( $flag !== '' && ( $flag !== $b['cal_flag'] || $note !== $b['cal_note'] ) ) {
+                $wpdb->update( self::bookings_table(), [ 'cal_flag' => $flag, 'cal_note' => $note ], [ 'id' => (int) $b['id'] ] );
+                self::log( (int) $b['id'], 'cal_' . $flag, $note );
+                $flagged++;
+            }
+        }
+        return [ 'ok' => true, 'flagged' => $flagged ];
+    }
+
+    /** Bookings still to put in the calendar (the tick chain). */
+    private static function cal_retry( float $until ): void {
+        global $wpdb;
+        if ( ! self::calendar()['connected'] ) return;
+        $rows = (array) $wpdb->get_col( $wpdb->prepare(
+            'SELECT id FROM ' . self::bookings_table() . " WHERE cal_state = 'retry' AND cal_tries < 5 AND updated < %s ORDER BY id LIMIT 10",
+            self::sql_time( time() - 5 * MINUTE_IN_SECONDS )
+        ) );
+        foreach ( $rows as $id ) {
+            if ( microtime( true ) > $until ) return;
+            $wpdb->update( self::bookings_table(), [ 'updated' => self::now() ], [ 'id' => (int) $id ] );
+            self::cal_sync( (int) $id );
+        }
     }
 
     /* ---------------- taking and letting go ---------------- */
@@ -865,6 +1055,8 @@ class Qwoo_Appointments {
         }
         $wpdb->update( self::bookings_table(), [ 'status' => 'confirmed', 'hold_until' => null, 'hold_token' => '', 'order_id' => $order_id ?: (int) $b['order_id'], 'updated' => self::now() ], [ 'id' => $id ] );
         self::log( $id, 'confirmed' );
+        // Into the owner's calendar first: a Meet link made there goes into the confirmation.
+        self::cal_sync( $id );
         $b = self::booking( $id );
         self::send( 'booking_confirmed', $b );
         self::send( 'booking_new', $b );
@@ -884,6 +1076,7 @@ class Qwoo_Appointments {
         self::release_units( $b );
         $wpdb->update( self::bookings_table(), [ 'status' => 'cancelled', 'hold_until' => null, 'updated' => self::now() ], [ 'id' => $id ] );
         self::log( $id, 'cancelled', $by . ( $why !== '' ? ': ' . $why : '' ) );
+        self::cal_sync( $id );
         $was_on = in_array( $b['status'], [ 'confirmed', 'pending' ], true );
         if ( $was_on && $by === 'shopper' ) self::refund_on_cancel( $b );
         $b = self::booking( $id );
@@ -936,13 +1129,14 @@ class Qwoo_Appointments {
             }
             $wpdb->update( self::bookings_table(), [
                 'start_utc' => self::sql_time( $start ), 'end_utc' => self::sql_time( $start + $svc['duration'] * 60 ),
-                'sess' => self::sess_for( $svc, $start ), 'reminded' => 0,
+                'sess' => self::sess_for( $svc, $start ), 'reminded' => 0, 'cal_flag' => '', 'cal_note' => '',
                 'moves' => (int) $b['moves'] + ( $by === 'shopper' ? 1 : 0 ), 'updated' => self::now(),
             ], [ 'id' => $id ] );
         } finally {
             self::unlock();
         }
         self::log( $id, 'moved', $by . ': ' . wp_date( 'Y-m-d H:i', $old_start ) . ' → ' . wp_date( 'Y-m-d H:i', $start ) );
+        self::cal_sync( $id );
         $b = self::booking( $id );
         if ( $tell && $b['email'] !== '' ) self::send( 'booking_moved', $b );
         if ( $by === 'shopper' ) self::send( 'booking_new', $b, [ 'moved' => true ] );
@@ -974,6 +1168,7 @@ class Qwoo_Appointments {
             } finally {
                 self::unlock();
             }
+            self::cal_sync( $id );
             return self::owner_view( self::booking( $id ) );
         }
         $svc = self::service( absint( $in['service_id'] ?? 0 ) );
@@ -1009,6 +1204,7 @@ class Qwoo_Appointments {
         if ( $user ) $wpdb->update( self::bookings_table(), [ 'customer_id' => (int) $user->ID ], [ 'id' => $id ] );
         $wpdb->update( self::bookings_table(), [ 'status' => 'confirmed', 'hold_until' => null, 'note' => mb_substr( sanitize_textarea_field( (string) ( $in['note'] ?? '' ) ), 0, 2000 ), 'updated' => self::now() ], [ 'id' => $id ] );
         self::log( $id, 'created', 'owner' );
+        self::cal_sync( $id );
         $b = self::booking( $id );
         if ( ! empty( $in['tell'] ) && $b['email'] !== '' ) self::send( 'booking_confirmed', $b );
         do_action( 'qwoo_booking_status', $b, 'confirmed' );
@@ -1210,7 +1406,8 @@ class Qwoo_Appointments {
         }
         if ( (int) $b['seats'] > 1 ) $rows[] = [ 'k' => self::l( 'Places', 'מקומות' ), 'v' => (string) (int) $b['seats'] ];
         if ( $b['place'] !== '' ) $rows[] = [ 'k' => self::l( 'Where', 'איפה' ), 'v' => (string) $b['place'] ];
-        if ( $svc && $svc['place']['type'] === 'video' && $svc['place']['link'] !== '' && $b['status'] === 'confirmed' ) $rows[] = [ 'k' => self::l( 'Video link', 'קישור לשיחה' ), 'v' => $svc['place']['link'], 'link' => true ];
+        $video = $b['video'] !== '' ? (string) $b['video'] : ( $svc ? (string) $svc['place']['link'] : '' );
+        if ( $svc && $svc['place']['type'] === 'video' && $video !== '' && $b['status'] === 'confirmed' ) $rows[] = [ 'k' => self::l( 'Video link', 'קישור לשיחה' ), 'v' => $video, 'link' => true ];
         if ( (float) $b['due_now'] > 0 && $b['order_id'] ) $rows[] = [ 'k' => self::l( 'Paid', 'שולם' ), 'v' => html_entity_decode( wp_strip_all_tags( wc_price( (float) $b['due_now'], [ 'currency' => $b['currency'] ] ) ), ENT_QUOTES ) ];
         $rest = (float) $b['price'] - ( $b['order_id'] ? (float) $b['due_now'] : 0 );
         if ( $rest > 0 && $svc && $svc['pay'] !== 'free' ) $rows[] = [ 'k' => self::l( 'To pay there', 'לתשלום במקום' ), 'v' => html_entity_decode( wp_strip_all_tags( wc_price( $rest, [ 'currency' => $b['currency'] ] ) ), ENT_QUOTES ) ];
@@ -1263,6 +1460,7 @@ class Qwoo_Appointments {
     public static function tick( float $until ) {
         self::expire_holds();
         if ( ! self::plan_allows() ) return;
+        self::cal_retry( $until );
         global $wpdb;
         $s    = self::settings()['reminders'];
         $jobs = [];
@@ -1295,6 +1493,8 @@ class Qwoo_Appointments {
             if ( $first ) $cands[] = max( time(), self::ts( $first ) - $before );
         }
         $hold = $wpdb->get_var( 'SELECT MIN(hold_until) FROM ' . self::bookings_table() . " WHERE status IN ('held','pending') AND hold_until IS NOT NULL" );
+        // Bookings that didn't reach the owner's calendar yet: another try in 5 minutes.
+        if ( self::calendar()['connected'] && $wpdb->get_var( 'SELECT id FROM ' . self::bookings_table() . " WHERE cal_state = 'retry' AND cal_tries < 5 LIMIT 1" ) ) $cands[] = time() + 5 * MINUTE_IN_SECONDS;
         if ( $hold ) $cands[] = self::ts( $hold );
         if ( ! $cands ) return $due;
         $unix = min( $cands );
@@ -1315,6 +1515,7 @@ class Qwoo_Appointments {
             'answers' => (array) ( json_decode( (string) $b['answers'], true ) ?: [] ), 'place' => (string) $b['place'],
             'price' => (float) $b['price'], 'due_now' => (float) $b['due_now'], 'currency' => (string) $b['currency'], 'order_id' => (int) $b['order_id'],
             'customer_id' => (int) $b['customer_id'], 'source' => (string) $b['source'], 'note' => (string) $b['note'], 'moves' => (int) $b['moves'],
+            'video' => (string) $b['video'], 'cal_state' => (string) $b['cal_state'], 'cal_flag' => (string) $b['cal_flag'], 'cal_note' => (string) $b['cal_note'], 'in_calendar' => $b['cal_event'] !== '',
             'hold_until' => $b['hold_until'] ? gmdate( 'c', self::ts( $b['hold_until'] ) ) : '', 'created' => gmdate( 'c', self::ts( $b['created'] ) ),
             'log' => is_array( $log ) ? array_map( static fn( $e ) => [ 'at' => gmdate( 'c', (int) $e['t'] ), 'type' => (string) $e['type'], 'note' => (string) $e['note'] ], $log ) : [],
         ];
@@ -1335,6 +1536,8 @@ class Qwoo_Appointments {
             'settings'  => array_diff_key( $s, [ 'feed' => 1 ] ) + [ 'feed_full' => ! empty( get_option( self::OPTION, [] )['feed_full'] ) ],
             'services'  => array_map( [ __CLASS__, 'service_view' ], self::services() ),
             'feed_url'  => self::feed_url(),
+            'calendar'  => self::calendar(),
+            'flagged'   => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::bookings_table() . " WHERE cal_flag <> '' AND status IN ('confirmed','pending') AND start_utc > %s", $now ) ),
             'tz'        => wp_timezone_string(),
             'tz_unset'  => in_array( (string) get_option( 'timezone_string' ), [ '', 'UTC' ], true ) && ! (float) get_option( 'gmt_offset' ),
             'currency'  => get_woocommerce_currency(),
@@ -1386,6 +1589,9 @@ class Qwoo_Appointments {
             case 'cancel':
                 if ( $b['status'] === 'blocked' ) {
                     self::release_units( $b );
+                    // Out of the owner's calendar too, then gone.
+                    $wpdb->update( self::bookings_table(), [ 'status' => 'cancelled' ], [ 'id' => $id ] );
+                    self::cal_sync( $id );
                     $wpdb->delete( self::bookings_table(), [ 'id' => $id ] );
                     return [ 'deleted' => true ];
                 }
@@ -1405,6 +1611,16 @@ class Qwoo_Appointments {
                 break;
             case 'note':
                 $wpdb->update( self::bookings_table(), [ 'note' => mb_substr( sanitize_textarea_field( (string) ( $p['note'] ?? '' ) ), 0, 2000 ), 'updated' => self::now() ], [ 'id' => $id ] );
+                $r = true;
+                break;
+            case 'unflag':
+                // The owner looked at what changed in their calendar.
+                $wpdb->update( self::bookings_table(), [ 'cal_flag' => '', 'cal_note' => '' ], [ 'id' => $id ] );
+                $r = true;
+                break;
+            case 'cal_again':
+                $wpdb->update( self::bookings_table(), [ 'cal_tries' => 0 ], [ 'id' => $id ] );
+                self::cal_sync( $id );
                 $r = true;
                 break;
             case 'resend':
@@ -1456,6 +1672,10 @@ class Qwoo_Appointments {
                 return self::owner_create( $p );
             case 'appt_update':
                 return self::owner_update( $p );
+            case 'appt_cal_link':
+                return self::cal_link( $p );
+            case 'appt_cal_changed':
+                return self::cal_changed( $p );
         }
         return new WP_Error( 'op', 'Unknown action.' );
     }
