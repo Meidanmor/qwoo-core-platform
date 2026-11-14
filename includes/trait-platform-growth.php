@@ -83,6 +83,8 @@ trait Qwoo_Platform_Growth {
             case 'appt_feed_full':
             case 'appt_service_save':
             case 'appt_service_delete':
+            case 'appt_staff_save':
+            case 'appt_staff_delete':
             case 'appt_services_sort':
             case 'appt_list':
             case 'appt_get':

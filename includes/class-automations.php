@@ -28,7 +28,9 @@ class Qwoo_Automations {
     const OPTION    = 'qwoo_flows';
     const MAX_FLOWS = 20;
     const MAX_STEPS = 12;
-    const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed', 'audience_joined', 'event_done' ];
+    const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed', 'audience_joined', 'event_done', 'booking_made', 'booking_status', 'booking_before', 'booking_after' ];
+    // Appointments: what a booking_status automation can start on.
+    const BOOKING_STATUSES = [ 'requested', 'confirmed', 'cancelled', 'declined', 'done', 'noshow' ];
     const SCAN_KEY  = 'qwoo_flows_scanned';
 
     public static function init() {
@@ -37,6 +39,7 @@ class Qwoo_Automations {
         add_action( 'woocommerce_order_status_changed', [ __CLASS__, 'on_order_status' ], 30, 4 );
         add_action( 'qwoo_personalization_event', [ __CLASS__, 'on_personalization_event' ], 10, 4 );
         add_action( 'qwoo_audience_joined', [ __CLASS__, 'on_audience_joined' ], 10, 3 );
+        add_action( 'qwoo_booking_status', [ __CLASS__, 'on_booking' ], 20, 2 );
         add_action( 'qwoo_push_tick', [ __CLASS__, 'run_due' ] );
         add_filter( 'qwoo_push_next_due', [ __CLASS__, 'next_due' ] );
     }
@@ -214,6 +217,15 @@ class Qwoo_Automations {
             if ( ! class_exists( 'Qwoo_Events' ) || ! Qwoo_Events::exists( $done ) ) return new WP_Error( 'event', 'Choose the event that starts this automation.' );
             $trigger['event_id'] = $done;
         }
+        if ( strpos( $type, 'booking_' ) === 0 ) {
+            if ( $type === 'booking_status' ) {
+                $st = (string) ( $in['trigger']['status'] ?? 'confirmed' );
+                $trigger['status'] = in_array( $st, self::BOOKING_STATUSES, true ) ? $st : 'confirmed';
+            }
+            if ( in_array( $type, [ 'booking_before', 'booking_after' ], true ) ) $trigger['hours'] = min( 720, max( 1, (int) ( $in['trigger']['hours'] ?? 24 ) ) );
+            $svc = absint( $in['trigger']['service_id'] ?? 0 );
+            if ( $svc && class_exists( 'Qwoo_Appointments' ) && Qwoo_Appointments::service( $svc ) ) $trigger['service_id'] = $svc;
+        }
         $audience_id = sanitize_key( (string) ( $in['audience_id'] ?? '' ) );
         if ( $audience_id && ! Qwoo_Personalization::exists( $audience_id ) ) return new WP_Error( 'audience', 'Choose an audience that still exists.' );
         $rules = [];
@@ -291,6 +303,11 @@ class Qwoo_Automations {
             if ( $type === 'no_order' && (int) ( $flow['trigger']['days'] ?? 0 ) !== (int) ( $match['days'] ?? 0 ) ) continue;
             if ( $type === 'audience_joined' && ( $flow['trigger']['audience_id'] ?? '' ) !== ( $match['audience_id'] ?? '' ) ) continue;
             if ( $type === 'event_done' && ( $flow['trigger']['event_id'] ?? '' ) !== ( $match['event_id'] ?? '' ) ) continue;
+            if ( strpos( $type, 'booking_' ) === 0 ) {
+                if ( ! empty( $flow['trigger']['service_id'] ) && (int) $flow['trigger']['service_id'] !== (int) ( $match['service_id'] ?? 0 ) ) continue;
+                if ( $type === 'booking_status' && ( $flow['trigger']['status'] ?? '' ) !== ( $match['status'] ?? '' ) ) continue;
+                if ( in_array( $type, [ 'booking_before', 'booking_after' ], true ) && (int) ( $flow['trigger']['hours'] ?? 0 ) !== (int) ( $match['hours'] ?? 0 ) ) continue;
+            }
             if ( $type === 'product_view' ) {
                 if ( (int) ( $match['seconds'] ?? 0 ) < (int) ( $flow['trigger']['seconds'] ?? 30 ) ) continue;
                 if ( ! empty( $flow['trigger']['category_id'] ) && ! in_array( (int) $flow['trigger']['category_id'], array_map( 'absint', (array) ( $match['category_ids'] ?? [] ) ), true ) ) continue;
@@ -346,13 +363,49 @@ class Qwoo_Automations {
         self::start( 'audience_joined', $key, $email, 0, [ 'audience_id' => $audience_id ] );
     }
 
-    /** Twice an hour: checkouts left without paying, and buyers who haven't been back. */
+    /**
+     * Appointments (Qwoo_Appointments fires qwoo_booking_status): a new booking or request
+     * starts booking_made once; every status starts booking_status. The key carries the
+     * booking (bk:<id>) so a webhook step can send its details.
+     */
+    public static function on_booking( $b, $status ): void {
+        if ( ! is_array( $b ) || ! self::allowed() || ! is_email( (string) ( $b['email'] ?? '' ) ) ) return;
+        $match = [ 'service_id' => (int) $b['service_id'], 'status' => (string) $status ];
+        if ( in_array( $status, [ 'requested', 'confirmed' ], true ) ) {
+            self::start( 'booking_made', 'bk:' . (int) $b['id'] . ':made', (string) $b['email'], (int) $b['order_id'], $match );
+        }
+        self::start( 'booking_status', 'bk:' . (int) $b['id'] . ':st:' . $status, (string) $b['email'], (int) $b['order_id'], $match );
+    }
+
+    /** X hours before a booking starts, X hours after it ends (the scan; the key makes it once per booking). */
+    private static function scan_bookings( array $flow ): void {
+        global $wpdb;
+        if ( ! class_exists( 'Qwoo_Appointments' ) ) return;
+        $type  = $flow['trigger']['type'];
+        $hours = (int) ( $flow['trigger']['hours'] ?? 24 );
+        $t     = Qwoo_Appointments::bookings_table();
+        $now   = time();
+        if ( $type === 'booking_before' ) {
+            $rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE status = 'confirmed' AND email <> '' AND start_utc > %s AND start_utc <= %s LIMIT 300", gmdate( 'Y-m-d H:i:s', $now ), gmdate( 'Y-m-d H:i:s', $now + $hours * HOUR_IN_SECONDS ) ), ARRAY_A );
+        } else {
+            $rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE status IN ('confirmed','done') AND email <> '' AND end_utc <= %s AND end_utc > %s LIMIT 300", gmdate( 'Y-m-d H:i:s', $now - $hours * HOUR_IN_SECONDS ), gmdate( 'Y-m-d H:i:s', $now - $hours * HOUR_IN_SECONDS - 3 * DAY_IN_SECONDS ) ), ARRAY_A );
+        }
+        foreach ( $rows as $b ) {
+            self::start( $type, 'bk:' . (int) $b['id'] . ':' . ( $type === 'booking_before' ? 'b' : 'a' ) . $hours, (string) $b['email'], (int) $b['order_id'], [ 'service_id' => (int) $b['service_id'], 'hours' => $hours ] );
+        }
+    }
+
+    /** Twice an hour: checkouts left without paying, buyers who haven't been back, and times around bookings. */
     private static function scan() {
         if ( get_transient( self::SCAN_KEY ) ) return;
         set_transient( self::SCAN_KEY, 1, 30 * MINUTE_IN_SECONDS );
         global $wpdb;
         foreach ( self::flows() as $flow ) {
             if ( empty( $flow['on'] ) ) continue;
+            if ( in_array( $flow['trigger']['type'], [ 'booking_before', 'booking_after' ], true ) ) {
+                self::scan_bookings( $flow );
+                continue;
+            }
             if ( $flow['trigger']['type'] === 'cart_left' ) {
                 $old  = time() - (int) $flow['trigger']['minutes'] * 60;
                 $list = wc_get_orders( [ 'status' => 'checkout-draft', 'limit' => 100, 'date_modified' => ( $old - DAY_IN_SECONDS ) . '...' . $old ] );
@@ -517,10 +570,17 @@ class Qwoo_Automations {
                     'timeout'     => 8,
                     'redirection' => 0,
                     'headers'     => [ 'Content-Type' => 'application/json', 'User-Agent' => 'Openly-Automations/1' ],
-                    'body'        => wp_json_encode( [ 'automation' => $flow['name'], 'email' => $row['email'], 'order' => $order ? Qwoo_Webhooks::order_data( $order ) : null ] ),
+                    'body'        => wp_json_encode( [ 'automation' => $flow['name'], 'email' => $row['email'], 'order' => $order ? Qwoo_Webhooks::order_data( $order ) : null, 'booking' => self::booking_of( $row ) ] ),
                 ] );
                 break;
         }
+    }
+
+    /** The booking a run started for (its key holds bk:<id>), as webhooks send it; null for other runs. */
+    private static function booking_of( array $row ): ?array {
+        if ( ! class_exists( 'Qwoo_Appointments' ) || ! preg_match( '/:bk:(\d+):/', (string) ( $row['uniq'] ?? '' ), $m ) ) return null;
+        $b = Qwoo_Appointments::booking( (int) $m[1] );
+        return $b ? Qwoo_Appointments::webhook_data( $b, (string) $b['status'] ) : null;
     }
 
     /** To the devices of the shopper's account. Guests have no device we can tie to their email. */

@@ -94,6 +94,13 @@ class Qwoo_Appointments_Shop {
             'place' => [ 'type' => $s['place']['type'], 'text' => Qwoo_Appointments::place_text( $s ) ],
             'questions' => $s['questions'], 'product_id' => in_array( $s['pay'], [ 'full', 'deposit' ], true ) ? (int) $s['product_id'] : 0,
             'hidden' => $s['status'] === 'hidden',
+            // Who gives it (first names and photos only), and whether "anyone available" is offered.
+            'staff' => array_map( static function ( $id ) {
+                $p = Qwoo_Appointments::staff_one( $id );
+                return [ 'id' => $id, 'name' => $p['name'], 'bio' => $p['bio'], 'photo' => $p['photo'] ? (string) wp_get_attachment_image_url( $p['photo'], 'thumbnail' ) : '' ];
+            }, Qwoo_Appointments::service_staff( $s ) ),
+            'anyone' => (bool) $s['anyone'],
+            'approval' => $s['approval'] === 'owner',
         ];
     }
 
@@ -123,7 +130,11 @@ class Qwoo_Appointments_Shop {
         $s = self::service_from( $r->get_param( 'service' ) );
         if ( ! $s ) return self::no_cache( [ 'message' => self::l( 'This service can\'t be booked right now.', 'אי אפשר לקבוע את השירות הזה כרגע.' ) ], 404 );
         Qwoo_Appointments::expire_holds();
-        $days = Qwoo_Appointments::free_times( $s, (string) $r->get_param( 'from' ), (string) $r->get_param( 'to' ), [ 'seats' => max( 1, (int) $r->get_param( 'seats' ) ) ] );
+        $days = Qwoo_Appointments::free_times( $s, (string) $r->get_param( 'from' ), (string) $r->get_param( 'to' ), [ 'seats' => max( 1, (int) $r->get_param( 'seats' ) ), 'staff' => absint( $r->get_param( 'staff' ) ) ] );
+        // Who is free stays on the store: the shopper sees times only.
+        foreach ( $days as $date => $list ) {
+            $days[ $date ] = array_map( static fn( $slot ) => array_diff_key( $slot, [ 'staff' => 1 ] ), $list );
+        }
         return self::no_cache( [ 'days' => (object) $days ] );
     }
 
@@ -134,7 +145,7 @@ class Qwoo_Appointments_Shop {
         if ( ! $s ) return self::no_cache( [ 'message' => self::l( 'This service can\'t be booked right now.', 'אי אפשר לקבוע את השירות הזה כרגע.' ) ], 404 );
         $start = Qwoo_Appointments::parse_start( $in['start'] ?? '' );
         if ( ! $start ) return self::no_cache( [ 'message' => self::l( 'Pick a time.', 'צריך לבחור זמן.' ) ], 400 );
-        $held = Qwoo_Appointments::hold( $s, $start, (int) ( $in['seats'] ?? 1 ) );
+        $held = Qwoo_Appointments::hold( $s, $start, (int) ( $in['seats'] ?? 1 ), absint( $in['staff'] ?? 0 ) );
         return is_wp_error( $held ) ? self::fail( $held ) : self::no_cache( $held );
     }
 
@@ -188,7 +199,7 @@ class Qwoo_Appointments_Shop {
     public static function shopper_view( array $b ): array {
         $s     = Qwoo_Appointments::service( (int) $b['service_id'] );
         $start = (int) strtotime( $b['start_utc'] . ' UTC' );
-        $on    = in_array( $b['status'], [ 'confirmed', 'pending' ], true ) && $start > time();
+        $on    = in_array( $b['status'], [ 'confirmed', 'pending', 'requested' ], true ) && $start > time();
         $hours = $s && array_key_exists( 'cancel_hours', $s['rules'] ) ? (int) $s['rules']['cancel_hours'] : (int) Qwoo_Appointments::settings()['rules']['cancel_hours'];
         $moves = (int) Qwoo_Appointments::settings()['rules']['moves'];
         $in_time = $start - $hours * HOUR_IN_SECONDS > time();
@@ -200,7 +211,9 @@ class Qwoo_Appointments_Shop {
             'video' => $s && $s['place']['type'] === 'video' && $b['status'] === 'confirmed' ? ( (string) $b['video'] ?: (string) $s['place']['link'] ) : '',
             'price' => (float) $b['price'], 'due_now' => (float) $b['due_now'], 'currency' => (string) $b['currency'], 'paid' => (bool) $b['order_id'],
             'name' => (string) $b['name'], 'rows' => $card['rows'],
-            'can_cancel' => $on && $in_time, 'can_move' => $on && $in_time && (int) $b['moves'] < $moves && $s && $s['status'] !== 'off',
+            // A request can always be taken back before it starts; a booking only in time.
+            'can_cancel' => $on && ( $in_time || $b['status'] === 'requested' ), 'can_move' => $on && $in_time && $b['status'] !== 'requested' && (int) $b['moves'] < $moves && $s && $s['status'] !== 'off',
+            'staff' => ( $p = Qwoo_Appointments::staff_one( (int) $b['staff_id'] ) ) ? $p['name'] : '', 'staff_id' => (int) $b['staff_id'],
             'cancel_hours' => $hours, 'google' => $card['google'], 'outlook' => $card['outlook'],
             'ics' => $b['email'] !== '' ? rtrim( (string) ( class_exists( 'Qwoo_Technical_Settings' ) ? Qwoo_Technical_Settings::get_primary_frontend_domain() : home_url() ), '/' ) . '/wp-json/qwoo/v1/appointments/ics?id=' . (int) $b['id'] . '&k=' . Qwoo_Appointments::key( (int) $b['id'], (string) $b['email'] ) : '',
             'refund' => $s ? ( array_key_exists( 'refund', $s['rules'] ) ? $s['rules']['refund'] : Qwoo_Appointments::settings()['rules']['refund'] ) : 'keep',
@@ -262,7 +275,7 @@ class Qwoo_Appointments_Shop {
         global $wpdb;
         $user = wp_get_current_user();
         $rows = (array) $wpdb->get_results( $wpdb->prepare(
-            'SELECT * FROM ' . Qwoo_Appointments::bookings_table() . " WHERE (customer_id = %d OR (email <> '' AND email = %s)) AND status IN ('confirmed','pending','done','noshow','cancelled') ORDER BY start_utc DESC LIMIT 100",
+            'SELECT * FROM ' . Qwoo_Appointments::bookings_table() . " WHERE (customer_id = %d OR (email <> '' AND email = %s)) AND status IN ('confirmed','pending','requested','done','noshow','cancelled') ORDER BY start_utc DESC LIMIT 100",
             (int) $user->ID, (string) $user->user_email
         ), ARRAY_A );
         $out = [];

@@ -34,7 +34,7 @@ class Qwoo_Appointments {
 
     const OPTION      = 'qwoo_appt_settings';
     const DB_OPTION   = 'qwoo_appt_db';
-    const DB_VERSION  = '2';
+    const DB_VERSION  = '3';
     const CALENDAR    = 'qwoo_appt_calendar'; // { connected, provider, email, invite } (the platform sets it)
     const BUSY_GEN    = 'qwoo_appt_busy_gen'; // bumped when Google says something changed
     const BUSY_TTL    = 120;
@@ -46,7 +46,7 @@ class Qwoo_Appointments {
     const PLACES      = [ 'business', 'phone', 'video', 'customer' ];
     const SERVICE_ON  = [ 'active', 'hidden', 'off' ];
     // Statuses whose units are taken.
-    const BUSY        = [ 'held', 'pending', 'confirmed', 'done', 'noshow', 'blocked' ];
+    const BUSY        = [ 'held', 'pending', 'requested', 'confirmed', 'done', 'noshow', 'blocked' ];
     const STEPS       = [ 0, 5, 10, 15, 20, 30, 45, 60, 90, 120 ];
     const HOLD_MIN    = 10;
     const CART_MIN    = 30;
@@ -146,6 +146,15 @@ class Qwoo_Appointments {
         KEY email (email),
         KEY order_id (order_id),
         KEY customer_id (customer_id)
+        ) $charset;" );
+        dbDelta( 'CREATE TABLE ' . self::staff_table() . " (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        status VARCHAR(10) NOT NULL DEFAULT 'active',
+        sort INT NOT NULL DEFAULT 0,
+        data LONGTEXT NULL,
+        created DATETIME NOT NULL,
+        updated DATETIME NOT NULL,
+        PRIMARY KEY  (id)
         ) $charset;" );
         dbDelta( 'CREATE TABLE ' . self::slots_table() . " (
         resource VARCHAR(40) NOT NULL,
@@ -341,7 +350,14 @@ class Qwoo_Appointments {
         $deposit      = max( 0, (float) $g( 'deposit', 0 ) );
         if ( $deposit_type === 'percent' ) $deposit = min( 100, $deposit );
         $image = absint( $g( 'image', 0 ) );
+        $staff = array_values( array_unique( array_filter( array_map( 'absint', (array) $g( 'staff', [] ) ) ) ) );
         return [
+            // Who gives it (Appointments → Staff); none = the store's own calendar.
+            'staff'         => array_slice( $staff, 0, 100 ),
+            'anyone'        => ! array_key_exists( 'anyone', $in ) ? (bool) ( $old['anyone'] ?? true ) : ! empty( $in['anyone'] ),
+            // The owner approves each booking: the time is held for approval_hours, then declined by itself.
+            'approval'      => $g( 'approval', 'auto' ) === 'owner' ? 'owner' : 'auto',
+            'approval_hours' => min( 168, max( 1, (int) $g( 'approval_hours', 24 ) ) ),
             'name'          => mb_substr( sanitize_text_field( (string) $g( 'name', '' ) ), 0, 120 ),
             'description'   => mb_substr( sanitize_textarea_field( (string) $g( 'description', '' ) ), 0, 2000 ),
             'category'      => mb_substr( sanitize_text_field( (string) $g( 'category', '' ) ), 0, 60 ),
@@ -519,21 +535,35 @@ class Qwoo_Appointments {
         return array_key_exists( $key, $svc['rules'] ) ? $svc['rules'][ $key ] : self::settings()['rules'][ $key ];
     }
 
-    /** The day's opening ranges (minutes) after special dates; null = closed. */
-    private static function day_ranges( string $date, array $s ): array {
-        foreach ( $s['dates'] as $d ) {
-            if ( $d['from'] <= $date && $date <= $d['to'] ) {
-                return [ 'ranges' => $d['closed'] ? [] : $d['ranges'], 'special' => true ];
+    /**
+     * The day's opening ranges (minutes) for a staff member (0 = the store): their own
+     * special dates first, then the store's (a store holiday closes everyone), then their
+     * week (or the store's when they work the store's hours).
+     */
+    private static function day_ranges( string $date, array $s, int $staff = 0 ): array {
+        $person = $staff ? self::staff_one( $staff ) : null;
+        $lists  = $person && $person['dates'] ? [ $person['dates'], $s['dates'] ] : [ $s['dates'] ];
+        foreach ( $lists as $dates ) {
+            foreach ( $dates as $d ) {
+                if ( $d['from'] <= $date && $date <= $d['to'] ) {
+                    return [ 'ranges' => $d['closed'] ? [] : $d['ranges'], 'special' => true ];
+                }
             }
         }
-        $dt = new DateTimeImmutable( $date . ' 12:00', wp_timezone() );
-        return [ 'ranges' => $s['hours'][ (int) $dt->format( 'w' ) ] ?? [], 'special' => false ];
+        $week = $person && is_array( $person['hours'] ) ? $person['hours'] : $s['hours'];
+        $dt   = new DateTimeImmutable( $date . ' 12:00', wp_timezone() );
+        return [ 'ranges' => $week[ (int) $dt->format( 'w' ) ] ?? [], 'special' => false ];
     }
 
-    /** Taken units on r0 in [from, to): unit => sess ('' = one-to-one or busy), leaving out $exclude's own rows. */
-    private static function taken( int $u0, int $u1, int $exclude = 0, string $exclude_sess = '' ): array {
+    /** The slots resource of a staff member (r0 = the store, for services without staff). */
+    private static function resource( int $staff ): string {
+        return 'r' . max( 0, $staff );
+    }
+
+    /** Taken units of a resource in [from, to): unit => sess ('' = one-to-one or busy), leaving out $exclude's own rows. */
+    private static function taken( int $u0, int $u1, int $exclude = 0, string $exclude_sess = '', int $staff = 0 ): array {
         global $wpdb;
-        $rows  = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT unit, booking_id, sess FROM ' . self::slots_table() . " WHERE resource = 'r0' AND unit >= %d AND unit < %d", $u0, $u1 ), ARRAY_A );
+        $rows  = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT unit, booking_id, sess FROM ' . self::slots_table() . ' WHERE resource = %s AND unit >= %d AND unit < %d', self::resource( $staff ), $u0, $u1 ), ARRAY_A );
         $taken = [];
         foreach ( $rows as $r ) {
             if ( $exclude && (int) $r['booking_id'] === $exclude ) continue;
@@ -555,8 +585,19 @@ class Qwoo_Appointments {
         return $out;
     }
 
-    private static function sess_for( array $svc, int $start ): string {
-        return $svc['capacity'] > 1 ? 'g' . $svc['id'] . '-' . intdiv( $start, self::UNIT ) : '';
+    private static function sess_for( array $svc, int $start, int $staff = 0 ): string {
+        if ( $svc['capacity'] <= 1 ) return '';
+        return 'g' . $svc['id'] . '-' . ( $staff ? $staff . '-' : '' ) . intdiv( $start, self::UNIT );
+    }
+
+    /** The staff ids that give a service and are on (none: the service is the store's own, staff 0). */
+    public static function service_staff( array $svc ): array {
+        $out = [];
+        foreach ( (array) ( $svc['staff'] ?? [] ) as $id ) {
+            $p = self::staff_one( (int) $id );
+            if ( $p && $p['status'] === 'active' ) $out[] = (int) $id;
+        }
+        return $out;
     }
 
     /** [ first unit, end unit (exclusive) ] a booking at $start takes, with its free time around it. */
@@ -568,8 +609,9 @@ class Qwoo_Appointments {
 
     /**
      * Free times for a service between two store dates (Y-m-d, inclusive):
-     * [ date => [ { start (ISO UTC), time (store H:i), left (places, groups) } ] ].
-     * $owner: the owner adding a booking by hand (no notice or "how far ahead").
+     * [ date => [ { start (ISO UTC), time (store H:i), left (places, groups), staff: [ids free] } ] ].
+     * $opt: owner (the owner adding a booking: no notice or "how far ahead"), staff (one
+     * person; 0 = anyone who gives it), seats, exclude (a booking being moved), fresh.
      */
     public static function free_times( array $svc, string $from, string $to, array $opt = [] ): array {
         $from = self::clean_date( $from );
@@ -579,6 +621,39 @@ class Qwoo_Appointments {
         $start = new DateTimeImmutable( $from . ' 00:00', $tz );
         $end   = new DateTimeImmutable( $to . ' 00:00', $tz );
         if ( $end->diff( $start )->days > self::MAX_RANGE ) $end = $start->modify( '+' . self::MAX_RANGE . ' days' );
+        $who  = self::service_staff( $svc );
+        $want = (int) ( $opt['staff'] ?? 0 );
+        if ( ! $who ) {
+            if ( ! empty( $svc['staff'] ) ) return []; // everyone who gives it is off
+            $who = [ 0 ];
+        } elseif ( $want ) {
+            $who = in_array( $want, $who, true ) ? [ $want ] : [];
+        }
+        $out = [];
+        foreach ( $who as $staff ) {
+            foreach ( self::free_times_of( $svc, $start, $end, $opt, $staff ) as $date => $list ) {
+                $out[ $date ] = $out[ $date ] ?? [];
+                foreach ( $list as $slot ) {
+                    $k = $slot['start'];
+                    if ( ! isset( $out[ $date ][ $k ] ) ) {
+                        $out[ $date ][ $k ] = $slot + [ 'staff' => [] ];
+                    } elseif ( isset( $slot['left'] ) ) {
+                        $out[ $date ][ $k ]['left'] = max( (int) $out[ $date ][ $k ]['left'], (int) $slot['left'] );
+                    }
+                    $out[ $date ][ $k ]['staff'][] = $staff;
+                }
+            }
+        }
+        foreach ( $out as $date => $list ) {
+            ksort( $list );
+            $out[ $date ] = array_values( $list );
+        }
+        ksort( $out );
+        return $out;
+    }
+
+    /** One person's (or the store's) free times. */
+    private static function free_times_of( array $svc, DateTimeImmutable $start, DateTimeImmutable $end, array $opt, int $staff ): array {
         $s       = self::settings();
         $owner   = ! empty( $opt['owner'] );
         $exclude = (int) ( $opt['exclude'] ?? 0 );
@@ -591,20 +666,20 @@ class Qwoo_Appointments {
         $dur     = (int) $svc['duration'];
         $u0      = intdiv( $start->getTimestamp() - DAY_IN_SECONDS, self::UNIT );
         $u1      = intdiv( $end->modify( '+2 days' )->getTimestamp(), self::UNIT );
-        $taken   = self::taken( $u0, $u1, $exclude, $ex_sess );
-        // The owner's own calendar (Google): its busy times take the same units.
-        foreach ( self::busy( $u0 * self::UNIT, $u1 * self::UNIT, ! empty( $opt['fresh'] ) ) as [ $a, $b ] ) {
+        $taken   = self::taken( $u0, $u1, $exclude, $ex_sess, $staff );
+        // Their own calendar (Google): its busy times take the same units.
+        foreach ( self::busy( $u0 * self::UNIT, $u1 * self::UNIT, ! empty( $opt['fresh'] ), $staff ) as [ $a, $b ] ) {
             for ( $u = max( $u0, intdiv( $a, self::UNIT ) ); $u < min( $u1, (int) ceil( $b / self::UNIT ) ); $u++ ) $taken[ $u ] = '';
         }
         $places  = $svc['capacity'] > 1 ? self::seats_taken( $u0, $u1, $exclude ) : [];
-        $per_day = self::day_counts( $start->getTimestamp(), $end->modify( '+1 day' )->getTimestamp(), $exclude );
+        $per_day = self::day_counts( $start->getTimestamp(), $end->modify( '+1 day' )->getTimestamp(), $exclude, $staff );
         $max_day = (int) $s['rules']['max_per_day'];
         $out     = [];
         for ( $day = $start; $day <= $end; $day = $day->modify( '+1 day' ) ) {
             $date = $day->format( 'Y-m-d' );
             $list = [];
             if ( ! $max_day || $owner || ( $per_day[ $date ] ?? 0 ) < $max_day ) {
-                $info   = self::day_ranges( $date, $s );
+                $info   = self::day_ranges( $date, $s, $staff );
                 $ranges = $info['ranges'];
                 $cands  = [];
                 if ( $svc['times']['mode'] === 'fixed' ) {
@@ -624,7 +699,7 @@ class Qwoo_Appointments {
                     $ts = $day->setTime( intdiv( $m, 60 ), $m % 60 )->getTimestamp();
                     if ( $ts < $min_ts || $ts > $max_ts ) continue;
                     [ $a, $b ] = self::units( $svc, $ts );
-                    $sess = self::sess_for( $svc, $ts );
+                    $sess = self::sess_for( $svc, $ts, $staff );
                     $ok   = true;
                     for ( $u = $a; $u < $b; $u++ ) {
                         if ( isset( $taken[ $u ] ) && ( $sess === '' || $taken[ $u ] !== $sess ) ) { $ok = false; break; }
@@ -644,10 +719,10 @@ class Qwoo_Appointments {
         return $out;
     }
 
-    /** Bookings that take time, per store date, between two moments. */
-    private static function day_counts( int $from, int $to, int $exclude = 0 ): array {
+    /** Bookings that take time, per store date, between two moments (one person's, or the store's). */
+    private static function day_counts( int $from, int $to, int $exclude = 0, int $staff = 0 ): array {
         global $wpdb;
-        $rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT start_utc FROM ' . self::bookings_table() . " WHERE status IN ('held','pending','confirmed','done','noshow') AND start_utc >= %s AND start_utc < %s AND id <> %d", self::sql_time( $from ), self::sql_time( $to ), $exclude ) );
+        $rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT start_utc FROM ' . self::bookings_table() . " WHERE status IN ('held','pending','requested','confirmed','done','noshow') AND start_utc >= %s AND start_utc < %s AND id <> %d AND staff_id = %d", self::sql_time( $from ), self::sql_time( $to ), $exclude, $staff ) );
         $out  = [];
         foreach ( $rows as $r ) {
             $d = wp_date( 'Y-m-d', self::ts( $r ) );
@@ -656,14 +731,153 @@ class Qwoo_Appointments {
         return $out;
     }
 
-    /** Whether $start is one of the service's free times right now. */
+    /** Whether $start is one of the service's free times right now ($opt staff: for that person). */
     private static function is_free( array $svc, int $start, array $opt = [] ): bool {
+        return (bool) self::free_staff( $svc, $start, $opt );
+    }
+
+    /** Who is free at $start (staff ids; [0] for a service without staff). */
+    private static function free_staff( array $svc, int $start, array $opt = [] ): array {
         $date = wp_date( 'Y-m-d', $start );
         $want = gmdate( 'Y-m-d\TH:i:s\Z', $start );
         foreach ( self::free_times( $svc, $date, $date, $opt + [ 'fresh' => true ] )[ $date ] ?? [] as $slot ) {
-            if ( $slot['start'] === $want ) return true;
+            if ( $slot['start'] === $want ) return $slot['staff'];
         }
-        return false;
+        return [];
+    }
+
+    /* ---------------- staff ---------------- */
+
+    public static function staff_table() { global $wpdb; return $wpdb->prefix . 'qwoo_appt_staff'; }
+
+    private static $staff_cache = null;
+
+    /** How many staff the plan allows (0 = no limit). Basic 1, Pro (and the trial) 5, Plus no limit. */
+    public static function staff_limit(): int {
+        $plan = get_option( 'qwoo_plan', null );
+        if ( ! is_array( $plan ) ) return 0;
+        return [ 'basic' => 1, 'free' => 1, 'pro' => 5, 'trial' => 5, 'plus' => 0 ][ (string) ( $plan['plan'] ?? '' ) ] ?? 5;
+    }
+
+    private static function clean_staff( array $in, array $old = [] ): array {
+        $g     = static fn( $k, $d = null ) => array_key_exists( $k, $in ) ? $in[ $k ] : ( $old[ $k ] ?? $d );
+        $photo = absint( $g( 'photo', 0 ) );
+        $hours = $g( 'hours', null );
+        $cal   = $old['cal'] ?? [];
+        return [
+            'name'     => mb_substr( sanitize_text_field( (string) $g( 'name', '' ) ), 0, 80 ),
+            'email'    => is_email( (string) $g( 'email', '' ) ) ? sanitize_email( (string) $g( 'email', '' ) ) : '',
+            'bio'      => mb_substr( sanitize_textarea_field( (string) $g( 'bio', '' ) ), 0, 500 ),
+            'photo'    => $photo && wp_attachment_is_image( $photo ) ? $photo : 0,
+            'color'    => sanitize_hex_color( (string) $g( 'color', '' ) ) ?: '',
+            // null = the store's hours
+            'hours'    => is_array( $hours ) ? self::clean_week( $hours ) : null,
+            'dates'    => self::clean_dates( $g( 'dates', [] ) ),
+            // Whose calendar: the store's connected calendar, their own, or none.
+            'calendar' => in_array( $g( 'calendar', 'store' ), [ 'store', 'own', 'none' ], true ) ? (string) $g( 'calendar', 'store' ) : 'store',
+            'notify'   => ! array_key_exists( 'notify', $in ) ? ( $old['notify'] ?? true ) : ! empty( $in['notify'] ),
+            'cal'      => is_array( $cal ) ? $cal : [],
+        ];
+    }
+
+    private static function row_staff( $row ): ?array {
+        if ( ! $row ) return null;
+        $row  = (array) $row;
+        $data = json_decode( (string) $row['data'], true );
+        $data = is_array( $data ) ? $data : [];
+        return [ 'id' => (int) $row['id'], 'status' => (string) $row['status'], 'sort' => (int) $row['sort'] ] + self::clean_staff( [], $data + [ 'cal' => $data['cal'] ?? [] ] );
+    }
+
+    public static function staff_list(): array {
+        if ( self::$staff_cache === null ) {
+            global $wpdb;
+            $rows = (array) $wpdb->get_results( 'SELECT * FROM ' . self::staff_table() . ' ORDER BY sort ASC, id ASC LIMIT 200', ARRAY_A );
+            self::$staff_cache = [];
+            foreach ( $rows as $r ) {
+                $p = self::row_staff( $r );
+                if ( $p ) self::$staff_cache[ $p['id'] ] = $p;
+            }
+        }
+        return self::$staff_cache;
+    }
+
+    public static function staff_one( int $id ): ?array {
+        return $id ? ( self::staff_list()[ $id ] ?? null ) : null;
+    }
+
+    public static function save_staff( array $in, int $only = 0 ) {
+        global $wpdb;
+        $id  = absint( $in['id'] ?? 0 );
+        if ( $only && $id !== $only ) return new WP_Error( 'access', 'You can change your own details only.' );
+        $old = $id ? self::staff_one( $id ) : null;
+        if ( $id && ! $old ) return new WP_Error( 'missing', 'That person isn\'t on your team any more.' );
+        if ( $only ) {
+            // Someone with "only their own bookings": their hours, days off, photo and words.
+            $in = array_intersect_key( $in, array_flip( [ 'hours', 'dates', 'bio', 'photo' ] ) );
+        }
+        $limit = self::staff_limit();
+        if ( ! $id && $limit && count( array_filter( self::staff_list(), static fn( $p ) => $p['status'] === 'active' ) ) >= $limit ) {
+            return new WP_Error( 'limit', sprintf( 'Your plan has room for %d people. See Plan & billing for more.', $limit ) );
+        }
+        $data = self::clean_staff( $in, $old ?: [] );
+        if ( $data['name'] === '' ) return new WP_Error( 'name', 'Write their name.' );
+        $status = $only ? ( $old['status'] ?? 'active' ) : ( ( $in['status'] ?? ( $old['status'] ?? 'active' ) ) === 'off' ? 'off' : 'active' );
+        $row    = [ 'status' => $status, 'data' => wp_json_encode( $data ), 'updated' => self::now() ];
+        if ( $id ) {
+            $wpdb->update( self::staff_table(), $row, [ 'id' => $id ] );
+        } else {
+            $wpdb->insert( self::staff_table(), $row + [ 'sort' => count( self::staff_list() ) + 1, 'created' => self::now() ] );
+            $id = (int) $wpdb->insert_id;
+        }
+        self::$staff_cache = null;
+        // "Gives these services" from the staff card.
+        if ( ! $only && is_array( $in['services'] ?? null ) ) {
+            $want = array_map( 'absint', $in['services'] );
+            foreach ( self::services() as $svc ) {
+                $has  = in_array( $id, $svc['staff'], true );
+                $gets = in_array( $svc['id'], $want, true );
+                if ( $has === $gets ) continue;
+                $list = $gets ? array_merge( $svc['staff'], [ $id ] ) : array_values( array_diff( $svc['staff'], [ $id ] ) );
+                $wpdb->update( self::services_table(), [ 'data' => wp_json_encode( self::clean_service( [ 'staff' => $list ], $svc ) ), 'updated' => self::now() ], [ 'id' => $svc['id'] ] );
+            }
+        }
+        return self::staff_view( self::staff_one( $id ) );
+    }
+
+    public static function delete_staff( int $id ) {
+        global $wpdb;
+        if ( ! self::staff_one( $id ) ) return [ 'ok' => true ];
+        $future = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::bookings_table() . " WHERE staff_id = %d AND status IN ('held','pending','requested','confirmed') AND start_utc > %s", $id, self::now() ) );
+        if ( $future ) return new WP_Error( 'busy', sprintf( 'They have %d upcoming bookings. Move them to someone else first, or turn them off.', $future ) );
+        foreach ( self::services() as $svc ) {
+            if ( in_array( $id, $svc['staff'], true ) ) {
+                $wpdb->update( self::services_table(), [ 'data' => wp_json_encode( self::clean_service( [ 'staff' => array_values( array_diff( $svc['staff'], [ $id ] ) ) ], $svc ) ) ], [ 'id' => $svc['id'] ] );
+            }
+        }
+        $wpdb->delete( self::staff_table(), [ 'id' => $id ] );
+        self::$staff_cache = null;
+        return [ 'ok' => true ];
+    }
+
+    public static function staff_view( ?array $p ): ?array {
+        if ( ! $p ) return null;
+        return $p + [
+            'photo_url' => $p['photo'] ? (string) wp_get_attachment_image_url( $p['photo'], 'thumbnail' ) : '',
+            'services'  => array_values( array_map( static fn( $s ) => $s['id'], array_filter( self::services(), static fn( $s ) => in_array( $p['id'], $s['staff'], true ) ) ) ),
+        ];
+    }
+
+    /** The least busy of these people that day (anyone available). */
+    private static function pick_staff( array $ids, int $start ): int {
+        if ( count( $ids ) < 2 ) return (int) ( $ids[0] ?? 0 );
+        $day  = ( new DateTimeImmutable( '@' . $start ) )->setTimezone( wp_timezone() )->setTime( 0, 0 )->getTimestamp();
+        $best = 0;
+        $low  = PHP_INT_MAX;
+        foreach ( $ids as $id ) {
+            $n = array_sum( self::day_counts( $day, $day + DAY_IN_SECONDS, 0, (int) $id ) );
+            if ( $n < $low ) { $low = $n; $best = (int) $id; }
+        }
+        return $best;
     }
 
     /* ---------------- the owner's calendar (Google, through the platform) ---------------- */
@@ -672,6 +886,25 @@ class Qwoo_Appointments {
         $c = get_option( self::CALENDAR, [] );
         $c = is_array( $c ) ? $c : [];
         return [ 'connected' => ! empty( $c['connected'] ), 'provider' => (string) ( $c['provider'] ?? '' ), 'email' => (string) ( $c['email'] ?? '' ), 'invite' => ! empty( $c['invite'] ), 'error' => (string) ( $c['error'] ?? '' ) ];
+    }
+
+    /**
+     * Whose connected calendar a person's bookings use: 0 = the store's, a staff id = their
+     * own, null = none. Staff 0 is the store itself (services without staff).
+     */
+    public static function cal_target( int $staff ): ?int {
+        if ( $staff ) {
+            $p = self::staff_one( $staff );
+            if ( ! $p || $p['calendar'] === 'none' ) return null;
+            if ( $p['calendar'] === 'own' ) return ! empty( $p['cal']['connected'] ) ? $staff : null;
+        }
+        return self::calendar()['connected'] ? 0 : null;
+    }
+
+    private static function cal_info( int $link ): array {
+        if ( ! $link ) return self::calendar();
+        $p = self::staff_one( $link );
+        return [ 'connected' => ! empty( $p['cal']['connected'] ), 'email' => (string) ( $p['cal']['email'] ?? '' ), 'invite' => ! empty( $p['cal']['invite'] ), 'error' => '' ];
     }
 
     private static function calendar_error( string $error ): void {
@@ -687,20 +920,21 @@ class Qwoo_Appointments {
      * again (before a time is held). When the calendar can't be reached, nothing is
      * busy: bookings still work.
      */
-    public static function busy( int $from, int $to, bool $fresh = false ): array {
-        if ( ! self::calendar()['connected'] || ! class_exists( 'Qwoo_Platform_Connection' ) ) return [];
+    public static function busy( int $from, int $to, bool $fresh = false, int $staff = 0 ): array {
+        $link = self::cal_target( $staff );
+        if ( $link === null || ! class_exists( 'Qwoo_Platform_Connection' ) ) return [];
         $a   = intdiv( $from, DAY_IN_SECONDS ) * DAY_IN_SECONDS;
         $b   = (int) ceil( $to / DAY_IN_SECONDS ) * DAY_IN_SECONDS;
-        $key = 'qwoo_appt_busy_' . md5( (int) get_option( self::BUSY_GEN, 0 ) . '|' . $a . '|' . $b );
+        $key = 'qwoo_appt_busy_' . md5( (int) get_option( self::BUSY_GEN, 0 ) . '|' . $link . '|' . $a . '|' . $b );
         $hit = $fresh ? false : get_transient( $key );
         if ( is_array( $hit ) ) return $hit;
-        $res = Qwoo_Platform_Connection::post( 'calendar', [ 'do' => 'busy', 'from' => gmdate( 'c', $a ), 'to' => gmdate( 'c', $b ) ], 8 );
+        $res = Qwoo_Platform_Connection::post( 'calendar', [ 'do' => 'busy', 'staff' => $link, 'from' => gmdate( 'c', $a ), 'to' => gmdate( 'c', $b ) ], 8 );
         if ( ! is_array( $res ) || empty( $res['connected'] ) || ! is_array( $res['busy'] ?? null ) ) {
-            self::calendar_error( is_array( $res ) && array_key_exists( 'connected', $res ) && ! $res['connected'] ? 'disconnected' : 'unreachable' );
+            if ( ! $link ) self::calendar_error( is_array( $res ) && array_key_exists( 'connected', $res ) && ! $res['connected'] ? 'disconnected' : 'unreachable' );
             set_transient( $key, [], 30 );
             return [];
         }
-        self::calendar_error( '' );
+        if ( ! $link ) self::calendar_error( '' );
         $tz  = wp_timezone();
         $out = [];
         foreach ( $res['busy'] as $iv ) {
@@ -727,17 +961,19 @@ class Qwoo_Appointments {
     public static function cal_sync( int $id ): void {
         global $wpdb;
         $b = self::booking( $id );
-        if ( ! $b || ! self::calendar()['connected'] || ! class_exists( 'Qwoo_Platform_Connection' ) ) return;
+        if ( ! $b || ! class_exists( 'Qwoo_Platform_Connection' ) ) return;
+        $link = self::cal_target( (int) $b['staff_id'] );
+        if ( $link === null ) return;
         $live = in_array( $b['status'], [ 'confirmed', 'done', 'noshow', 'blocked' ], true );
         if ( ! $live ) {
             if ( $b['cal_event'] === '' ) return;
-            $res = Qwoo_Platform_Connection::post( 'calendar', [ 'do' => 'delete', 'event_id' => $b['cal_event'] ], 8 );
+            $res = Qwoo_Platform_Connection::post( 'calendar', [ 'do' => 'delete', 'staff' => $link, 'event_id' => $b['cal_event'] ], 8 );
             $ok  = is_array( $res ) && ( ! empty( $res['ok'] ) || ( array_key_exists( 'connected', $res ) && ! $res['connected'] ) );
             $wpdb->update( self::bookings_table(), $ok ? [ 'cal_event' => '', 'cal_state' => 'ok', 'cal_tries' => 0 ] : [ 'cal_state' => 'retry', 'cal_tries' => (int) $b['cal_tries'] + 1 ], [ 'id' => $id ] );
             return;
         }
         if ( in_array( $b['status'], [ 'done', 'noshow' ], true ) && $b['cal_event'] !== '' ) return; // nothing to change for a past one
-        $res = Qwoo_Platform_Connection::post( 'calendar', [ 'do' => 'write', 'event' => self::cal_event( $b ) ], 10 );
+        $res = Qwoo_Platform_Connection::post( 'calendar', [ 'do' => 'write', 'staff' => $link, 'event' => self::cal_event( $b, $link ) ], 10 );
         if ( is_array( $res ) && ! empty( $res['event_id'] ) ) {
             $set = [ 'cal_event' => mb_substr( (string) $res['event_id'], 0, 255 ), 'cal_state' => 'ok', 'cal_tries' => 0 ];
             if ( ! empty( $res['meet'] ) && preg_match( '#^https://meet\.google\.com/#', (string) $res['meet'] ) ) $set['video'] = mb_substr( (string) $res['meet'], 0, 500 );
@@ -749,9 +985,9 @@ class Qwoo_Appointments {
     }
 
     /** The event as the owner sees it in their calendar (the customer sees only the title, place and link when invited). */
-    private static function cal_event( array $b ): array {
+    private static function cal_event( array $b, int $link = 0 ): array {
         $svc     = self::service( (int) $b['service_id'] );
-        $invite  = self::calendar()['invite'] && $b['email'] !== '' && $b['status'] !== 'blocked';
+        $invite  = self::cal_info( $link )['invite'] && $b['email'] !== '' && $b['status'] !== 'blocked';
         if ( $b['status'] === 'blocked' ) {
             $summary = self::l( 'Busy', 'תפוס' ) . ( $b['note'] ? ' · ' . $b['note'] : '' );
             $desc    = '';
@@ -780,14 +1016,28 @@ class Qwoo_Appointments {
 
     /** From the platform: the owner connected or disconnected a calendar. */
     public static function cal_link( array $p ): array {
-        update_option( self::CALENDAR, [
+        global $wpdb;
+        $info  = [
             'connected' => ! empty( $p['connected'] ), 'provider' => sanitize_key( (string) ( $p['provider'] ?? '' ) ),
             'email' => sanitize_email( (string) ( $p['email'] ?? '' ) ), 'invite' => ! empty( $p['invite'] ), 'error' => '',
-        ], false );
+        ];
+        $staff = absint( $p['staff'] ?? 0 );
+        if ( $staff ) {
+            // A staff member's own calendar: kept on their card.
+            $person = self::staff_one( $staff );
+            if ( ! $person ) return [ 'ok' => false ];
+            $data          = array_diff_key( $person, array_flip( [ 'id', 'status', 'sort' ] ) );
+            $data['cal']   = $info;
+            if ( $info['connected'] ) $data['calendar'] = 'own';
+            elseif ( $data['calendar'] === 'own' ) $data['calendar'] = 'store';
+            $wpdb->update( self::staff_table(), [ 'data' => wp_json_encode( $data ), 'updated' => self::now() ], [ 'id' => $staff ] );
+            self::$staff_cache = null;
+        } else {
+            update_option( self::CALENDAR, $info, false );
+        }
         update_option( self::BUSY_GEN, (int) get_option( self::BUSY_GEN, 0 ) + 1, false );
         // Upcoming bookings go into a newly connected calendar (the tick chain does the rest).
         if ( ! empty( $p['connected'] ) ) {
-            global $wpdb;
             $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::bookings_table() . " SET cal_state = 'retry', cal_tries = 0 WHERE status IN ('confirmed','blocked') AND cal_event = '' AND start_utc > %s", self::now() ) );
         }
         return [ 'ok' => true ];
@@ -829,7 +1079,6 @@ class Qwoo_Appointments {
     /** Bookings still to put in the calendar (the tick chain). */
     private static function cal_retry( float $until ): void {
         global $wpdb;
-        if ( ! self::calendar()['connected'] ) return;
         $rows = (array) $wpdb->get_col( $wpdb->prepare(
             'SELECT id FROM ' . self::bookings_table() . " WHERE cal_state = 'retry' AND cal_tries < 5 AND updated < %s ORDER BY id LIMIT 10",
             self::sql_time( time() - 5 * MINUTE_IN_SECONDS )
@@ -843,15 +1092,16 @@ class Qwoo_Appointments {
 
     /* ---------------- taking and letting go ---------------- */
 
-    /** Takes the booking's units. False: someone else has them. Call inside the lock. */
-    private static function take_units( int $booking_id, array $svc, int $start, int $seats ): bool {
+    /** Takes the booking's units on its person's resource. False: someone else has them. Call inside the lock. */
+    private static function take_units( int $booking_id, array $svc, int $start, int $seats, int $staff = 0 ): bool {
         global $wpdb;
         [ $a, $b ] = self::units( $svc, $start );
-        $sess  = self::sess_for( $svc, $start );
+        $sess  = self::sess_for( $svc, $start, $staff );
+        $res   = self::resource( $staff );
         $table = self::slots_table();
         if ( $sess === '' ) {
             $values = [];
-            for ( $u = $a; $u < $b; $u++ ) $values[] = $wpdb->prepare( "('r0', %d, 0, %d, '')", $u, $booking_id );
+            for ( $u = $a; $u < $b; $u++ ) $values[] = $wpdb->prepare( "(%s, %d, 0, %d, '')", $res, $u, $booking_id );
             $ok = $wpdb->query( "INSERT INTO $table (resource, unit, seat, booking_id, sess) VALUES " . implode( ',', $values ) );
             if ( $ok === false ) {
                 $wpdb->delete( $table, [ 'booking_id' => $booking_id ] );
@@ -859,8 +1109,8 @@ class Qwoo_Appointments {
             }
             return true;
         }
-        // A group: its session's time once on r0, then a row per place.
-        $existing = (array) $wpdb->get_results( $wpdb->prepare( "SELECT unit, sess FROM $table WHERE resource = 'r0' AND unit >= %d AND unit < %d", $a, $b ), ARRAY_A );
+        // A group: its session's time once on the person's resource, then a row per place.
+        $existing = (array) $wpdb->get_results( $wpdb->prepare( "SELECT unit, sess FROM $table WHERE resource = %s AND unit >= %d AND unit < %d", $res, $a, $b ), ARRAY_A );
         $have     = [];
         foreach ( $existing as $r ) {
             if ( $r['sess'] !== $sess ) return false;
@@ -877,7 +1127,7 @@ class Qwoo_Appointments {
         }
         $missing = [];
         for ( $u = $a; $u < $b; $u++ ) {
-            if ( empty( $have[ $u ] ) ) $missing[] = $wpdb->prepare( "('r0', %d, 0, 0, %s)", $u, $sess );
+            if ( empty( $have[ $u ] ) ) $missing[] = $wpdb->prepare( '(%s, %d, 0, 0, %s)', $res, $u, $sess );
         }
         if ( $missing && $wpdb->query( "INSERT INTO $table (resource, unit, seat, booking_id, sess) VALUES " . implode( ',', $missing ) ) === false ) {
             $wpdb->delete( $table, [ 'booking_id' => $booking_id ] );
@@ -892,7 +1142,7 @@ class Qwoo_Appointments {
         global $wpdb;
         if ( $sess === '' ) return;
         $left = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::slots_table() . ' WHERE resource = %s AND seat > 0', $sess ) );
-        if ( ! $left ) $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . self::slots_table() . " WHERE resource = 'r0' AND sess = %s", $sess ) );
+        if ( ! $left ) $wpdb->query( $wpdb->prepare( 'DELETE FROM ' . self::slots_table() . " WHERE resource LIKE 'r%%' AND sess = %s", $sess ) );
     }
 
     private static function release_units( array $b ): void {
@@ -901,11 +1151,18 @@ class Qwoo_Appointments {
         self::tidy_session( (string) $b['sess'] );
     }
 
-    /** Lets go of holds that ran out (a shopper who left, an order never paid). */
+    /**
+     * Lets go of holds that ran out (a shopper who left, an order never paid), and
+     * declines requests the owner didn't answer in time.
+     */
     public static function expire_holds(): void {
         global $wpdb;
-        $rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . self::bookings_table() . " WHERE status IN ('held','pending') AND hold_until IS NOT NULL AND hold_until < %s LIMIT 200", self::now() ), ARRAY_A );
+        $rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . self::bookings_table() . " WHERE status IN ('held','pending','requested') AND hold_until IS NOT NULL AND hold_until < %s LIMIT 200", self::now() ), ARRAY_A );
         foreach ( $rows as $b ) {
+            if ( $b['status'] === 'requested' ) {
+                self::decline( (int) $b['id'], self::l( 'Not answered in time', 'לא נענה בזמן' ), 'expired' );
+                continue;
+            }
             self::release_units( $b );
             $wpdb->update( self::bookings_table(), [ 'status' => 'expired', 'hold_until' => null, 'updated' => self::now() ], [ 'id' => (int) $b['id'] ] );
         }
@@ -942,13 +1199,16 @@ class Qwoo_Appointments {
     }
 
     /**
-     * Holds a time for a shopper (10 minutes). { hold, id, until } or a WP_Error.
-     * The time must be one of the service's free times right now.
+     * Holds a time for a shopper (10 minutes). { hold, id, until, staff } or a WP_Error.
+     * The time must be one of the service's free times right now. $staff: the person
+     * chosen (0 = anyone: the least busy of those free then).
      */
-    public static function hold( array $svc, int $start, int $seats = 1 ) {
+    public static function hold( array $svc, int $start, int $seats = 1, int $staff = 0 ) {
         global $wpdb;
         $seats = max( 1, min( (int) $svc['max_seats'], $seats ) );
         if ( $svc['capacity'] <= 1 ) $seats = 1;
+        $team = self::service_staff( $svc );
+        if ( $team && ! $staff && empty( $svc['anyone'] ) ) return new WP_Error( 'staff', self::l( 'Choose who you\'d like to book with.', 'צריך לבחור עם מי לקבוע.' ), [ 'status' => 400 ] );
         $ip = self::ip_hash();
         if ( $ip !== '' ) {
             $open = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::bookings_table() . " WHERE ip_hash = %s AND status = 'held' AND hold_until > %s", $ip, self::now() ) );
@@ -957,24 +1217,27 @@ class Qwoo_Appointments {
         if ( ! self::lock() ) return new WP_Error( 'busy', self::l( 'Many people are booking right now. Please try again.', 'הרבה אנשים קובעים עכשיו. אפשר לנסות שוב.' ), [ 'status' => 503 ] );
         try {
             self::expire_holds();
-            if ( ! self::is_free( $svc, $start, [ 'seats' => $seats ] ) ) {
+            $free = self::free_staff( $svc, $start, [ 'seats' => $seats, 'staff' => $staff ] );
+            if ( ! $free ) {
                 return new WP_Error( 'taken', self::l( 'That time was just taken. Please pick another one.', 'הזמן הזה נתפס הרגע. אפשר לבחור זמן אחר.' ), [ 'status' => 409 ] );
             }
+            $who   = $team ? ( $staff ?: self::pick_staff( $free, $start ) ) : 0;
             $token = bin2hex( random_bytes( 20 ) );
             $now   = self::now();
             $wpdb->insert( self::bookings_table(), [
-                'service_id' => (int) $svc['id'], 'sess' => self::sess_for( $svc, $start ),
+                'service_id' => (int) $svc['id'], 'staff_id' => $who, 'sess' => self::sess_for( $svc, $start, $who ),
                 'start_utc' => self::sql_time( $start ), 'end_utc' => self::sql_time( $start + $svc['duration'] * 60 ),
                 'seats' => $seats, 'status' => 'held', 'hold_until' => self::sql_time( time() + self::HOLD_MIN * 60 ), 'hold_token' => $token,
                 'ip_hash' => $ip, 'customer_id' => get_current_user_id(), 'price' => (float) $svc['price'] * $seats, 'due_now' => self::due_now( $svc ) * $seats,
                 'currency' => get_woocommerce_currency(), 'place' => self::place_text( $svc ), 'created' => $now, 'updated' => $now,
             ] );
             $id = (int) $wpdb->insert_id;
-            if ( ! $id || ! self::take_units( $id, $svc, $start, $seats ) ) {
+            if ( ! $id || ! self::take_units( $id, $svc, $start, $seats, $who ) ) {
                 if ( $id ) $wpdb->delete( self::bookings_table(), [ 'id' => $id ] );
                 return new WP_Error( 'taken', self::l( 'That time was just taken. Please pick another one.', 'הזמן הזה נתפס הרגע. אפשר לבחור זמן אחר.' ), [ 'status' => 409 ] );
             }
-            return [ 'hold' => $token, 'id' => $id, 'until' => gmdate( 'c', time() + self::HOLD_MIN * 60 ) ];
+            $person = $who ? self::staff_one( $who ) : null;
+            return [ 'hold' => $token, 'id' => $id, 'until' => gmdate( 'c', time() + self::HOLD_MIN * 60 ), 'staff' => $person ? $person['name'] : '' ];
         } finally {
             self::unlock();
         }
@@ -1036,35 +1299,87 @@ class Qwoo_Appointments {
         }
     }
 
-    /** A held booking becomes a booking: emails go out. */
-    public static function confirm( int $id, int $order_id = 0 ): bool {
+    /**
+     * A held (or paid) booking becomes a booking: emails go out. A service the owner
+     * approves becomes a request instead (the time stays held until they answer);
+     * $approved: the owner said yes.
+     */
+    public static function confirm( int $id, int $order_id = 0, bool $approved = false ): bool {
         global $wpdb;
         $b = self::booking( $id );
         if ( ! $b ) return false;
         if ( $b['status'] === 'confirmed' ) return true;
+        $svc = self::service( (int) $b['service_id'] );
         if ( $b['status'] === 'expired' || $b['status'] === 'cancelled' ) {
             // Paid after the hold ran out: take the time again if it's still free.
-            $svc = self::service( (int) $b['service_id'] );
             if ( ! $svc || ! self::lock() ) return false;
             try {
-                $ok = self::take_units( $id, $svc, self::ts( $b['start_utc'] ), (int) $b['seats'] );
+                $ok = self::take_units( $id, $svc, self::ts( $b['start_utc'] ), (int) $b['seats'], (int) $b['staff_id'] );
             } finally {
                 self::unlock();
             }
             if ( ! $ok ) return false;
         }
-        $wpdb->update( self::bookings_table(), [ 'status' => 'confirmed', 'hold_until' => null, 'hold_token' => '', 'order_id' => $order_id ?: (int) $b['order_id'], 'updated' => self::now() ], [ 'id' => $id ] );
-        self::log( $id, 'confirmed' );
+        $order = $order_id ?: (int) $b['order_id'];
+        if ( ! $approved && $svc && $svc['approval'] === 'owner' && $b['source'] !== 'owner' ) {
+            if ( $b['status'] === 'requested' ) return true;
+            $until = min( self::ts( $b['start_utc'] ) - 15 * MINUTE_IN_SECONDS, time() + (int) $svc['approval_hours'] * HOUR_IN_SECONDS );
+            $wpdb->update( self::bookings_table(), [ 'status' => 'requested', 'hold_until' => self::sql_time( max( time() + 15 * MINUTE_IN_SECONDS, $until ) ), 'hold_token' => '', 'order_id' => $order, 'updated' => self::now() ], [ 'id' => $id ] );
+            self::log( $id, 'requested' );
+            $b = self::booking( $id );
+            self::send( 'booking_requested', $b );
+            self::send( 'booking_request', $b );
+            if ( class_exists( 'Qwoo_Owner_Alerts' ) && method_exists( 'Qwoo_Owner_Alerts', 'booking' ) ) {
+                Qwoo_Owner_Alerts::booking( $id, (string) $b['name'], self::l( 'Waiting for you: ', 'מחכה לאישורך: ' ) . self::title_for( $b ) . ' · ' . wp_date( 'D j M, H:i', self::ts( $b['start_utc'] ) ) );
+            }
+            do_action( 'qwoo_booking_status', $b, 'requested' );
+            return true;
+        }
+        $wpdb->update( self::bookings_table(), [ 'status' => 'confirmed', 'hold_until' => null, 'hold_token' => '', 'order_id' => $order, 'updated' => self::now() ], [ 'id' => $id ] );
+        self::log( $id, $approved ? 'approved' : 'confirmed' );
         // Into the owner's calendar first: a Meet link made there goes into the confirmation.
         self::cal_sync( $id );
         $b = self::booking( $id );
         self::send( 'booking_confirmed', $b );
-        self::send( 'booking_new', $b );
-        if ( class_exists( 'Qwoo_Owner_Alerts' ) && method_exists( 'Qwoo_Owner_Alerts', 'booking' ) ) {
-            Qwoo_Owner_Alerts::booking( $id, (string) $b['name'], self::title_for( $b ) . ' · ' . wp_date( 'D j M, H:i', self::ts( $b['start_utc'] ) ) );
+        if ( ! $approved ) {
+            self::send( 'booking_new', $b );
+            if ( class_exists( 'Qwoo_Owner_Alerts' ) && method_exists( 'Qwoo_Owner_Alerts', 'booking' ) ) {
+                Qwoo_Owner_Alerts::booking( $id, (string) $b['name'], self::title_for( $b ) . ' · ' . wp_date( 'D j M, H:i', self::ts( $b['start_utc'] ) ) );
+            }
         }
         do_action( 'qwoo_booking_status', $b, 'confirmed' );
         return true;
+    }
+
+    /** The owner says no to a request (or nobody answered in time): the time goes back, a payment is refunded. */
+    public static function decline( int $id, string $why = '', string $by = 'owner' ) {
+        global $wpdb;
+        $b = self::booking( $id );
+        if ( ! $b || $b['status'] !== 'requested' ) return new WP_Error( 'status', 'Only requests can be declined.' );
+        self::release_units( $b );
+        $wpdb->update( self::bookings_table(), [ 'status' => 'cancelled', 'hold_until' => null, 'updated' => self::now() ], [ 'id' => $id ] );
+        self::log( $id, 'declined', $by . ( $why !== '' ? ': ' . $why : '' ) );
+        self::refund_all( $b, self::l( 'Booking request declined', 'בקשת התור נדחתה' ) );
+        $b = self::booking( $id );
+        if ( $b['email'] !== '' ) self::send( 'booking_declined', $b, [ 'why' => $why ] );
+        do_action( 'qwoo_booking_status', $b, 'declined' );
+        return true;
+    }
+
+    /** The booking's whole payment back (a declined request). */
+    private static function refund_all( array $b, string $reason ): void {
+        $order = $b['order_id'] ? wc_get_order( (int) $b['order_id'] ) : null;
+        if ( ! $order || ! $order->is_paid() ) return;
+        $amount = 0.0;
+        foreach ( $order->get_items() as $item ) {
+            if ( (int) $item->get_meta( '_qwoo_booking' ) === (int) $b['id'] ) $amount += (float) $item->get_total() + (float) $item->get_total_tax();
+        }
+        $amount = min( $amount, (float) $order->get_remaining_refund_amount() );
+        if ( $amount <= 0 ) return;
+        $refund = wc_create_refund( [ 'order_id' => $order->get_id(), 'amount' => $amount, 'reason' => $reason, 'refund_payment' => true ] );
+        if ( is_wp_error( $refund ) ) {
+            $order->add_order_note( sprintf( self::l( 'The booking request was declined, but the refund didn\'t go through (%s). Refund it from the order.', 'בקשת התור נדחתה, אבל ההחזר לא עבר (%s). אפשר להחזיר מההזמנה.' ), $refund->get_error_message() ) );
+        }
     }
 
     /** Cancels a booking (the shopper's link or the owner). */
@@ -1077,8 +1392,10 @@ class Qwoo_Appointments {
         $wpdb->update( self::bookings_table(), [ 'status' => 'cancelled', 'hold_until' => null, 'updated' => self::now() ], [ 'id' => $id ] );
         self::log( $id, 'cancelled', $by . ( $why !== '' ? ': ' . $why : '' ) );
         self::cal_sync( $id );
-        $was_on = in_array( $b['status'], [ 'confirmed', 'pending' ], true );
-        if ( $was_on && $by === 'shopper' ) self::refund_on_cancel( $b );
+        $was_on = in_array( $b['status'], [ 'confirmed', 'pending', 'requested' ], true );
+        // A request the shopper takes back is refunded in full (the owner never said yes).
+        if ( $b['status'] === 'requested' ) self::refund_all( $b, self::l( 'Booking request withdrawn', 'בקשת התור בוטלה' ) );
+        elseif ( $was_on && $by === 'shopper' ) self::refund_on_cancel( $b );
         $b = self::booking( $id );
         if ( $was_on && $tell && $b['email'] !== '' ) self::send( 'booking_cancelled', $b, [ 'by' => $by ] );
         if ( $was_on && $by === 'shopper' ) self::send( 'booking_cancelled_team', $b );
@@ -1096,46 +1413,47 @@ class Qwoo_Appointments {
             $order->add_order_note( self::l( 'The customer cancelled the booking. Your rule keeps the payment.', 'הלקוח ביטל את התור. לפי הכלל שלך התשלום נשאר.' ) );
             return;
         }
-        $amount = 0.0;
-        foreach ( $order->get_items() as $item ) {
-            if ( (int) $item->get_meta( '_qwoo_booking' ) === (int) $b['id'] ) $amount += (float) $item->get_total() + (float) $item->get_total_tax();
-        }
-        $amount = min( $amount, (float) $order->get_remaining_refund_amount() );
-        if ( $amount <= 0 ) return;
-        $refund = wc_create_refund( [ 'order_id' => $order->get_id(), 'amount' => $amount, 'reason' => self::l( 'Booking cancelled by the customer', 'התור בוטל על ידי הלקוח' ), 'refund_payment' => true ] );
-        if ( is_wp_error( $refund ) ) {
-            $order->add_order_note( sprintf( self::l( 'The customer cancelled the booking, but the refund didn\'t go through (%s). Refund it from the order.', 'הלקוח ביטל את התור, אבל ההחזר לא עבר (%s). אפשר להחזיר מההזמנה.' ), $refund->get_error_message() ) );
-        }
+        self::refund_all( $b, self::l( 'Booking cancelled by the customer', 'התור בוטל על ידי הלקוח' ) );
     }
 
-    /** Moves a booking to another free time. */
-    public static function move( int $id, int $start, string $by, bool $tell = true ) {
+    /** Moves a booking to another free time (the owner may also give it to someone else on the team). */
+    public static function move( int $id, int $start, string $by, bool $tell = true, int $to_staff = -1 ) {
         global $wpdb;
         $b   = self::booking( $id );
         $svc = $b ? self::service( (int) $b['service_id'] ) : null;
         if ( ! $b || ! $svc ) return new WP_Error( 'missing', 'That booking doesn\'t exist any more.' );
-        if ( ! in_array( $b['status'], [ 'confirmed', 'pending' ], true ) ) return new WP_Error( 'status', 'Only upcoming bookings can be moved.' );
+        if ( ! in_array( $b['status'], [ 'confirmed', 'pending', 'requested' ], true ) ) return new WP_Error( 'status', 'Only upcoming bookings can be moved.' );
+        $staff = $by === 'owner' && $to_staff >= 0 && ( ! $to_staff || in_array( $to_staff, self::service_staff( $svc ), true ) ) ? $to_staff : (int) $b['staff_id'];
+        if ( self::service_staff( $svc ) && ! $staff ) $staff = (int) $b['staff_id'];
         if ( ! self::lock() ) return new WP_Error( 'busy', self::l( 'Please try again in a moment.', 'אפשר לנסות שוב בעוד רגע.' ), [ 'status' => 503 ] );
         try {
             self::expire_holds();
-            $opt = [ 'exclude' => $id, 'owner' => $by === 'owner', 'seats' => (int) $b['seats'] ];
+            $opt = [ 'exclude' => $id, 'owner' => $by === 'owner', 'seats' => (int) $b['seats'], 'staff' => $staff ];
             if ( $b['sess'] !== '' && ! self::others_in( $b ) ) $opt['exclude_sess'] = $b['sess'];
             if ( ! self::is_free( $svc, $start, $opt ) ) return new WP_Error( 'taken', self::l( 'That time isn\'t free. Please pick another one.', 'הזמן הזה לא פנוי. אפשר לבחור זמן אחר.' ), [ 'status' => 409 ] );
             $old_start = self::ts( $b['start_utc'] );
+            $old_staff = (int) $b['staff_id'];
             self::release_units( $b );
-            if ( ! self::take_units( $id, $svc, $start, (int) $b['seats'] ) ) {
-                self::take_units( $id, $svc, $old_start, (int) $b['seats'] );
+            if ( ! self::take_units( $id, $svc, $start, (int) $b['seats'], $staff ) ) {
+                self::take_units( $id, $svc, $old_start, (int) $b['seats'], $old_staff );
                 return new WP_Error( 'taken', self::l( 'That time was just taken. Please pick another one.', 'הזמן הזה נתפס הרגע. אפשר לבחור זמן אחר.' ), [ 'status' => 409 ] );
             }
             $wpdb->update( self::bookings_table(), [
-                'start_utc' => self::sql_time( $start ), 'end_utc' => self::sql_time( $start + $svc['duration'] * 60 ),
-                'sess' => self::sess_for( $svc, $start ), 'reminded' => 0, 'cal_flag' => '', 'cal_note' => '',
+                'start_utc' => self::sql_time( $start ), 'end_utc' => self::sql_time( $start + $svc['duration'] * 60 ), 'staff_id' => $staff,
+                'sess' => self::sess_for( $svc, $start, $staff ), 'reminded' => 0, 'cal_flag' => '', 'cal_note' => '',
                 'moves' => (int) $b['moves'] + ( $by === 'shopper' ? 1 : 0 ), 'updated' => self::now(),
             ], [ 'id' => $id ] );
         } finally {
             self::unlock();
         }
         self::log( $id, 'moved', $by . ': ' . wp_date( 'Y-m-d H:i', $old_start ) . ' → ' . wp_date( 'Y-m-d H:i', $start ) );
+        // Another person's calendar: out of the old one, into the new one.
+        if ( $old_staff !== $staff && $b['cal_event'] !== '' ) {
+            $wpdb->update( self::bookings_table(), [ 'status' => 'cancelled' ], [ 'id' => $id ] );
+            $wpdb->update( self::bookings_table(), [ 'staff_id' => $old_staff ], [ 'id' => $id ] );
+            self::cal_sync( $id );
+            $wpdb->update( self::bookings_table(), [ 'status' => $b['status'], 'staff_id' => $staff, 'cal_event' => '' ], [ 'id' => $id ] );
+        }
         self::cal_sync( $id );
         $b = self::booking( $id );
         if ( $tell && $b['email'] !== '' ) self::send( 'booking_moved', $b );
@@ -1148,20 +1466,22 @@ class Qwoo_Appointments {
         return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::slots_table() . ' WHERE resource = %s AND seat > 0 AND booking_id <> %d', $b['sess'], (int) $b['id'] ) ) > 0;
     }
 
-    /** The owner adds a booking by hand (a phone call) or blocks time. */
+    /** The owner adds a booking by hand (a phone call) or blocks time (for one person, or the store). */
     public static function owner_create( array $in ) {
         global $wpdb;
         $start = self::parse_start( $in['start'] ?? '' );
         if ( ! $start ) return new WP_Error( 'start', 'Choose a day and time.' );
-        $now = self::now();
+        $now   = self::now();
+        $staff = absint( $in['staff_id'] ?? 0 );
+        if ( $staff && ! self::staff_one( $staff ) ) return new WP_Error( 'staff', 'That person isn\'t on your team any more.' );
         if ( ! empty( $in['block'] ) ) {
             $minutes = max( 5, min( 24 * 60, intdiv( (int) ( $in['minutes'] ?? 60 ), 5 ) * 5 ) );
             $busy    = [ 'id' => 0, 'capacity' => 1, 'duration' => $minutes, 'buffer_before' => 0, 'buffer_after' => 0 ];
             if ( ! self::lock() ) return new WP_Error( 'busy', 'Please try again in a moment.' );
             try {
-                $wpdb->insert( self::bookings_table(), [ 'service_id' => 0, 'start_utc' => self::sql_time( $start ), 'end_utc' => self::sql_time( $start + $minutes * 60 ), 'status' => 'blocked', 'source' => 'owner', 'note' => mb_substr( sanitize_text_field( (string) ( $in['note'] ?? '' ) ), 0, 200 ), 'created' => $now, 'updated' => $now ] );
+                $wpdb->insert( self::bookings_table(), [ 'service_id' => 0, 'staff_id' => $staff, 'start_utc' => self::sql_time( $start ), 'end_utc' => self::sql_time( $start + $minutes * 60 ), 'status' => 'blocked', 'source' => 'owner', 'note' => mb_substr( sanitize_text_field( (string) ( $in['note'] ?? '' ) ), 0, 200 ), 'created' => $now, 'updated' => $now ] );
                 $id = (int) $wpdb->insert_id;
-                if ( ! self::take_units( $id, $busy, $start, 1 ) ) {
+                if ( ! self::take_units( $id, $busy, $start, 1, $staff ) ) {
                     $wpdb->delete( self::bookings_table(), [ 'id' => $id ] );
                     return new WP_Error( 'taken', 'Part of that time is already booked. Move or cancel those bookings first.' );
                 }
@@ -1173,6 +1493,9 @@ class Qwoo_Appointments {
         }
         $svc = self::service( absint( $in['service_id'] ?? 0 ) );
         if ( ! $svc ) return new WP_Error( 'service', 'Choose a service.' );
+        $team = self::service_staff( $svc );
+        if ( $team && $staff && ! in_array( $staff, $team, true ) ) return new WP_Error( 'staff', 'That person doesn\'t give this service.' );
+        if ( ! $team ) $staff = 0;
         $details = self::clean_details( $svc, $in + [ 'email' => '' ] );
         // The owner may add someone without an email (a walk-in): only a name is needed then.
         if ( is_wp_error( $details ) && in_array( $details->get_error_code(), [ 'email', 'phone' ], true ) ) {
@@ -1185,14 +1508,16 @@ class Qwoo_Appointments {
         try {
             self::expire_holds();
             $seats = max( 1, min( (int) $svc['capacity'], (int) ( $in['seats'] ?? 1 ) ) );
-            if ( ! self::is_free( $svc, $start, [ 'owner' => true, 'seats' => $seats ] ) ) return new WP_Error( 'taken', 'That time isn\'t free. Choose another time, or move what\'s there first.' );
+            $free  = self::free_staff( $svc, $start, [ 'owner' => true, 'seats' => $seats, 'staff' => $staff ] );
+            if ( ! $free ) return new WP_Error( 'taken', 'That time isn\'t free. Choose another time, or move what\'s there first.' );
+            if ( $team && ! $staff ) $staff = self::pick_staff( $free, $start );
             $wpdb->insert( self::bookings_table(), [
-                'service_id' => (int) $svc['id'], 'sess' => self::sess_for( $svc, $start ), 'start_utc' => self::sql_time( $start ), 'end_utc' => self::sql_time( $start + $svc['duration'] * 60 ),
+                'service_id' => (int) $svc['id'], 'staff_id' => $staff, 'sess' => self::sess_for( $svc, $start, $staff ), 'start_utc' => self::sql_time( $start ), 'end_utc' => self::sql_time( $start + $svc['duration'] * 60 ),
                 'seats' => $seats, 'status' => 'held', 'hold_until' => self::sql_time( time() + 300 ), 'price' => (float) $svc['price'] * $seats, 'currency' => get_woocommerce_currency(),
                 'place' => self::place_text( $svc ), 'source' => 'owner', 'created' => $now, 'updated' => $now,
             ] );
             $id = (int) $wpdb->insert_id;
-            if ( ! self::take_units( $id, $svc, $start, $seats ) ) {
+            if ( ! self::take_units( $id, $svc, $start, $seats, $staff ) ) {
                 $wpdb->delete( self::bookings_table(), [ 'id' => $id ] );
                 return new WP_Error( 'taken', 'That time was just taken.' );
             }
@@ -1404,6 +1729,8 @@ class Qwoo_Appointments {
         if ( $b['tz'] !== '' && $b['tz'] !== wp_timezone_string() && in_array( $b['tz'], timezone_identifiers_list(), true ) ) {
             $rows[] = [ 'k' => self::l( 'Your time', 'אצלך' ), 'v' => wp_date( 'l, j F · H:i', $ts, new DateTimeZone( $b['tz'] ) ) ];
         }
+        $person = self::staff_one( (int) $b['staff_id'] );
+        if ( $person ) $rows[] = [ 'k' => self::l( 'With', 'עם' ), 'v' => $person['name'] ];
         if ( (int) $b['seats'] > 1 ) $rows[] = [ 'k' => self::l( 'Places', 'מקומות' ), 'v' => (string) (int) $b['seats'] ];
         if ( $b['place'] !== '' ) $rows[] = [ 'k' => self::l( 'Where', 'איפה' ), 'v' => (string) $b['place'] ];
         $video = $b['video'] !== '' ? (string) $b['video'] : ( $svc ? (string) $svc['place']['link'] : '' );
@@ -1421,19 +1748,27 @@ class Qwoo_Appointments {
             case 'booking_reminder':       return self::l( 'Reminder: {service_name} on {booking_date} at {booking_time}', 'תזכורת: {service_name} ב{booking_date} בשעה {booking_time}' );
             case 'booking_moved':          return self::l( 'Your booking moved to {booking_date} at {booking_time}', 'התור שלך הוזז ל{booking_date} בשעה {booking_time}' );
             case 'booking_cancelled':      return self::l( 'Your booking was cancelled', 'התור שלך בוטל' );
+            case 'booking_requested':      return self::l( 'We got your request: {service_name}, {booking_date}', 'קיבלנו את הבקשה שלך: {service_name}, {booking_date}' );
+            case 'booking_declined':       return self::l( 'About your request for {booking_date}', 'לגבי הבקשה שלך ל{booking_date}' );
             case 'booking_new':            return $moved ? self::l( 'Booking moved: {customer_name}, {booking_date} {booking_time}', 'תור הוזז: {customer_name}, {booking_date} {booking_time}' ) : self::l( 'New booking: {customer_name}, {booking_date} {booking_time}', 'תור חדש: {customer_name}, {booking_date} {booking_time}' );
+            case 'booking_request':        return self::l( 'Waiting for you: {customer_name}, {booking_date} {booking_time}', 'מחכה לאישורך: {customer_name}, {booking_date} {booking_time}' );
             case 'booking_cancelled_team': return self::l( 'Booking cancelled: {customer_name}, {booking_date} {booking_time}', 'תור בוטל: {customer_name}, {booking_date} {booking_time}' );
         }
         return '{store_name}';
     }
 
-    /** Sends one of the booking emails (store emails catalog). */
+    const TEAM_EMAILS = [ 'booking_new', 'booking_request', 'booking_cancelled_team' ];
+
+    /** Sends one of the booking emails (store emails catalog). Team emails also go to the staff member it's with. */
     public static function send( string $id, array $b, array $extra = [] ): void {
         if ( ! class_exists( 'Qwoo_Store_Emails' ) ) return;
-        $team = in_array( $id, [ 'booking_new', 'booking_cancelled_team' ], true );
+        $team = in_array( $id, self::TEAM_EMAILS, true );
         if ( $team ) {
             $list = array_filter( (array) ( Qwoo_Store_Emails::saved( $id )['to'] ?? [] ), 'is_email' );
-            $to   = $list ? implode( ',', $list ) : ( self::settings()['notify_to'] ?: (string) get_option( 'admin_email' ) );
+            $to   = $list ?: [ self::settings()['notify_to'] ?: (string) get_option( 'admin_email' ) ];
+            $p    = self::staff_one( (int) $b['staff_id'] );
+            if ( $p && $p['notify'] && is_email( $p['email'] ) ) $to[] = $p['email'];
+            $to = implode( ',', array_unique( array_map( 'strtolower', $to ) ) );
         } else {
             $to = (string) $b['email'];
             if ( ! is_email( $to ) ) return;
@@ -1480,7 +1815,11 @@ class Qwoo_Appointments {
             }
         }
         // Yesterday's bookings are done.
-        $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::bookings_table() . " SET status = 'done' WHERE status = 'confirmed' AND end_utc < %s", self::sql_time( time() - 6 * HOUR_IN_SECONDS ) ) );
+        $done = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . self::bookings_table() . " WHERE status = 'confirmed' AND end_utc < %s LIMIT 100", self::sql_time( time() - 6 * HOUR_IN_SECONDS ) ), ARRAY_A );
+        foreach ( $done as $b ) {
+            $wpdb->update( self::bookings_table(), [ 'status' => 'done' ], [ 'id' => (int) $b['id'] ] );
+            do_action( 'qwoo_booking_status', array_merge( $b, [ 'status' => 'done' ] ), 'done' );
+        }
     }
 
     public static function next_due( $due ) {
@@ -1492,9 +1831,9 @@ class Qwoo_Appointments {
             $first = $wpdb->get_var( $wpdb->prepare( 'SELECT MIN(start_utc) FROM ' . self::bookings_table() . " WHERE status = 'confirmed' AND email <> '' AND (reminded & %d) = 0 AND start_utc > %s", $bit, self::now() ) );
             if ( $first ) $cands[] = max( time(), self::ts( $first ) - $before );
         }
-        $hold = $wpdb->get_var( 'SELECT MIN(hold_until) FROM ' . self::bookings_table() . " WHERE status IN ('held','pending') AND hold_until IS NOT NULL" );
-        // Bookings that didn't reach the owner's calendar yet: another try in 5 minutes.
-        if ( self::calendar()['connected'] && $wpdb->get_var( 'SELECT id FROM ' . self::bookings_table() . " WHERE cal_state = 'retry' AND cal_tries < 5 LIMIT 1" ) ) $cands[] = time() + 5 * MINUTE_IN_SECONDS;
+        $hold = $wpdb->get_var( 'SELECT MIN(hold_until) FROM ' . self::bookings_table() . " WHERE status IN ('held','pending','requested') AND hold_until IS NOT NULL" );
+        // Bookings that didn't reach a calendar yet: another try in 5 minutes.
+        if ( $wpdb->get_var( 'SELECT id FROM ' . self::bookings_table() . " WHERE cal_state = 'retry' AND cal_tries < 5 LIMIT 1" ) ) $cands[] = time() + 5 * MINUTE_IN_SECONDS;
         if ( $hold ) $cands[] = self::ts( $hold );
         if ( ! $cands ) return $due;
         $unix = min( $cands );
@@ -1505,10 +1844,12 @@ class Qwoo_Appointments {
 
     public static function owner_view( ?array $b ): ?array {
         if ( ! $b ) return null;
-        $svc = self::service( (int) $b['service_id'] );
-        $log = json_decode( (string) $b['log'], true );
+        $svc    = self::service( (int) $b['service_id'] );
+        $person = self::staff_one( (int) $b['staff_id'] );
+        $log    = json_decode( (string) $b['log'], true );
         return [
             'id' => (int) $b['id'], 'service_id' => (int) $b['service_id'], 'service' => $svc ? $svc['name'] : '',
+            'staff_id' => (int) $b['staff_id'], 'staff' => $person ? $person['name'] : '',
             'start' => gmdate( 'Y-m-d\TH:i:s\Z', self::ts( $b['start_utc'] ) ), 'end' => gmdate( 'Y-m-d\TH:i:s\Z', self::ts( $b['end_utc'] ) ),
             'local' => wp_date( 'Y-m-d H:i', self::ts( $b['start_utc'] ) ), 'local_end' => wp_date( 'Y-m-d H:i', self::ts( $b['end_utc'] ) ),
             'status' => (string) $b['status'], 'seats' => (int) $b['seats'], 'name' => (string) $b['name'], 'email' => (string) $b['email'], 'phone' => (string) $b['phone'],
@@ -1525,34 +1866,42 @@ class Qwoo_Appointments {
         return $svc + [ 'image_url' => $svc['image'] ? (string) wp_get_attachment_image_url( $svc['image'], 'medium' ) : '', 'due_now' => self::due_now( $svc ) ];
     }
 
-    public static function dashboard_state(): array {
+    /** $only: someone who sees only their own bookings (a staff id, from the platform's People access). */
+    public static function dashboard_state( int $only = 0 ): array {
         global $wpdb;
         self::expire_holds();
-        $s    = self::settings();
-        $now  = self::now();
-        $week = self::sql_time( time() + 7 * DAY_IN_SECONDS );
+        $s     = self::settings();
+        $now   = self::now();
+        $week  = self::sql_time( time() + 7 * DAY_IN_SECONDS );
+        $mine  = $only ? $wpdb->prepare( ' AND staff_id = %d', $only ) : '';
+        $count = static fn( string $where, ...$args ) => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::bookings_table() . ' WHERE ' . $where . $mine, ...$args ) );
+        $staff = array_values( array_map( [ __CLASS__, 'staff_view' ], self::staff_list() ) );
         return [
             'allowed'   => self::plan_allows(),
+            'only'      => $only,
             'settings'  => array_diff_key( $s, [ 'feed' => 1 ] ) + [ 'feed_full' => ! empty( get_option( self::OPTION, [] )['feed_full'] ) ],
             'services'  => array_map( [ __CLASS__, 'service_view' ], self::services() ),
-            'feed_url'  => self::feed_url(),
+            'staff'     => $only ? array_values( array_filter( $staff, static fn( $p ) => $p['id'] === $only ) ) : $staff,
+            'staff_limit' => self::staff_limit(),
+            'feed_url'  => $only ? '' : self::feed_url(),
             'calendar'  => self::calendar(),
-            'flagged'   => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::bookings_table() . " WHERE cal_flag <> '' AND status IN ('confirmed','pending') AND start_utc > %s", $now ) ),
+            'flagged'   => $count( "cal_flag <> '' AND status IN ('confirmed','pending') AND start_utc > %s", $now ),
+            'requests'  => $count( "status = 'requested' AND start_utc > %s", $now ),
             'tz'        => wp_timezone_string(),
             'tz_unset'  => in_array( (string) get_option( 'timezone_string' ), [ '', 'UTC' ], true ) && ! (float) get_option( 'gmt_offset' ),
             'currency'  => get_woocommerce_currency(),
             'country'   => WC()->countries ? WC()->countries->get_base_country() : '',
             'address'   => implode( ', ', array_filter( [ get_option( 'woocommerce_store_address' ), get_option( 'woocommerce_store_city' ) ] ) ),
             'counts'    => [
-                'today'    => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::bookings_table() . " WHERE status IN ('confirmed','pending') AND start_utc >= %s AND start_utc < %s", self::sql_time( strtotime( 'today', time() ) ), self::sql_time( strtotime( 'tomorrow', time() ) ) ) ),
-                'week'     => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::bookings_table() . " WHERE status IN ('confirmed','pending') AND start_utc >= %s AND start_utc < %s", $now, $week ) ),
-                'upcoming' => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::bookings_table() . " WHERE status IN ('confirmed','pending') AND start_utc >= %s", $now ) ),
+                'today'    => $count( "status IN ('confirmed','pending') AND start_utc >= %s AND start_utc < %s", self::sql_time( strtotime( 'today', time() ) ), self::sql_time( strtotime( 'tomorrow', time() ) ) ),
+                'week'     => $count( "status IN ('confirmed','pending') AND start_utc >= %s AND start_utc < %s", $now, $week ),
+                'upcoming' => $count( "status IN ('confirmed','pending') AND start_utc >= %s", $now ),
             ],
         ];
     }
 
-    /** Bookings between two moments (the calendar), or a list. */
-    public static function listing( array $p ): array {
+    /** Bookings between two moments (the calendar), or a list; one person's with staff. */
+    public static function listing( array $p, int $only = 0 ): array {
         global $wpdb;
         self::expire_holds();
         $from = self::parse_start( $p['from'] ?? '' ) ?: strtotime( 'today' );
@@ -1563,11 +1912,16 @@ class Qwoo_Appointments {
         $status = (string) ( $p['status'] ?? '' );
         if ( $status === 'all' ) {
             $where .= " AND status NOT IN ('held','expired')";
-        } elseif ( in_array( $status, [ 'confirmed', 'cancelled', 'done', 'noshow', 'pending' ], true ) ) {
+        } elseif ( in_array( $status, [ 'confirmed', 'cancelled', 'done', 'noshow', 'pending', 'requested' ], true ) ) {
             $where .= ' AND status = %s';
             $args[] = $status;
         } else {
-            $where .= " AND status IN ('confirmed','pending','done','noshow','blocked','held')";
+            $where .= " AND status IN ('confirmed','pending','requested','done','noshow','blocked','held')";
+        }
+        $staff = $only ?: absint( $p['staff'] ?? 0 );
+        if ( $staff ) {
+            $where .= ' AND staff_id = %d';
+            $args[] = $staff;
         }
         $search = mb_substr( sanitize_text_field( (string) ( $p['search'] ?? '' ) ), 0, 100 );
         if ( $search !== '' ) {
@@ -1579,17 +1933,24 @@ class Qwoo_Appointments {
         return [ 'items' => array_values( array_map( [ __CLASS__, 'owner_view' ], $rows ) ), 'from' => gmdate( 'c', $from ), 'to' => gmdate( 'c', $to ) ];
     }
 
-    public static function owner_update( array $p ) {
+    public static function owner_update( array $p, int $only = 0 ) {
         global $wpdb;
         $id = absint( $p['id'] ?? 0 );
         $b  = self::booking( $id );
-        if ( ! $b ) return new WP_Error( 'missing', 'That booking doesn\'t exist any more.' );
+        if ( ! $b || ( $only && (int) $b['staff_id'] !== $only ) ) return new WP_Error( 'missing', 'That booking doesn\'t exist any more.' );
         $tell = ! empty( $p['tell'] );
         switch ( (string) ( $p['action'] ?? '' ) ) {
+            case 'approve':
+                if ( $b['status'] !== 'requested' ) return new WP_Error( 'status', 'This booking isn\'t waiting for you.' );
+                $r = self::confirm( $id, 0, true ) ? true : new WP_Error( 'taken', 'That time isn\'t free any more.' );
+                break;
+            case 'decline':
+                $r = self::decline( $id, mb_substr( sanitize_text_field( (string) ( $p['why'] ?? '' ) ), 0, 200 ) );
+                break;
             case 'cancel':
                 if ( $b['status'] === 'blocked' ) {
                     self::release_units( $b );
-                    // Out of the owner's calendar too, then gone.
+                    // Out of the calendar too, then gone.
                     $wpdb->update( self::bookings_table(), [ 'status' => 'cancelled' ], [ 'id' => $id ] );
                     self::cal_sync( $id );
                     $wpdb->delete( self::bookings_table(), [ 'id' => $id ] );
@@ -1598,7 +1959,8 @@ class Qwoo_Appointments {
                 $r = self::cancel( $id, 'owner', $tell, mb_substr( sanitize_text_field( (string) ( $p['why'] ?? '' ) ), 0, 200 ) );
                 break;
             case 'move':
-                $r = self::move( $id, self::parse_start( $p['start'] ?? '' ), 'owner', $tell );
+                $to = $only ? -1 : ( array_key_exists( 'staff_id', $p ) ? absint( $p['staff_id'] ) : -1 );
+                $r  = self::move( $id, self::parse_start( $p['start'] ?? '' ), 'owner', $tell, $to );
                 break;
             case 'noshow':
             case 'done':
@@ -1642,11 +2004,24 @@ class Qwoo_Appointments {
         return self::dashboard_state();
     }
 
-    /** Growth ops from the dashboard (Qwoo_Platform_Growth). */
+    /**
+     * Growth ops from the dashboard (Qwoo_Platform_Growth). $p['_staff'] is set by the
+     * platform only (never the browser's) for someone the owner invited with "only their
+     * own bookings": they see and change their own bookings and hours, nothing else.
+     */
     public static function dashboard( string $op, array $p ) {
+        $only = absint( $p['_staff'] ?? 0 );
+        if ( $only ) {
+            if ( ! self::staff_one( $only ) ) return new WP_Error( 'access', 'Your place on the team was removed. Ask the store owner.' );
+            if ( ! in_array( $op, [ 'appt_state', 'appt_list', 'appt_get', 'appt_times', 'appt_create', 'appt_update', 'appt_staff_save' ], true ) ) {
+                return new WP_Error( 'access', 'Only the store owner can change this.' );
+            }
+            $p['staff']    = $only;
+            $p['staff_id'] = $only;
+        }
         switch ( $op ) {
             case 'appt_state':
-                return self::dashboard_state();
+                return self::dashboard_state( $only );
             case 'appt_settings_save':
                 return self::save_settings( $p );
             case 'appt_feed_full':
@@ -1657,27 +2032,49 @@ class Qwoo_Appointments {
                 return self::delete_service( absint( $p['id'] ?? 0 ) );
             case 'appt_services_sort':
                 return self::sort_services( (array) ( $p['ids'] ?? [] ) );
+            case 'appt_staff_save':
+                $saved = self::save_staff( $p, $only );
+                return is_wp_error( $saved ) ? $saved : [ 'person' => $saved, 'state' => self::dashboard_state( $only ) ];
+            case 'appt_staff_delete':
+                $done = self::delete_staff( absint( $p['id'] ?? 0 ) );
+                return is_wp_error( $done ) ? $done : self::dashboard_state();
             case 'appt_list':
-                return self::listing( $p );
+                return self::listing( $p, $only );
             case 'appt_get':
-                $b = self::owner_view( self::booking( absint( $p['id'] ?? 0 ) ) );
+                $row = self::booking( absint( $p['id'] ?? 0 ) );
+                if ( $row && $only && (int) $row['staff_id'] !== $only ) $row = null;
+                $b = self::owner_view( $row );
                 return $b ?: new WP_Error( 'missing', 'That booking doesn\'t exist any more.' );
             case 'appt_times':
                 $svc = self::service( absint( $p['service_id'] ?? 0 ) );
                 if ( ! $svc ) return new WP_Error( 'service', 'Choose a service.' );
                 $exclude = absint( $p['exclude'] ?? 0 );
-                return [ 'days' => self::free_times( $svc, (string) ( $p['from'] ?? '' ), (string) ( $p['to'] ?? '' ), [ 'owner' => true, 'exclude' => $exclude ] ) ];
+                return [ 'days' => self::free_times( $svc, (string) ( $p['from'] ?? '' ), (string) ( $p['to'] ?? '' ), [ 'owner' => true, 'exclude' => $exclude, 'staff' => absint( $p['staff'] ?? 0 ) ] ) ];
             case 'appt_create':
                 if ( ! self::plan_allows() ) return new WP_Error( 'plan', 'Appointments aren\'t part of this plan.' );
                 return self::owner_create( $p );
             case 'appt_update':
-                return self::owner_update( $p );
+                return self::owner_update( $p, $only );
             case 'appt_cal_link':
                 return self::cal_link( $p );
             case 'appt_cal_changed':
                 return self::cal_changed( $p );
         }
         return new WP_Error( 'op', 'Unknown action.' );
+    }
+
+    /** A booking as webhooks and automation webhooks send it. */
+    public static function webhook_data( array $b, string $status ): array {
+        $svc    = self::service( (int) $b['service_id'] );
+        $person = self::staff_one( (int) $b['staff_id'] );
+        return [
+            'id' => (int) $b['id'], 'status' => $status, 'service' => $svc ? $svc['name'] : '', 'service_id' => (int) $b['service_id'],
+            'staff' => $person ? $person['name'] : '', 'staff_id' => (int) $b['staff_id'],
+            'start' => gmdate( 'c', self::ts( $b['start_utc'] ) ), 'end' => gmdate( 'c', self::ts( $b['end_utc'] ) ), 'local_start' => wp_date( 'Y-m-d H:i', self::ts( $b['start_utc'] ) ),
+            'seats' => (int) $b['seats'], 'name' => (string) $b['name'], 'email' => (string) $b['email'], 'phone' => (string) $b['phone'],
+            'answers' => (array) ( json_decode( (string) $b['answers'], true ) ?: [] ), 'place' => (string) $b['place'],
+            'price' => (float) $b['price'], 'paid_now' => (float) $b['due_now'], 'currency' => (string) $b['currency'], 'order_id' => (int) $b['order_id'],
+        ];
     }
 
     /* ---------------- privacy ---------------- */

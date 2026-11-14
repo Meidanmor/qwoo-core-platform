@@ -27,6 +27,7 @@ class Qwoo_Webhooks {
         'order.created', 'order.paid', 'order.status_changed', 'order.refunded',
         'customer.created', 'product.created', 'product.updated', 'stock.low',
         'review.created', 'subscriber.created', 'subscriber.unsubscribed',
+        'booking.created', 'booking.status_changed',
     ];
 
     private static $products_seen = [];
@@ -40,6 +41,8 @@ class Qwoo_Webhooks {
         add_action( 'woocommerce_update_product', [ __CLASS__, 'on_product_update' ], 60, 1 );
         add_action( 'woocommerce_low_stock', [ __CLASS__, 'on_low_stock' ], 60, 1 );
         add_action( 'comment_post', [ __CLASS__, 'on_review' ], 60, 3 );
+        // Appointments: a new booking (or request), and every status after it.
+        add_action( 'qwoo_booking_status', [ __CLASS__, 'on_booking' ], 60, 2 );
         add_action( 'qwoo_push_tick', [ __CLASS__, 'deliver_due' ] );
         add_filter( 'qwoo_push_next_due', [ __CLASS__, 'next_due' ] );
     }
@@ -293,6 +296,17 @@ class Qwoo_Webhooks {
     public static function on_review( $comment_id, $approved, $data ) {
         if ( ( $data['comment_type'] ?? '' ) !== 'review' ) return;
         self::emit( 'review.created', [ 'id' => (int) $comment_id, 'product_id' => (int) ( $data['comment_post_ID'] ?? 0 ), 'author' => (string) ( $data['comment_author'] ?? '' ), 'text' => (string) ( $data['comment_content'] ?? '' ), 'approved' => $approved === 1 ] );
+    }
+
+    public static function on_booking( $b, $status ) {
+        if ( ! is_array( $b ) || ! class_exists( 'Qwoo_Appointments' ) ) return;
+        $data = Qwoo_Appointments::webhook_data( $b, (string) $status );
+        $first = in_array( $status, [ 'confirmed', 'requested' ], true ) && ! get_transient( 'qwoo_wh_bk_' . (int) $b['id'] );
+        if ( $first ) {
+            set_transient( 'qwoo_wh_bk_' . (int) $b['id'], 1, 30 * DAY_IN_SECONDS );
+            self::emit( 'booking.created', $data );
+        }
+        self::emit( 'booking.status_changed', $data );
     }
 
     /* ---------------- delivery ---------------- */
