@@ -254,6 +254,11 @@ trait SB_Sanitizers {
                 // A discount code (Marketing → Discounts); WooCommerce checks it again in the cart.
                 return mb_substr( sanitize_text_field( is_scalar( $value ) ? (string) $value : '' ), 0, 50 );
 
+            case 'service':
+                // Appointments → Services: a service id, or '' for all of them.
+                $value = is_scalar( $value ) ? absint( $value ) : 0;
+                return $value ? (string) $value : '';
+
             case 'menu':
                 $value = is_scalar( $value ) ? trim( (string) $value ) : '';
                 return preg_match( '/^menu_[A-Za-z0-9_]{3,30}$/', $value ) ? $value : ( in_array( $value, [ 'menu_header', 'menu_footer' ], true ) ? $value : '' );

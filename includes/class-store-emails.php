@@ -41,6 +41,12 @@ class Qwoo_Store_Emails {
             'review_request'            => [ 'name' => 'Review request', 'when' => 'After an order is completed', 'group' => 'customer', 'kind' => 'review' ],
             'gift_card'                 => [ 'name' => 'Gift card', 'when' => 'On the day a gift card is sent to its recipient', 'group' => 'customer', 'kind' => 'gift', 'lock' => true ],
             'gift_card_bounced'         => [ 'name' => 'Gift card not delivered', 'when' => 'When a gift card\'s email can\'t be delivered (to the buyer)', 'group' => 'customer', 'kind' => 'gift_notice' ],
+            'booking_confirmed'         => [ 'name' => 'Booking confirmed', 'when' => 'When someone books a time (or pays for it)', 'group' => 'customer', 'kind' => 'booking' ],
+            'booking_reminder'          => [ 'name' => 'Booking reminder', 'when' => 'Before a booking (Appointments → Settings → Reminders)', 'group' => 'customer', 'kind' => 'booking' ],
+            'booking_moved'             => [ 'name' => 'Booking moved', 'when' => 'When a booking moves to another time', 'group' => 'customer', 'kind' => 'booking' ],
+            'booking_cancelled'         => [ 'name' => 'Booking cancelled', 'when' => 'When a booking is cancelled', 'group' => 'customer', 'kind' => 'booking' ],
+            'booking_new'               => [ 'name' => 'New booking', 'when' => 'When someone books or moves a time', 'group' => 'team', 'kind' => 'booking' ],
+            'booking_cancelled_team'    => [ 'name' => 'Booking cancelled by the customer', 'when' => 'When a customer cancels a booking', 'group' => 'team', 'kind' => 'booking' ],
             'new_order'                 => [ 'name' => 'New order', 'when' => 'When someone places an order', 'group' => 'team', 'kind' => 'order', 'wc' => true ],
             'cancelled_order'           => [ 'name' => 'Cancelled order', 'when' => 'When an order is cancelled', 'group' => 'team', 'kind' => 'order', 'wc' => true ],
             'failed_order'              => [ 'name' => 'Failed payment', 'when' => 'When a payment fails', 'group' => 'team', 'kind' => 'order', 'wc' => true ],
@@ -190,6 +196,16 @@ class Qwoo_Store_Emails {
             ];
         } elseif ( $id === 'gift_card_bounced' ) {
             $rows[] = $button( self::l( 'Go to the store', 'לחנות' ), 'shop' );
+        } elseif ( $def['kind'] === 'booking' ) {
+            $rows[] = self::row( self::b( 'booking_details', [ 'padV' => 12, 'calendar' => $def['group'] === 'customer' && $id !== 'booking_cancelled' ] ) );
+            if ( $def['group'] === 'team' ) {
+                $rows[] = $button( self::l( 'Open the booking', 'פתיחת התור' ), 'booking' );
+            } elseif ( $id !== 'booking_cancelled' ) {
+                $rows[] = $text( self::l( 'Need a change? You can move or cancel your booking from this link.', 'צריך שינוי? אפשר להזיז או לבטל את התור מהקישור הזה.' ) );
+                $rows[] = $button( self::l( 'Move or cancel', 'הזזה או ביטול' ), 'booking' );
+            } else {
+                $rows[] = $button( self::l( 'Book another time', 'קביעת זמן אחר' ), 'shop' );
+            }
         } elseif ( $id === 'back_in_stock' ) {
             $rows[] = $button( self::l( 'View {product_name}', 'לצפייה ב{product_name}' ), 'product' );
         } else {
@@ -218,6 +234,12 @@ class Qwoo_Store_Emails {
             case 'review_request':            return [ 'title' => self::l( 'How was your order?', 'איך הייתה ההזמנה?' ), 'text' => self::l( 'Thank you for your order from {store_name}. We\'d love to hear what you think. It only takes a minute:', 'תודה על ההזמנה מ{store_name}. נשמח לשמוע מה דעתך. זה לוקח רק דקה:' ) ];
             case 'gift_card':                 return [ 'title' => self::l( '{sender_name} sent you a {store_name} gift card', '{sender_name} שלחו לך כרטיס מתנה מ{store_name}' ), 'text' => '' ];
             case 'gift_card_bounced':         return [ 'title' => self::l( 'We couldn\'t deliver your gift card', 'לא הצלחנו למסור את כרטיס המתנה שלך' ), 'text' => self::l( 'Hi {first_name}, the gift card for {recipient_name} couldn\'t be delivered to {recipient_email}. Reply to this email with the right address and we\'ll send it again.', 'היי {first_name}, לא הצלחנו למסור את כרטיס המתנה של {recipient_name} לכתובת {recipient_email}. אפשר להשיב למייל הזה עם הכתובת הנכונה ונשלח אותו שוב.' ) ];
+            case 'booking_confirmed':         return [ 'title' => self::l( 'See you soon, {first_name}', 'נתראה בקרוב, {first_name}' ), 'text' => self::l( 'Your booking for {service_name} is confirmed.', 'התור שלך ל{service_name} נקבע.' ) ];
+            case 'booking_reminder':          return [ 'title' => self::l( 'See you {booking_date}', 'נתראה {booking_date}' ), 'text' => self::l( 'A reminder of your booking for {service_name} at {booking_time}.', 'תזכורת לתור שלך ל{service_name} בשעה {booking_time}.' ) ];
+            case 'booking_moved':             return [ 'title' => self::l( 'Your booking moved', 'התור שלך הוזז' ), 'text' => self::l( 'Your booking for {service_name} is now on {booking_date} at {booking_time}.', 'התור שלך ל{service_name} עכשיו ב{booking_date} בשעה {booking_time}.' ) ];
+            case 'booking_cancelled':         return [ 'title' => self::l( 'Your booking was cancelled', 'התור שלך בוטל' ), 'text' => self::l( 'Your booking for {service_name} on {booking_date} at {booking_time} was cancelled.', 'התור שלך ל{service_name} ב{booking_date} בשעה {booking_time} בוטל.' ) ];
+            case 'booking_new':               return [ 'title' => self::l( 'New booking: {customer_name}', 'תור חדש: {customer_name}' ), 'text' => self::l( '{service_name} on {booking_date} at {booking_time}.', '{service_name} ב{booking_date} בשעה {booking_time}.' ) ];
+            case 'booking_cancelled_team':    return [ 'title' => self::l( '{customer_name} cancelled', '{customer_name} ביטל/ה' ), 'text' => self::l( 'The booking for {service_name} on {booking_date} at {booking_time} was cancelled by the customer. The time is free again.', 'התור ל{service_name} ב{booking_date} בשעה {booking_time} בוטל על ידי הלקוח. הזמן פנוי שוב.' ) ];
             case 'new_order':                 return [ 'title' => self::l( 'New order #{order_number}', 'הזמנה חדשה {order_number}' ), 'text' => self::l( 'You have a new order from {first_name} {last_name}.', 'יש לך הזמנה חדשה מ{first_name} {last_name}.' ) ];
             case 'cancelled_order':           return [ 'title' => self::l( 'Order #{order_number} was cancelled', 'הזמנה {order_number} בוטלה' ), 'text' => self::l( 'The order from {first_name} {last_name} was cancelled.', 'ההזמנה של {first_name} {last_name} בוטלה.' ) ];
             case 'failed_order':              return [ 'title' => self::l( 'Payment failed on order #{order_number}', 'התשלום נכשל בהזמנה {order_number}' ), 'text' => self::l( 'The payment from {first_name} {last_name} failed.', 'התשלום של {first_name} {last_name} נכשל.' ) ];
@@ -299,6 +321,11 @@ class Qwoo_Store_Emails {
             if ( $set !== '' ) $urls['account'] = $set;
         }
         if ( ! empty( $args['product_url'] ) ) $urls['product'] = (string) $args['product_url'];
+        // Appointments: the shopper's manage link (the owner's: the booking in the dashboard), "Add to Google Calendar".
+        if ( isset( $args['booking_url'] ) ) {
+            $urls['booking']  = ! empty( $args['team'] ) ? (string) ( $args['owner_url'] ?? '' ) : (string) $args['booking_url'];
+            $urls['calendar'] = ! empty( $args['team'] ) ? '' : (string) ( $args['calendar_url'] ?? '' );
+        }
         return $urls;
     }
 
@@ -325,6 +352,11 @@ class Qwoo_Store_Emails {
             '{recipient_email}' => (string) ( $args['recipient_email'] ?? '' ),
             '{sender_name}'     => (string) ( $args['sender_name'] ?? '' ),
             '{gift_amount}'     => (string) ( $args['gift_amount'] ?? '' ),
+            '{service_name}'    => (string) ( $args['service_name'] ?? '' ),
+            '{booking_date}'    => (string) ( $args['booking_date'] ?? '' ),
+            '{booking_time}'    => (string) ( $args['booking_time'] ?? '' ),
+            '{booking_place}'   => (string) ( $args['booking_place'] ?? '' ),
+            '{customer_name}'   => (string) ( $args['customer_name'] ?? '' ),
         ];
         if ( ! $order && isset( $args['first_name'] ) ) $out['{first_name}'] = (string) $args['first_name'];
         if ( $order ) {
@@ -348,6 +380,7 @@ class Qwoo_Store_Emails {
             'admin'        => $admin,
             'note'         => (string) ( $args['customer_note'] ?? '' ),
             'review_links' => (array) ( $args['review_links'] ?? [] ),
+            'booking'      => is_array( $args['booking'] ?? null ) ? $args['booking'] : null,
         ];
     }
 
@@ -422,7 +455,7 @@ class Qwoo_Store_Emails {
      * Back in stock and review requests. True or false: sent or not. Null: the
      * design failed, the caller sends its plain version.
      */
-    public static function send_own( string $id, string $to, string $default_subject, array $args, ?WC_Order $order = null, bool $force = false ) {
+    public static function send_own( string $id, string $to, string $default_subject, array $args, ?WC_Order $order = null, bool $force = false, array $attachments = [] ) {
         // $force: the owner sends it by hand from an order, also when the automatic one is off.
         if ( ! $force && ! self::is_on( $id ) ) return false;
         try {
@@ -430,7 +463,7 @@ class Qwoo_Store_Emails {
             $mine    = trim( (string) ( self::saved( $id )['subject'] ?? '' ) );
             $subject = $mine !== '' ? strtr( $mine, self::tokens( $order, null, $args ) ) : $default_subject;
             self::$final = $html;
-            $sent = (bool) WC()->mailer()->send( $to, $subject, $html, self::headers( "Content-Type: text/html\r\n", $id ) );
+            $sent = (bool) WC()->mailer()->send( $to, $subject, $html, self::headers( "Content-Type: text/html\r\n", $id ), $attachments );
             self::$final = null;
             return $sent;
         } catch ( \Throwable $e ) {
@@ -462,8 +495,8 @@ class Qwoo_Store_Emails {
                 $to      = $def['group'] === 'team' ? array_values( array_filter( array_map( 'trim', explode( ',', (string) ( $mail->recipient ?: get_option( 'admin_email' ) ) ) ) ) ) : [];
             } else {
                 $on      = in_array( $id, [ 'low_stock', 'no_stock' ], true ) ? get_option( 'woocommerce_notify_' . $id, 'yes' ) === 'yes' : self::is_on( $id );
-                $subject = $id === 'back_in_stock' ? self::l( '{product_name} is back in stock', '{product_name} חזר למלאי' ) : ( $id === 'review_request' ? self::l( 'How was your order from {store_name}?', 'איך הייתה ההזמנה מ{store_name}?' ) : self::copy_for( $id )['title'] );
-                $to      = $def['group'] === 'team' ? array_values( array_filter( array_map( 'trim', explode( ',', (string) get_option( 'woocommerce_stock_email_recipient', get_option( 'admin_email' ) ) ) ) ) ) : [];
+                $subject = $def['kind'] === 'booking' ? Qwoo_Appointments::default_subject( $id ) : ( $id === 'back_in_stock' ? self::l( '{product_name} is back in stock', '{product_name} חזר למלאי' ) : ( $id === 'review_request' ? self::l( 'How was your order from {store_name}?', 'איך הייתה ההזמנה מ{store_name}?' ) : self::copy_for( $id )['title'] ) );
+                $to      = $def['group'] === 'team' ? array_values( array_filter( array_map( 'trim', explode( ',', (string) ( $def['kind'] === 'booking' ? ( Qwoo_Appointments::settings()['notify_to'] ?: get_option( 'admin_email' ) ) : get_option( 'woocommerce_stock_email_recipient', get_option( 'admin_email' ) ) ) ) ) ) ) : [];
             }
             $list[] = [
                 'id'        => $id,
@@ -526,6 +559,11 @@ class Qwoo_Store_Emails {
             case 'gift_notice':
                 $tokens = [ 'first_name', 'recipient_name', 'recipient_email', 'store_name' ];
                 $targets = [ 'shop' ];
+                break;
+            case 'booking':
+                $tokens  = [ 'first_name', 'customer_name', 'service_name', 'booking_date', 'booking_time', 'booking_place', 'store_name' ];
+                $blocks  = [ 'booking_details' ];
+                $targets = $def['group'] === 'team' ? [ 'booking' ] : [ 'shop', 'account', 'booking', 'calendar' ];
                 break;
         }
         $saved = self::saved( $id );
@@ -654,6 +692,23 @@ class Qwoo_Store_Emails {
         if ( in_array( $def['kind'], [ 'gift', 'gift_notice' ], true ) ) {
             $args += [ 'recipient_name' => 'Noa', 'recipient_email' => 'noa@example.com', 'sender_name' => self::l( 'Dana and Yoni', 'דנה ויוני' ), 'gift_amount' => html_entity_decode( wp_strip_all_tags( wc_price( 200 ) ), ENT_QUOTES ) ];
         }
+        if ( $def['kind'] === 'booking' ) {
+            $when  = strtotime( '+2 days 10:00' );
+            $args += [
+                'first_name' => 'Dana', 'customer_name' => 'Dana Levi', 'service_name' => self::l( 'Cut & blow-dry', 'תספורת ופן' ),
+                'booking_date' => wp_date( 'l, j F Y', $when ), 'booking_time' => wp_date( 'H:i', $when ), 'booking_place' => self::l( '12 Herzl St', 'הרצל 12' ),
+                'booking_url' => $home, 'calendar_url' => $home, 'owner_url' => $home, 'team' => ( $def['group'] ?? '' ) === 'team',
+                'booking' => [
+                    'rows' => [
+                        [ 'k' => self::l( 'Service', 'שירות' ), 'v' => self::l( 'Cut & blow-dry', 'תספורת ופן' ) ],
+                        [ 'k' => self::l( 'When', 'מתי' ), 'v' => wp_date( 'l, j F Y', $when ) . ' · ' . wp_date( 'H:i', $when ) . ' (' . self::l( '60 minutes', '60 דקות' ) . ')' ],
+                        [ 'k' => self::l( 'Where', 'איפה' ), 'v' => self::l( '12 Herzl St', 'הרצל 12' ) ],
+                    ],
+                    'google' => $home, 'outlook' => $home, 'manage' => $home,
+                    'labels' => [ 'google' => 'Google', 'outlook' => 'Outlook', 'manage' => self::l( 'Move or cancel', 'הזזה או ביטול' ) ],
+                ],
+            ];
+        }
         $ctx = self::context( $id, $order, null, $args );
         $ctx['urls'] += [ 'reset' => $home, 'order' => $home ];
         if ( ! $order ) $ctx['tokens']['{first_name}'] = 'Dana';
@@ -677,7 +732,8 @@ class Qwoo_Store_Emails {
         $design = is_array( $in['design'] ?? null ) ? Qwoo_Email_Render::clean( $in['design'] ) : self::design_for( $id );
         $list   = array_column( self::overview()['emails'], null, 'id' );
         $row    = $list[ $id ] ?? [];
-        $tokens = [ '{first_name}' => 'Dana', '{last_name}' => 'Levi', '{order_number}' => '1042', '{store_name}' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), '{product_name}' => self::l( 'Example product', 'מוצר לדוגמה' ), '{order_total}' => '', '{order_date}' => '', '{stock}' => '2', '{user_login}' => 'dana', '{customer_note}' => '', '{site_title}' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), '{order_date_short}' => '', '{recipient_name}' => 'Noa', '{recipient_email}' => 'noa@example.com', '{sender_name}' => self::l( 'Dana and Yoni', 'דנה ויוני' ), '{gift_amount}' => html_entity_decode( wp_strip_all_tags( wc_price( 200 ) ), ENT_QUOTES ) ];
+        $tokens = [ '{first_name}' => 'Dana', '{last_name}' => 'Levi', '{order_number}' => '1042', '{store_name}' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), '{product_name}' => self::l( 'Example product', 'מוצר לדוגמה' ), '{order_total}' => '', '{order_date}' => '', '{stock}' => '2', '{user_login}' => 'dana', '{customer_note}' => '', '{site_title}' => html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES ), '{order_date_short}' => '', '{recipient_name}' => 'Noa', '{recipient_email}' => 'noa@example.com', '{sender_name}' => self::l( 'Dana and Yoni', 'דנה ויוני' ), '{gift_amount}' => html_entity_decode( wp_strip_all_tags( wc_price( 200 ) ), ENT_QUOTES ),
+            '{service_name}' => self::l( 'Cut & blow-dry', 'תספורת ופן' ), '{booking_date}' => wp_date( 'l, j F Y', strtotime( '+2 days' ) ), '{booking_time}' => '10:00', '{booking_place}' => self::l( '12 Herzl St', 'הרצל 12' ), '{customer_name}' => 'Dana Levi' ];
         $subject = strtr( (string) ( ( $row['subject'] ?? '' ) ?: ( $row['default_subject'] ?? '' ) ), $tokens );
         $sent = wp_mail( $to, '[Test] ' . $subject, self::sample_html( $id, $design ), [ 'Content-Type: text/html; charset=UTF-8' ] );
         return $sent ? [ 'ok' => true ] : new WP_Error( 'mail', 'The test couldn\'t be sent.' );

@@ -19,9 +19,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  */
 class Qwoo_Email_Render {
 
-    const TYPES   = [ 'logo', 'heading', 'text', 'image', 'button', 'divider', 'spacer', 'video', 'menu', 'products', 'coupon', 'social', 'footer', 'order_items', 'order_totals', 'order_info', 'addresses', 'order_button', 'downloads', 'review_links', 'gift_header', 'gift_card', 'gift_message', 'gift_button' ];
+    const TYPES   = [ 'logo', 'heading', 'text', 'image', 'button', 'divider', 'spacer', 'video', 'menu', 'products', 'coupon', 'social', 'footer', 'order_items', 'order_totals', 'order_info', 'addresses', 'order_button', 'downloads', 'review_links', 'gift_header', 'gift_card', 'gift_message', 'gift_button', 'booking_details' ];
     const LAYOUTS = [ '1' => [ 1 ], '1-1' => [ 1, 1 ], '1-2' => [ 1, 2 ], '2-1' => [ 2, 1 ], '1-1-1' => [ 1, 1, 1 ], '1-3' => [ 1, 3 ], '3-1' => [ 3, 1 ], '1-1-1-1' => [ 1, 1, 1, 1 ] ];
-    const TARGETS = [ '', 'order', 'account', 'shop', 'pay', 'reset', 'product' ];
+    const TARGETS = [ '', 'order', 'account', 'shop', 'pay', 'reset', 'product', 'booking', 'calendar' ];
     const SHOW_IF = [ '', 'coupon', 'first', 'paid', 'shipping', 'note', 'buyers', 'new' ];
     const MAX_ROWS = 60;
 
@@ -154,6 +154,16 @@ class Qwoo_Email_Render {
                 break;
             case 'review_links':
                 $data += [ 'bg' => sanitize_hex_color( (string) ( $d['bg'] ?? '' ) ) ?: '', 'color' => sanitize_hex_color( (string) ( $d['color'] ?? '' ) ) ?: '' ];
+                break;
+            case 'booking_details':
+                $data += [
+                    'bg'       => self::hex( $d['bg'] ?? '', '#f7f5f2' ),
+                    'border'   => self::hex( $d['border'] ?? '', '#e8e2da' ),
+                    'label'    => self::hex( $d['label'] ?? '', '#77748b' ),
+                    'radius'   => (int) self::num( $d['radius'] ?? null, 12, 0, 40 ),
+                    'size'     => (int) self::num( $d['size'] ?? null, 15, 12, 20 ),
+                    'calendar' => ! array_key_exists( 'calendar', $d ) || ! empty( $d['calendar'] ),
+                ];
                 break;
             case 'gift_header':
                 $data += [ 'size' => (int) self::num( $d['size'] ?? null, 28, 16, 48 ), 'radius' => (int) self::num( $d['radius'] ?? null, 12, 0, 40 ), 'text' => self::hex( $d['text'] ?? '', '#ffffff' ) ];
@@ -450,6 +460,8 @@ class Qwoo_Email_Render {
             case 'gift_message':
             case 'gift_button':
                 return is_array( $ctx['gift'] ?? null ) ? self::gift( $type, $d, $env, $ctx['gift'] ) : '';
+            case 'booking_details':
+                return is_array( $ctx['booking'] ?? null ) ? self::booking( $d, $env, $ctx['booking'] ) : '';
             case 'review_links':
                 $out = '';
                 foreach ( (array) ( $ctx['review_links'] ?? [] ) as $l ) {
@@ -509,6 +521,30 @@ class Qwoo_Email_Render {
                 return self::button( [ 'bg' => ( $d['bg'] ?? '' ) ?: $color ] + $d, $env, (string) ( $g['shop'] ?? home_url( '/' ) ) );
         }
         return '';
+    }
+
+    /** A booking's card (Qwoo_Appointments::email_card): label / value rows, then Add to calendar links. */
+    private static function booking( array $d, array $env, array $bk ): string {
+        $font  = $env['font'];
+        $link  = $env['link'];
+        $rows  = '';
+        foreach ( (array) ( $bk['rows'] ?? [] ) as $r ) {
+            $value = ! empty( $r['link'] )
+                ? '<a href="' . esc_url( $link( (string) $r['v'] ) ) . '" style="color:' . esc_attr( $env['s']['link'] ) . ';word-break:break-all;">' . esc_html( (string) $r['v'] ) . '</a>'
+                : esc_html( (string) $r['v'] );
+            $rows .= '<tr><td style="padding:5px 0;font-family:' . $font . ';font-size:13px;color:' . esc_attr( $d['label'] ) . ';vertical-align:top;width:34%;text-align:' . $env['start'] . ';">' . esc_html( (string) $r['k'] ) . '</td>'
+                . '<td style="padding:5px 0;font-family:' . $font . ';font-size:' . (int) $d['size'] . 'px;font-weight:600;color:' . esc_attr( $env['s']['color'] ) . ';text-align:' . $env['start'] . ';">' . $value . '</td></tr>';
+        }
+        $out = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;"><tr><td style="background:' . esc_attr( $d['bg'] ) . ';border:1px solid ' . esc_attr( $d['border'] ) . ';border-radius:' . (int) $d['radius'] . 'px;padding:14px 18px;">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' . $rows . '</table></td></tr></table>';
+        if ( ! empty( $d['calendar'] ) && ! empty( $bk['google'] ) ) {
+            $he   = class_exists( 'Qwoo_I18n' ) && Qwoo_I18n::default_code() === 'he';
+            $pill = static fn( $url, $label ) => '<a href="' . esc_url( $link( (string) $url ) ) . '" style="display:inline-block;margin:6px 4px 0;padding:8px 14px;border:1px solid ' . esc_attr( $d['border'] ) . ';border-radius:8px;font-family:' . $font . ';font-size:13px;font-weight:600;color:' . esc_attr( $env['s']['color'] ) . ';text-decoration:none;">' . esc_html( $label ) . '</a>';
+            $out .= '<div style="padding-top:10px;text-align:' . $env['start'] . ';font-family:' . $font . ';font-size:13px;color:' . esc_attr( $d['label'] ) . ';">' . esc_html( $he ? 'הוספה ליומן:' : 'Add to your calendar:' ) . '<br>'
+                . $pill( $bk['google'], 'Google' ) . $pill( $bk['outlook'] ?? '', 'Outlook' )
+                . '<span style="display:inline-block;margin:6px 4px 0;font-size:12px;">' . esc_html( $he ? 'Apple ואחרים: הקובץ המצורף' : 'Apple and others: the attached file' ) . '</span></div>';
+        }
+        return $out;
     }
 
     /** What the block's "which products" comes to. */

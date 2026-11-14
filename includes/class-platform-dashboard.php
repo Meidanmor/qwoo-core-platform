@@ -665,6 +665,10 @@ class Qwoo_Platform_Dashboard {
         if ( $search !== '' ) {
             $args['s'] = $search;
         }
+        // The hidden products behind paid appointments aren't the owner's products (Appointments → Services).
+        if ( class_exists( 'Qwoo_Appointments' ) && Qwoo_Appointments::product_ids() ) {
+            $args['post__not_in'] = Qwoo_Appointments::product_ids();
+        }
         if ( $filter === 'outofstock' ) {
             $args['meta_query'] = [ [ 'key' => '_stock_status', 'value' => 'outofstock' ] ];
         }

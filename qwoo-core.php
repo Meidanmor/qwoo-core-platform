@@ -119,6 +119,8 @@ require_once QWOO_PATH . 'includes/trait-platform-customers.php';
 require_once QWOO_PATH . 'includes/trait-platform-reviews.php';
 require_once QWOO_PATH . 'includes/class-owner-alerts.php';
 require_once QWOO_PATH . 'includes/class-inbox.php';
+require_once QWOO_PATH . 'includes/class-appointments.php';
+require_once QWOO_PATH . 'includes/class-appointments-shop.php';
 require_once QWOO_PATH . 'includes/class-events.php';
 require_once QWOO_PATH . 'includes/class-reviews.php';
 require_once QWOO_PATH . 'includes/trait-platform-blog.php';

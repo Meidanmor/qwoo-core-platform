@@ -77,6 +77,20 @@ trait Qwoo_Platform_Growth {
             case 'inbox_settings_save':
                 return Qwoo_Inbox::save_settings( $p );
 
+            /* Appointments: services, hours, bookings (Qwoo_Appointments). */
+            case 'appt_state':
+            case 'appt_settings_save':
+            case 'appt_feed_full':
+            case 'appt_service_save':
+            case 'appt_service_delete':
+            case 'appt_services_sort':
+            case 'appt_list':
+            case 'appt_get':
+            case 'appt_times':
+            case 'appt_create':
+            case 'appt_update':
+                return Qwoo_Appointments::dashboard( $op, $p );
+
             /* Subscribers */
             case 'subscribers':
                 return Qwoo_Email_Marketing::subscribers( $p ) + [ 'counts' => Qwoo_Email_Marketing::counts() ];

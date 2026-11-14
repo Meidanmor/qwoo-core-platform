@@ -941,6 +941,34 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
 
+            // Appointments (Qwoo_Appointments): shoppers pick a service, a day and a time, then book or pay.
+            'booking' => [
+                    'label' => 'Booking',
+                    'category' => 'shop',
+                    'icon' => 'event',
+                    'summary' => 'title',
+                    'fields' => [
+                            'service_id' => [ 'type' => 'service', 'label' => 'Service', 'tab' => 'content', 'default' => '',
+                                    'help' => 'Appointments → Services. "All services": shoppers choose one first.' ],
+                            'category' => [ 'type' => 'text', 'label' => 'Only This Group', 'tab' => 'content', 'default' => '', 'show_if' => [ 'service_id' => '' ],
+                                    'help' => 'Empty: every service. Or a group name from your services, like "Hair".' ],
+                            'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => 'Book a time' ],
+                            'show_description' => [ 'type' => 'toggle', 'label' => 'Show the service\'s description', 'tab' => 'content', 'default' => true ],
+                            'show_prices' => [ 'type' => 'toggle', 'label' => 'Show prices', 'tab' => 'content', 'default' => true ],
+                            'show_length' => [ 'type' => 'toggle', 'label' => 'Show how long it takes', 'tab' => 'content', 'default' => true ],
+                            'button_text' => [ 'type' => 'text', 'label' => 'Book Button', 'tab' => 'content', 'default' => 'Book', 'placeholder' => 'Book' ],
+                            'done_text' => [ 'type' => 'textarea', 'label' => 'Text After Booking', 'tab' => 'content', 'default' => '',
+                                    'help' => 'Empty: the text from Appointments → Settings.' ],
+                            'layout' => [ 'type' => 'select', 'label' => 'Calendar And Times', 'tab' => 'style', 'default' => 'side', 'responsive' => true,
+                                    'options' => [ 'side' => 'Side by side', 'stack' => 'Times under the calendar' ] ],
+                            'accent' => [ 'type' => 'color', 'label' => 'Chosen Day And Time', 'tab' => 'style', 'default' => 'global:secondary' ],
+                            'card_bg' => [ 'type' => 'color', 'label' => 'Card Background', 'tab' => 'style' ],
+                            'border_color' => [ 'type' => 'color', 'label' => 'Lines', 'tab' => 'style' ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title' ],
+                            'ts:text' => [ 'type' => 'text_style', 'label' => 'Text' ],
+                    ],
+            ],
+
             'image_block' => [
                     'label'  => 'Image(s)',
                     'category' => 'basic',

@@ -95,6 +95,19 @@ class Qwoo_Owner_Alerts {
         ] );
     }
 
+    /** A shopper booked a time (Qwoo_Appointments). */
+    public static function booking( $booking_id, $name, $text ) {
+        if ( self::$muted ) {
+            return;
+        }
+        self::add( [
+            'type' => 'booking',
+            'id'   => (int) $booking_id,
+            'from' => mb_substr( wp_strip_all_tags( (string) $name ), 0, 80 ),
+            'text' => mb_substr( wp_strip_all_tags( (string) $text ), 0, 140 ),
+        ] );
+    }
+
     public static function low_stock( $product ) {
         self::stock( $product, false );
     }
