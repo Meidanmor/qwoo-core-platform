@@ -472,7 +472,7 @@ class Qwoo_Store_Emails {
         try {
             $html    = Qwoo_Email_Render::html( self::design_for( $id ), self::context( $id, $order, null, $args ) );
             $mine    = trim( (string) ( self::saved( $id )['subject'] ?? '' ) );
-            $subject = $mine !== '' ? strtr( $mine, self::tokens( $order, null, $args ) ) : $default_subject;
+            $subject = strtr( $mine !== '' ? $mine : $default_subject, self::tokens( $order, null, $args ) );
             self::$final = $html;
             $sent = (bool) WC()->mailer()->send( $to, $subject, $html, self::headers( "Content-Type: text/html\r\n", $id ), $attachments );
             self::$final = null;

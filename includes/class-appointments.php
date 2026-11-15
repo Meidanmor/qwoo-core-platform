@@ -1787,6 +1787,12 @@ class Qwoo_Appointments {
         return '{store_name}';
     }
 
+    /** The owner's email: the new-order recipient the platform sets at setup (the account's email), else the site's. */
+    public static function owner_email(): string {
+        if ( class_exists( 'Qwoo_Reviews' ) ) return (string) Qwoo_Reviews::owner_email();
+        return (string) get_option( 'admin_email' );
+    }
+
     const TEAM_EMAILS = [ 'booking_new', 'booking_request', 'booking_cancelled_team' ];
 
     /** Sends one of the booking emails (store emails catalog). Team emails also go to the staff member it's with. */
@@ -1795,7 +1801,7 @@ class Qwoo_Appointments {
         $team = in_array( $id, self::TEAM_EMAILS, true );
         if ( $team ) {
             $list = array_filter( (array) ( Qwoo_Store_Emails::saved( $id )['to'] ?? [] ), 'is_email' );
-            $to   = $list ?: [ self::settings()['notify_to'] ?: (string) get_option( 'admin_email' ) ];
+            $to   = $list ?: [ self::settings()['notify_to'] ?: self::owner_email() ];
             $p    = self::staff_one( (int) $b['staff_id'] );
             if ( $p && $p['notify'] && is_email( $p['email'] ) ) $to[] = $p['email'];
             $to = implode( ',', array_unique( array_map( 'strtolower', $to ) ) );

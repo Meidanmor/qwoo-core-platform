@@ -48,11 +48,16 @@ class Qwoo_Platform_Connection {
     /**
      * Hands an email to the platform (POST /stores/{id}/mail). Returns true
      * when the platform sent it, or null to let WordPress send it itself
-     * (not connected, attachments, the platform unreachable or refusing).
+     * (not connected, attachments the platform doesn't take, the platform
+     * unreachable or refusing). Small calendar, PDF and picture files go along.
      */
     public static function relay_mail( $result, $atts ) {
-        if ( $result !== null || get_option( 'qwoo_platform_mail', 'yes' ) !== 'yes' || ! empty( $atts['attachments'] ) ) {
+        if ( $result !== null || get_option( 'qwoo_platform_mail', 'yes' ) !== 'yes' ) {
             return $result;
+        }
+        $files = self::attachments( $atts['attachments'] ?? [] );
+        if ( $files === null ) {
+            return null;
         }
         $c = self::get();
         if ( ! $c ) {
@@ -97,6 +102,9 @@ class Qwoo_Platform_Connection {
         }
         $mail['subject'] = (string) ( $atts['subject'] ?? '' );
         $mail['body']    = (string) ( $atts['message'] ?? '' );
+        if ( $files ) {
+            $mail['attachments'] = $files;
+        }
 
         $sent = self::call( $c, 'mail', $mail, 15 );
         if ( $sent === null ) {
@@ -104,6 +112,32 @@ class Qwoo_Platform_Connection {
         }
         do_action( 'wp_mail_succeeded', $atts );
         return true;
+    }
+
+    /**
+     * The email's files for the platform: [ { filename, content (base64) } ],
+     * or null when one can't go (too many, too big, a type it doesn't take).
+     */
+    private static function attachments( $paths ) {
+        $paths = is_array( $paths ) ? array_filter( $paths ) : array_filter( explode( "
+", str_replace( ',', "
+", (string) $paths ) ) );
+        if ( ! $paths ) {
+            return [];
+        }
+        if ( count( $paths ) > 3 ) {
+            return null;
+        }
+        $out = [];
+        foreach ( $paths as $name => $path ) {
+            $path = (string) $path;
+            $file = is_string( $name ) && $name !== '' ? $name : basename( $path );
+            if ( ! preg_match( '/\.(ics|pdf|png|jpe?g)$/i', $file ) || ! is_readable( $path ) || filesize( $path ) > 524288 ) {
+                return null;
+            }
+            $out[] = [ 'filename' => sanitize_file_name( $file ), 'content' => base64_encode( (string) file_get_contents( $path ) ) ];
+        }
+        return $out;
     }
 
     /** Email addresses from "a@b.c, Name <d@e.f>" or a list of them. */
