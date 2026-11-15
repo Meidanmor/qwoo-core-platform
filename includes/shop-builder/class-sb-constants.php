@@ -3242,6 +3242,22 @@ abstract class Shop_Builder_Constants {
                             // The link of the page the visitor is on (empty: the link colour, underlined).
                             'active_link_color' => [ 'type' => 'color', 'label' => 'Current Page Link Color', 'tab' => 'style', 'group' => 'Colors' ],
                             'active_link_bg'    => [ 'type' => 'color', 'label' => 'Current Page Link Background', 'tab' => 'style', 'group' => 'Colors' ],
+                            // Each link as a box (aura MenuWidget.vue): in the vertical and folding lists it fills the whole row.
+                            'link_bg'       => [ 'type' => 'color', 'label' => 'Link Background', 'tab' => 'style', 'group' => 'Colors' ],
+                            'link_hover_bg' => [ 'type' => 'color', 'label' => 'Link Hover Background', 'tab' => 'style', 'group' => 'Colors' ],
+                            'link_padding'  => [ 'type' => 'sides', 'label' => 'Link Padding', 'tab' => 'style', 'group' => 'Links', 'responsive' => true,
+                                    'help' => 'The space inside each link, around its text. In a vertical or folding list the link is the whole row.' ],
+                            'link_radius'   => [ 'type' => 'length', 'label' => 'Link Corner Radius', 'tab' => 'style', 'group' => 'Links', 'placeholder' => '0px' ],
+                            // The standard drawer's menu (Drawer Content: Standard): its own look, apart from the header's links.
+                            'drawer_link_padding' => [ 'hide_if' => [ 'drawer_content' => 'same' ], 'type' => 'sides', 'label' => 'Link Padding', 'tab' => 'style', 'group' => 'Drawer Links', 'responsive' => true,
+                                    'show_if' => [ 'enable_mobile_menu' => true, 'drawer_content' => 'standard' ],
+                                    'help' => 'The space inside each menu row of the phone drawer.' ],
+                            'drawer_link_bg'      => [ 'hide_if' => [ 'drawer_content' => 'same' ], 'type' => 'color', 'label' => 'Link Background', 'tab' => 'style', 'group' => 'Drawer Links', 'show_if' => [ 'enable_mobile_menu' => true, 'drawer_content' => 'standard' ] ],
+                            'drawer_active_color' => [ 'hide_if' => [ 'drawer_content' => 'same' ], 'type' => 'color', 'label' => 'Current Page Link Color', 'tab' => 'style', 'group' => 'Drawer Links', 'show_if' => [ 'enable_mobile_menu' => true, 'drawer_content' => 'standard' ],
+                                    'help' => 'Empty: the store\'s main colour.' ],
+                            'drawer_active_bg'    => [ 'hide_if' => [ 'drawer_content' => 'same' ], 'type' => 'color', 'label' => 'Current Page Link Background', 'tab' => 'style', 'group' => 'Drawer Links', 'show_if' => [ 'enable_mobile_menu' => true, 'drawer_content' => 'standard' ],
+                                    'help' => 'Empty: the store\'s second colour.' ],
+                            'drawer_link_radius'  => [ 'hide_if' => [ 'drawer_content' => 'same' ], 'type' => 'length', 'label' => 'Link Corner Radius', 'tab' => 'style', 'group' => 'Drawer Links', 'placeholder' => '0px', 'show_if' => [ 'enable_mobile_menu' => true, 'drawer_content' => 'standard' ] ],
                             'dropdown_bg_color' => [
                                     'type'    => 'color',
                                     'label'   => 'Dropdown Background',
