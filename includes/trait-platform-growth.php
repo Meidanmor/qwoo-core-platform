@@ -95,6 +95,8 @@ trait Qwoo_Platform_Growth {
             // From the platform's calendar sync (QP_Calendars): connected or not, and Google's change notices.
             case 'appt_cal_link':
             case 'appt_cal_changed':
+            // A customer's WhatsApp answer button (QP_Messages webhook).
+            case 'appt_reply':
                 return Qwoo_Appointments::dashboard( $op, $p );
 
             /* Subscribers */

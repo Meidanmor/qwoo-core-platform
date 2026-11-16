@@ -210,6 +210,9 @@ class Qwoo_Appointments {
             'terms'        => mb_substr( (string) ( $s['terms'] ?? '' ), 0, 500 ),
             // The owner's own WhatsApp messages (sent by hand from a booking, wa.me links).
             'quick'        => array_key_exists( 'quick', $s ) ? self::clean_quick( $s['quick'] ) : self::default_quick(),
+            // Booking messages by phone (the platform sends them: QP_Messages): wa = WhatsApp, else SMS.
+            'channels'     => self::clean_channels( $s['channels'] ?? [] ),
+            'sms_texts'    => self::clean_sms_texts( $s['sms_texts'] ?? [] ),
             'feed'         => self::feed_key( $s ),
         ];
     }
@@ -226,6 +229,104 @@ class Qwoo_Appointments {
             $out[] = [ 'id' => preg_match( '/^m[a-z0-9]{4,12}$/', $id ) ? $id : 'm' . substr( md5( $name . $text . count( $out ) ), 0, 8 ), 'name' => $name, 'text' => $text ];
         }
         return $out;
+    }
+
+    /** The booking messages that can also go to the customer's phone, and how each goes by default. */
+    const PHONE_MESSAGES = [ 'booking_confirmed' => 'wa', 'booking_reminder' => 'none', 'booking_confirm_request' => 'wa', 'booking_moved' => 'wa', 'booking_cancelled' => 'wa', 'booking_requested' => 'none', 'booking_declined' => 'sms' ];
+
+    private static function clean_channels( $in ): array {
+        $out = [];
+        foreach ( self::PHONE_MESSAGES as $id => $default ) {
+            $v = is_array( $in ) ? (string) ( $in[ $id ] ?? $default ) : $default;
+            $out[ $id ] = in_array( $v, [ 'wa', 'sms', 'none' ], true ) ? $v : $default;
+        }
+        return $out;
+    }
+
+    /** The SMS texts (WhatsApp's are fixed by Meta's approved templates). Empty = the ready-made one. */
+    private static function clean_sms_texts( $in ): array {
+        $out = [];
+        foreach ( array_keys( self::PHONE_MESSAGES ) as $id ) {
+            $t = is_array( $in ) ? mb_substr( sanitize_textarea_field( (string) ( $in[ $id ] ?? '' ) ), 0, 600 ) : '';
+            $out[ $id ] = trim( $t ) !== '' ? $t : self::default_sms( $id );
+        }
+        return $out;
+    }
+
+    public static function default_sms( string $id ): string {
+        switch ( $id ) {
+            case 'booking_confirmed':       return self::l( 'Hi {first_name}, your {service} at {store} is booked for {date} at {time}. Details: {link}', 'היי {first_name}, התור שלך ל{service} ב{store} נקבע ל{date} בשעה {time}. פרטים: {link}' );
+            case 'booking_reminder':        return self::l( 'Reminder: {service} at {store} on {date} at {time}. Details: {link}', 'תזכורת: {service} ב{store} ב{date} בשעה {time}. פרטים: {link}' );
+            case 'booking_confirm_request': return self::l( 'Hi {first_name}, are you coming to {service} at {store} on {date} at {time}? Answer here: {link}', 'היי {first_name}, מגיעים ל{service} ב{store} ב{date} בשעה {time}? לתשובה: {link}' );
+            case 'booking_moved':           return self::l( 'Hi {first_name}, your {service} at {store} moved to {date} at {time}. Details: {link}', 'היי {first_name}, התור שלך ל{service} ב{store} הוזז ל{date} בשעה {time}. פרטים: {link}' );
+            case 'booking_cancelled':       return self::l( 'Hi {first_name}, your {service} at {store} on {date} at {time} is cancelled. To book again: {link}', 'היי {first_name}, התור שלך ל{service} ב{store} ב{date} בשעה {time} בוטל. לקביעה מחדש: {link}' );
+            case 'booking_requested':       return self::l( 'Hi {first_name}, we got your request for {service} on {date} at {time}. We\'ll confirm soon. {link}', 'היי {first_name}, קיבלנו את הבקשה שלך ל{service} ב{date} בשעה {time}. נאשר בקרוב. {link}' );
+            case 'booking_declined':        return self::l( 'Hi {first_name}, sorry, we couldn\'t confirm {service} on {date} at {time}. Pick another time: {link}', 'היי {first_name}, מצטערים, לא יכולנו לאשר {service} ב{date} בשעה {time}. אפשר לבחור זמן אחר: {link}' );
+        }
+        return '';
+    }
+
+    /** The texts' fill-ins for one booking: first name, service, store, date, time, link (the WhatsApp templates' order). */
+    private static function phone_fill( array $b ): array {
+        $svc   = self::service( (int) $b['service_id'] );
+        $start = self::ts( $b['start_utc'] );
+        $card  = self::email_args( $b );
+        $link  = is_email( (string) $b['email'] ) ? self::manage_url( $b ) : self::front() . '/';
+        return [
+            'first_name' => (string) ( $card['first_name'] ?? strtok( (string) $b['name'], ' ' ) ),
+            'service'    => $svc ? (string) $svc['name'] : '',
+            'store'      => html_entity_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ),
+            'date'       => wp_date( self::l( 'l, j F', 'l, j בF' ), $start ),
+            'time'       => wp_date( 'H:i', $start ),
+            'link'       => $link,
+        ];
+    }
+
+    /** The key on WhatsApp's answer buttons (c|x:<id>:<key>), so only this booking's message answers it. */
+    public static function reply_key( array $b ): string {
+        return substr( hash_hmac( 'sha256', (int) $b['id'] . '|' . strtolower( (string) $b['email'] ) . '|' . preg_replace( '/\D/', '', (string) $b['phone'] ), wp_salt( 'auth' ) . 'qwoo-appt-wa' ), 0, 16 );
+    }
+
+    /** A booking message to the customer's phone, by the channel the owner chose (the platform sends it). */
+    private static function phone( string $id, array $b ): void {
+        if ( ! isset( self::PHONE_MESSAGES[ $id ] ) || strlen( preg_replace( '/\D/', '', (string) $b['phone'] ) ) < 6 ) return;
+        if ( ! class_exists( 'Qwoo_Platform_Connection' ) || ! Qwoo_Platform_Connection::is_connected() ) return;
+        $s    = self::settings();
+        $pref = $s['channels'][ $id ] ?? 'none';
+        if ( $pref === 'none' ) return;
+        $fill = self::phone_fill( $b );
+        $sms  = strtr( (string) ( $s['sms_texts'][ $id ] ?? '' ), array_combine( array_map( static fn( $k ) => '{' . $k . '}', array_keys( $fill ) ), array_values( $fill ) ) );
+        $key  = self::reply_key( $b );
+        $lang = class_exists( 'Qwoo_I18n' ) && Qwoo_I18n::default_code() === 'he' ? 'he' : 'en';
+        $res  = Qwoo_Platform_Connection::post( 'messages', [
+            'do' => 'send', 'pref' => $pref, 'key' => $id, 'to' => (string) $b['phone'], 'lang' => $lang,
+            'country' => function_exists( 'WC' ) && WC()->countries ? WC()->countries->get_base_country() : '',
+            'params' => array_values( $fill ), 'payloads' => [ 'c:' . (int) $b['id'] . ':' . $key, 'x:' . (int) $b['id'] . ':' . $key ], 'sms' => $sms,
+        ], 20 );
+        $sent = is_array( $res ) ? (string) ( $res['sent'] ?? '' ) : '';
+        self::log( (int) $b['id'], $sent !== '' ? 'phone' : 'phone_fail', $sent !== '' ? $sent . ':' . $id : ( is_array( $res ) ? (string) ( $res['error'] ?? '' ) : 'unreachable' ) . ':' . $id );
+    }
+
+    /**
+     * A WhatsApp answer button (from the platform's webhook): { id, coming, k }. Returns the text the
+     * platform sends back in the chat.
+     */
+    public static function phone_reply( array $p ): array {
+        $b = self::booking( absint( $p['id'] ?? 0 ) );
+        if ( ! $b || ! hash_equals( self::reply_key( $b ), (string) ( $p['k'] ?? '' ) ) ) return [ 'ok' => false, 'text' => '' ];
+        $fill = self::phone_fill( $b );
+        [ $can ] = self::answer_window( $b );
+        if ( ! $can ) {
+            // Already answered the same way: say so again; anything else can't change here.
+            if ( $b['status'] === 'confirmed' && $b['confirm_state'] === 'yes' && ! empty( $p['coming'] ) ) return [ 'ok' => true, 'text' => strtr( self::l( 'Thanks, you\'re confirmed. See you on {date} at {time}.', 'תודה, אישרת הגעה. נתראה ב{date} בשעה {time}.' ), [ '{date}' => $fill['date'], '{time}' => $fill['time'] ] ) ];
+            return [ 'ok' => false, 'text' => strtr( self::l( 'This booking can\'t be changed here any more. Details: {link}', 'כבר אי אפשר לשנות את התור הזה כאן. פרטים: {link}' ), [ '{link}' => $fill['link'] ] ) ];
+        }
+        $done = self::answer( (int) $b['id'], ! empty( $p['coming'] ) );
+        if ( is_wp_error( $done ) ) return [ 'ok' => false, 'text' => strtr( self::l( 'Something went wrong. You can answer here: {link}', 'משהו השתבש. אפשר לענות כאן: {link}' ), [ '{link}' => $fill['link'] ] ) ];
+        self::log( (int) $b['id'], 'whatsapp_answer', ! empty( $p['coming'] ) ? 'yes' : 'no' );
+        return [ 'ok' => true, 'text' => strtr( ! empty( $p['coming'] )
+            ? self::l( 'Thanks {first_name}! See you on {date} at {time}.', 'תודה {first_name}! נתראה ב{date} בשעה {time}.' )
+            : self::l( 'Your booking is cancelled. To book another time: {shop}', 'התור שלך בוטל. לקביעת זמן אחר: {shop}' ), [ '{first_name}' => $fill['first_name'], '{date}' => $fill['date'], '{time}' => $fill['time'], '{shop}' => self::front() . '/' ] ) ];
     }
 
     /** Starting messages, until the owner saves their own list. */
@@ -323,6 +424,12 @@ class Qwoo_Appointments {
         if ( array_key_exists( 'confirm_text', $in ) ) $new['confirm_text'] = mb_substr( sanitize_textarea_field( (string) $in['confirm_text'] ), 0, 1000 );
         if ( array_key_exists( 'terms', $in ) ) $new['terms'] = mb_substr( sanitize_text_field( (string) $in['terms'] ), 0, 500 );
         if ( array_key_exists( 'quick', $in ) ) $new['quick'] = self::clean_quick( $in['quick'] );
+        if ( is_array( $in['channels'] ?? null ) ) $new['channels'] = self::clean_channels( $in['channels'] );
+        if ( is_array( $in['sms_texts'] ?? null ) ) {
+            // Texts left as the ready-made ones aren't saved, so a language change still reads well.
+            $texts = self::clean_sms_texts( $in['sms_texts'] );
+            $new['sms_texts'] = array_filter( $texts, static fn( $t, $id ) => $t !== self::default_sms( $id ), ARRAY_FILTER_USE_BOTH );
+        }
         if ( ! empty( $in['new_feed'] ) ) $new['ics_key'] = bin2hex( random_bytes( 24 ) );
         update_option( self::OPTION, $new, false );
         if ( class_exists( 'Qwoo_Custom_Code' ) && method_exists( 'Qwoo_Custom_Code', 'touch' ) ) Qwoo_Custom_Code::touch();
@@ -1844,6 +1951,7 @@ class Qwoo_Appointments {
             if ( $p && $p['notify'] && is_email( $p['email'] ) ) $to[] = $p['email'];
             $to = implode( ',', array_unique( array_map( 'strtolower', $to ) ) );
         } else {
+            self::phone( $id, $b );
             $to = (string) $b['email'];
             if ( ! is_email( $to ) ) return;
         }
@@ -1915,7 +2023,7 @@ class Qwoo_Appointments {
             if ( $b['confirm_state'] === '' ) {
                 if ( time() < $ask ) continue;
                 // Booked after the moment to ask (booking it was the answer), or no time left to answer.
-                if ( self::ts( $b['created'] ) >= $ask || time() >= $last || ! is_email( (string) $b['email'] ) ) {
+                if ( self::ts( $b['created'] ) >= $ask || time() >= $last || ( ! is_email( (string) $b['email'] ) && strlen( preg_replace( '/\D/', '', (string) $b['phone'] ) ) < 6 ) ) {
                     self::confirm_set( $id, '', 'none' );
                     continue;
                 }
@@ -2289,6 +2397,8 @@ class Qwoo_Appointments {
                 return self::cal_link( $p );
             case 'appt_cal_changed':
                 return self::cal_changed( $p );
+            case 'appt_reply':
+                return self::phone_reply( $p );
         }
         return new WP_Error( 'op', 'Unknown action.' );
     }
