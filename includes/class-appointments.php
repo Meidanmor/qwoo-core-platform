@@ -777,11 +777,11 @@ class Qwoo_Appointments {
 
     private static $staff_cache = null;
 
-    /** How many staff the plan allows (0 = no limit). Basic 1, Pro (and the trial) 5, Plus no limit. */
+    /** How many staff the plan allows (0 = no limit). Basic 3, Pro (and the trial) 10, Plus no limit (user, 2026-11-16). */
     public static function staff_limit(): int {
         $plan = get_option( 'qwoo_plan', null );
         if ( ! is_array( $plan ) ) return 0;
-        return [ 'basic' => 1, 'free' => 1, 'pro' => 5, 'trial' => 5, 'plus' => 0 ][ (string) ( $plan['plan'] ?? '' ) ] ?? 5;
+        return [ 'basic' => 3, 'free' => 3, 'pro' => 10, 'trial' => 10, 'plus' => 0 ][ (string) ( $plan['plan'] ?? '' ) ] ?? 10;
     }
 
     private static function clean_staff( array $in, array $old = [] ): array {
