@@ -997,16 +997,19 @@ class Qwoo_Appointments {
         $out = [];
         foreach ( $res['busy'] as $iv ) {
             if ( ! is_array( $iv ) || count( $iv ) < 2 ) continue;
+            // [ start, end, the event's own page in Google / Outlook ] (the link only for the dashboard).
+            $web = (string) ( $iv[2] ?? '' );
+            $web = preg_match( '#^https://(www\.google\.com/calendar/|calendar\.google\.com/|outlook\.(live|office365|office)\.com/)#', $web ) ? esc_url_raw( $web ) : '';
             if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) $iv[0] ) ) {
                 // An all-day event: whole days in the store's time zone.
                 $s = date_create_immutable( $iv[0] . ' 00:00', $tz );
                 $e = date_create_immutable( $iv[1] . ' 00:00', $tz );
-                if ( $s && $e ) $out[] = [ $s->getTimestamp(), $e->getTimestamp() ];
+                if ( $s && $e ) $out[] = [ $s->getTimestamp(), $e->getTimestamp(), $web ];
                 continue;
             }
             $s = strtotime( (string) $iv[0] );
             $e = strtotime( (string) $iv[1] );
-            if ( $s && $e && $e > $s ) $out[] = [ $s, $e ];
+            if ( $s && $e && $e > $s ) $out[] = [ $s, $e, $web ];
         }
         set_transient( $key, $out, self::BUSY_TTL );
         return $out;
@@ -2112,7 +2115,47 @@ class Qwoo_Appointments {
             array_push( $args, $like, $like, $like );
         }
         $rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . self::bookings_table() . " WHERE $where ORDER BY start_utc ASC LIMIT 1000", $args ), ARRAY_A );
-        return [ 'items' => array_values( array_map( [ __CLASS__, 'owner_view' ], $rows ) ), 'from' => gmdate( 'c', $from ), 'to' => gmdate( 'c', $to ) ];
+        $out  = [ 'items' => array_values( array_map( [ __CLASS__, 'owner_view' ], $rows ) ), 'from' => gmdate( 'c', $from ), 'to' => gmdate( 'c', $to ) ];
+        // The week / day view also shows busy times from connected calendars (times and a link only).
+        if ( $status === '' && $search === '' && $to - $from <= 32 * DAY_IN_SECONDS ) $out['outside'] = self::outside_busy( $from, $to, $staff, $only );
+        return $out;
+    }
+
+    /**
+     * Busy times from the connected Google / Outlook calendars for the dashboard calendar,
+     * cut per day: [ { local, local_end, link, staff } ]. Everyone: the store's calendar and
+     * each person's own one; a staff member sees only their own connected calendar.
+     */
+    private static function outside_busy( int $from, int $to, int $staff, int $only ): array {
+        $targets = [];
+        if ( $only ) {
+            $p = self::staff_one( $only );
+            if ( $p && $p['calendar'] === 'own' && self::cal_target( $only ) !== null ) $targets[ $only ] = $only;
+        } elseif ( $staff ) {
+            $t = self::cal_target( $staff );
+            if ( $t !== null ) $targets[ $t ] = $staff;
+        } else {
+            if ( self::cal_target( 0 ) !== null ) $targets[0] = 0;
+            foreach ( self::staff_list() as $p ) {
+                if ( $p['calendar'] === 'own' && self::cal_target( (int) $p['id'] ) !== null ) $targets[ (int) $p['id'] ] = (int) $p['id'];
+            }
+        }
+        $tz  = wp_timezone();
+        $out = [];
+        foreach ( $targets as $link => $who ) {
+            foreach ( self::busy( $from, $to, false, (int) $link ) as $iv ) {
+                $s = max( (int) $iv[0], $from );
+                $e = min( (int) $iv[1], $to );
+                // One piece per day, so a long or all-day event shows on each day it covers.
+                while ( $s < $e && count( $out ) < 600 ) {
+                    $next = ( new DateTimeImmutable( '@' . $s ) )->setTimezone( $tz )->setTime( 0, 0 )->modify( '+1 day' )->getTimestamp();
+                    $end  = min( $e, $next );
+                    $out[] = [ 'local' => wp_date( 'Y-m-d H:i', $s ), 'local_end' => wp_date( 'Y-m-d H:i', $end ), 'link' => (string) ( $iv[2] ?? '' ), 'staff' => $who ];
+                    $s = $end;
+                }
+            }
+        }
+        return $out;
     }
 
     public static function owner_update( array $p, int $only = 0 ) {
