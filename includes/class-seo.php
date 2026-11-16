@@ -696,6 +696,9 @@ class Qwoo_Seo {
             [ 'path' => '/', 'lastmod' => '' ],
             [ 'path' => '/products', 'lastmod' => '' ],
         ];
+        // Shop off with products hidden (Qwoo_Shop_Mode): no product, category or All products address.
+        $shop       = class_exists( 'Qwoo_Shop_Mode' ) ? Qwoo_Shop_Mode::settings() : [ 'sell' => true ];
+        $no_shop    = ! $shop['sell'] && ( $shop['products'] ?? '' ) === 'hide';
 
         // Hidden products ("Catalog visibility: hidden") carry both exclude terms.
         $hidden = [];
@@ -706,7 +709,7 @@ class Qwoo_Seo {
                 array_map( 'intval', (array) get_objects_in_term( (int) ( $terms['exclude-from-search'] ?? 0 ), 'product_visibility' ) )
             );
         }
-        $posts = get_posts( [
+        $posts = $no_shop ? [] : get_posts( [
             'post_type'              => 'product',
             'post_status'            => 'publish',
             'posts_per_page'         => self::SITEMAP_PRODUCTS,
@@ -724,6 +727,7 @@ class Qwoo_Seo {
             $urls[]  = [ 'path' => '/product/' . $post->post_name, 'lastmod' => $lastmod ];
         }
         $urls[1]['lastmod'] = $newest;
+        if ( $no_shop ) array_splice( $urls, 1, 1 );
 
         // The owner's published pages, unless hidden from search engines.
         if ( class_exists( 'Shop_Settings_Builder' ) ) {
@@ -737,7 +741,7 @@ class Qwoo_Seo {
 
         // (No meta_query here: WooCommerce's category ordering joins term meta
         // too, and the two together match nothing.)
-        $terms = get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => true, 'number' => 2000 ] );
+        $terms = $no_shop ? [] : get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => true, 'number' => 2000 ] );
         foreach ( is_wp_error( $terms ) ? [] : $terms as $term ) {
             if ( ! self::is_noindex( (int) $term->term_id, 'term' ) ) {
                 $urls[] = [ 'path' => '/product-category/' . $term->slug, 'lastmod' => '' ];

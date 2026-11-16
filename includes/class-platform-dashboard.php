@@ -1991,6 +1991,8 @@ class Qwoo_Platform_Dashboard {
             'general'  => self::general_settings(),
             // Products with no price or 0 (Qwoo_Zero_Price).
             'zero_price' => Qwoo_Zero_Price::for_dashboard(),
+            // Sell online + Shopper accounts (Qwoo_Shop_Mode).
+            'shop_mode'  => class_exists( 'Qwoo_Shop_Mode' ) ? Qwoo_Shop_Mode::for_dashboard() : null,
             'store'    => [
                 'name'           => html_entity_decode( get_option( 'blogname' ), ENT_QUOTES ),
                 'email'          => (string) ( $new_order['recipient'] ?? '' ) ?: (string) get_option( 'admin_email' ),
@@ -2231,6 +2233,14 @@ class Qwoo_Platform_Dashboard {
         switch ( $params['section'] ?? '' ) {
             case 'general':
                 $saved = self::save_general_settings( $v );
+                if ( is_wp_error( $saved ) ) {
+                    return $saved;
+                }
+                break;
+
+            case 'shop_mode':
+            case 'accounts':
+                $saved = Qwoo_Shop_Mode::save( $v, $params['section'] === 'accounts' ? 'accounts' : 'shop' );
                 if ( is_wp_error( $saved ) ) {
                     return $saved;
                 }

@@ -97,7 +97,9 @@ add_action( 'init', function() {
                 // Questions and answers + bought-together ids (single product answers only).
                 $extras = class_exists('Qwoo_Product_Extras') ? Qwoo_Product_Extras::for_storefront($product) : ['faq' => null, 'bought_together' => null];
                 // Products with no price or 0: what shows instead of Add to cart (Settings → General).
-                $extras['zero_price'] = class_exists('Qwoo_Zero_Price') ? Qwoo_Zero_Price::for_storefront($product) : null;
+                // With the shop off (Settings → General → Sell online), catalog mode: no price, no Add to cart.
+                $extras['zero_price'] = (class_exists('Qwoo_Shop_Mode') ? Qwoo_Shop_Mode::for_storefront($product) : null)
+                    ?? (class_exists('Qwoo_Zero_Price') ? Qwoo_Zero_Price::for_storefront($product) : null);
 
                 if (empty($terms) || is_wp_error($terms)) {
                     return ['default_category' => null, 'reviews' => $reviews, 'videos' => $videos, 'variation_prices' => $variation_prices] + $extras;

@@ -117,6 +117,8 @@ class Qwoo_Site_Content {
         if ( class_exists( 'Qwoo_Store_Suspension' ) ) $body = Qwoo_Store_Suspension::site_fields() + $body;
         // The Free plan: the storefront shows "Made with Openly" (a plan change rewrites this file, no publish needed).
         if ( class_exists( 'Qwoo_Platform_Dashboard' ) && Qwoo_Platform_Dashboard::is_free_plan() ) $body['free'] = true;
+        // Sell online / Shopper accounts off (Qwoo_Shop_Mode): which pages the storefront sends away.
+        if ( class_exists( 'Qwoo_Shop_Mode' ) ) $body += Qwoo_Shop_Mode::site_fields();
         // Tracking & custom code: only a hash of its stamp (the settings come from qwoo/v1/site/code).
         $body        += Qwoo_Custom_Code::site_fields();
         // An import is running: the storefront shows its pages under an "updating" overlay.
