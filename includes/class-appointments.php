@@ -34,7 +34,7 @@ class Qwoo_Appointments {
 
     const OPTION      = 'qwoo_appt_settings';
     const DB_OPTION   = 'qwoo_appt_db';
-    const DB_VERSION  = '3';
+    const DB_VERSION  = '4';
     const CALENDAR    = 'qwoo_appt_calendar'; // { connected, provider, email, invite } (the platform sets it)
     const BUSY_GEN    = 'qwoo_appt_busy_gen'; // bumped when Google says something changed
     const BUSY_TTL    = 120;
@@ -137,6 +137,8 @@ class Qwoo_Appointments {
         cal_tries TINYINT UNSIGNED NOT NULL DEFAULT 0,
         cal_flag VARCHAR(10) NOT NULL DEFAULT '',
         cal_note VARCHAR(120) NOT NULL DEFAULT '',
+        confirm_state VARCHAR(10) NOT NULL DEFAULT '',
+        confirm_at DATETIME NULL,
         note TEXT NULL,
         log LONGTEXT NULL,
         created DATETIME NOT NULL,
@@ -206,7 +208,31 @@ class Qwoo_Appointments {
             'notify_to'    => is_email( $s['notify_to'] ?? '' ) ? (string) $s['notify_to'] : '',
             'confirm_text' => mb_substr( (string) ( $s['confirm_text'] ?? '' ), 0, 1000 ),
             'terms'        => mb_substr( (string) ( $s['terms'] ?? '' ), 0, 500 ),
+            // The owner's own WhatsApp messages (sent by hand from a booking, wa.me links).
+            'quick'        => array_key_exists( 'quick', $s ) ? self::clean_quick( $s['quick'] ) : self::default_quick(),
             'feed'         => self::feed_key( $s ),
+        ];
+    }
+
+    /** Up to 30 { id, name, text }: texts with {first_name} {name} {service} {date} {time} {staff} {store} {link}. */
+    public static function clean_quick( $list ): array {
+        $out = [];
+        foreach ( array_slice( is_array( $list ) ? $list : [], 0, 30 ) as $q ) {
+            if ( ! is_array( $q ) ) continue;
+            $name = mb_substr( sanitize_text_field( (string) ( $q['name'] ?? '' ) ), 0, 60 );
+            $text = mb_substr( sanitize_textarea_field( (string) ( $q['text'] ?? '' ) ), 0, 1000 );
+            if ( $name === '' || $text === '' ) continue;
+            $id    = (string) ( $q['id'] ?? '' );
+            $out[] = [ 'id' => preg_match( '/^m[a-z0-9]{4,12}$/', $id ) ? $id : 'm' . substr( md5( $name . $text . count( $out ) ), 0, 8 ), 'name' => $name, 'text' => $text ];
+        }
+        return $out;
+    }
+
+    /** Starting messages, until the owner saves their own list. */
+    private static function default_quick(): array {
+        return [
+            [ 'id' => 'mlate1', 'name' => self::l( 'Running late', 'מתעכב/ת' ), 'text' => self::l( 'Hi {first_name}, I\'m running about 15 minutes late for your {service} at {time}. Sorry, see you soon!', 'היי {first_name}, אני מתעכב/ת בערך ב־15 דקות לתור שלך ל{service} בשעה {time}. סליחה, נתראה בקרוב!' ) ],
+            [ 'id' => 'mremind', 'name' => self::l( 'See you soon', 'נתראה בקרוב' ), 'text' => self::l( 'Hi {first_name}, just a reminder: {service} at {store} on {date} at {time}. Details: {link}', 'היי {first_name}, רק מזכירים: {service} ב{store} ב{date} בשעה {time}. פרטים: {link}' ) ],
         ];
     }
 
@@ -296,6 +322,7 @@ class Qwoo_Appointments {
         if ( array_key_exists( 'notify_to', $in ) ) $new['notify_to'] = sanitize_email( (string) $in['notify_to'] );
         if ( array_key_exists( 'confirm_text', $in ) ) $new['confirm_text'] = mb_substr( sanitize_textarea_field( (string) $in['confirm_text'] ), 0, 1000 );
         if ( array_key_exists( 'terms', $in ) ) $new['terms'] = mb_substr( sanitize_text_field( (string) $in['terms'] ), 0, 500 );
+        if ( array_key_exists( 'quick', $in ) ) $new['quick'] = self::clean_quick( $in['quick'] );
         if ( ! empty( $in['new_feed'] ) ) $new['ics_key'] = bin2hex( random_bytes( 24 ) );
         update_option( self::OPTION, $new, false );
         if ( class_exists( 'Qwoo_Custom_Code' ) && method_exists( 'Qwoo_Custom_Code', 'touch' ) ) Qwoo_Custom_Code::touch();
@@ -352,7 +379,13 @@ class Qwoo_Appointments {
         if ( $deposit_type === 'percent' ) $deposit = min( 100, $deposit );
         $image = absint( $g( 'image', 0 ) );
         $staff = array_values( array_unique( array_filter( array_map( 'absint', (array) $g( 'staff', [] ) ) ) ) );
+        $cf     = is_array( $g( 'confirm', [] ) ) ? $g( 'confirm', [] ) : [];
+        $before = min( 10080, max( 15, (int) ( $cf['before'] ?? 1440 ) ) );
+        $by     = min( 1440, max( 0, (int) ( $cf['answer_by'] ?? 120 ) ) );
         return [
+            // Ask the customer to confirm: $before minutes before the start, answers until $answer_by
+            // minutes before it; no answer keeps the booking marked "Not confirmed", or cancels it.
+            'confirm'       => [ 'on' => ! empty( $cf['on'] ), 'before' => $before, 'answer_by' => $by < $before ? $by : 0, 'no_answer' => ( $cf['no_answer'] ?? '' ) === 'cancel' ? 'cancel' : 'keep' ],
             // Who gives it (Appointments → Staff); none = the store's own calendar.
             'staff'         => array_slice( $staff, 0, 100 ),
             'anyone'        => ! array_key_exists( 'anyone', $in ) ? (bool) ( $old['anyone'] ?? true ) : ! empty( $in['anyone'] ),
@@ -1425,7 +1458,7 @@ class Qwoo_Appointments {
         $was_on = in_array( $b['status'], [ 'confirmed', 'pending', 'requested' ], true );
         // A request the shopper takes back is refunded in full (the owner never said yes).
         if ( $b['status'] === 'requested' ) self::refund_all( $b, self::l( 'Booking request withdrawn', 'בקשת התור בוטלה' ) );
-        elseif ( $was_on && $by === 'shopper' ) self::refund_on_cancel( $b );
+        elseif ( $was_on && in_array( $by, [ 'shopper', 'noanswer' ], true ) ) self::refund_on_cancel( $b );
         $b = self::booking( $id );
         if ( $was_on && $tell && $b['email'] !== '' ) self::send( 'booking_cancelled', $b, [ 'by' => $by ] );
         if ( $was_on && $by === 'shopper' ) self::send( 'booking_cancelled_team', $b );
@@ -1470,7 +1503,7 @@ class Qwoo_Appointments {
             }
             $wpdb->update( self::bookings_table(), [
                 'start_utc' => self::sql_time( $start ), 'end_utc' => self::sql_time( $start + $svc['duration'] * 60 ), 'staff_id' => $staff,
-                'sess' => self::sess_for( $svc, $start, $staff ), 'reminded' => 0, 'cal_flag' => '', 'cal_note' => '',
+                'sess' => self::sess_for( $svc, $start, $staff ), 'reminded' => 0, 'cal_flag' => '', 'cal_note' => '', 'confirm_state' => '', 'confirm_at' => null,
                 'moves' => (int) $b['moves'] + ( $by === 'shopper' ? 1 : 0 ), 'updated' => self::now(),
             ], [ 'id' => $id ] );
         } finally {
@@ -1783,6 +1816,8 @@ class Qwoo_Appointments {
             case 'booking_new':            return $moved ? self::l( 'Booking moved: {customer_name}, {booking_date} {booking_time}', 'תור הוזז: {customer_name}, {booking_date} {booking_time}' ) : self::l( 'New booking: {customer_name}, {booking_date} {booking_time}', 'תור חדש: {customer_name}, {booking_date} {booking_time}' );
             case 'booking_request':        return self::l( 'Waiting for you: {customer_name}, {booking_date} {booking_time}', 'מחכה לאישורך: {customer_name}, {booking_date} {booking_time}' );
             case 'booking_cancelled_team': return self::l( 'Booking cancelled: {customer_name}, {booking_date} {booking_time}', 'תור בוטל: {customer_name}, {booking_date} {booking_time}' );
+            case 'booking_confirm_request': return self::l( 'Are you coming? {service_name}, {booking_date} at {booking_time}', 'מגיעים? {service_name}, {booking_date} בשעה {booking_time}' );
+            case 'booking_unconfirmed':    return self::l( 'Not confirmed: {customer_name}, {booking_date} {booking_time}', 'לא אושר: {customer_name}, {booking_date} {booking_time}' );
         }
         return '{store_name}';
     }
@@ -1793,7 +1828,7 @@ class Qwoo_Appointments {
         return (string) get_option( 'admin_email' );
     }
 
-    const TEAM_EMAILS = [ 'booking_new', 'booking_request', 'booking_cancelled_team' ];
+    const TEAM_EMAILS = [ 'booking_new', 'booking_request', 'booking_cancelled_team', 'booking_unconfirmed' ];
 
     /** Sends one of the booking emails (store emails catalog). Team emails also go to the staff member it's with. */
     public static function send( string $id, array $b, array $extra = [] ): void {
@@ -1826,12 +1861,112 @@ class Qwoo_Appointments {
         self::log( (int) $b['id'], 'email', $id );
     }
 
+    /* ---------------- the customer confirms (asked before the appointment) ---------------- */
+
+    /** [ service id => confirm rule ] for the services that ask. */
+    private static function confirm_rules(): array {
+        $out = [];
+        foreach ( self::services() as $svc ) {
+            if ( ! empty( $svc['confirm']['on'] ) ) $out[ (int) $svc['id'] ] = $svc['confirm'];
+        }
+        return $out;
+    }
+
+    /** Upcoming confirmed bookings of those services that wait for a question or an answer. */
+    private static function confirm_rows( array $rules, int $limit = 60 ): array {
+        global $wpdb;
+        if ( ! $rules ) return [];
+        $in = implode( ',', array_map( 'intval', array_keys( $rules ) ) );
+        return (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . self::bookings_table() . " WHERE status = 'confirmed' AND confirm_state IN ('','asked') AND service_id IN ($in) AND start_utc > %s ORDER BY start_utc LIMIT %d", self::now(), $limit ), ARRAY_A );
+    }
+
+    /** When the next question or deadline is due (unix), or 0. */
+    private static function confirm_next(): int {
+        $rules = self::confirm_rules();
+        $next  = 0;
+        foreach ( self::confirm_rows( $rules ) as $b ) {
+            $r     = $rules[ (int) $b['service_id'] ];
+            $start = self::ts( $b['start_utc'] );
+            $at    = $b['confirm_state'] === '' ? $start - $r['before'] * 60 : $start - $r['answer_by'] * 60;
+            $next  = $next ? min( $next, $at ) : $at;
+        }
+        return $next ? max( time(), $next ) : 0;
+    }
+
+    /** Sets the confirm state only while it is still $from (two runs never send twice). */
+    private static function confirm_set( int $id, string $from, string $to, bool $stamp = false ): bool {
+        global $wpdb;
+        return (bool) $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::bookings_table() . ' SET confirm_state = %s' . ( $stamp ? ', confirm_at = %s' : '' ) . ' WHERE id = %d AND confirm_state = %s', ...array_merge( [ $to ], $stamp ? [ self::now() ] : [], [ $id, $from ] ) ) );
+    }
+
+    /** Asks when it's time, and handles the bookings nobody answered for. */
+    private static function confirm_tick( float $until ): void {
+        $rules = self::confirm_rules();
+        foreach ( self::confirm_rows( $rules ) as $b ) {
+            if ( microtime( true ) > $until ) return;
+            $id    = (int) $b['id'];
+            $r     = $rules[ (int) $b['service_id'] ];
+            $start = self::ts( $b['start_utc'] );
+            $ask   = $start - $r['before'] * 60;
+            $last  = $start - $r['answer_by'] * 60;
+            if ( $b['confirm_state'] === '' ) {
+                if ( time() < $ask ) continue;
+                // Booked after the moment to ask (booking it was the answer), or no time left to answer.
+                if ( self::ts( $b['created'] ) >= $ask || time() >= $last || ! is_email( (string) $b['email'] ) ) {
+                    self::confirm_set( $id, '', 'none' );
+                    continue;
+                }
+                if ( ! self::confirm_set( $id, '', 'asked', true ) ) continue;
+                self::log( $id, 'confirm_asked' );
+                self::send( 'booking_confirm_request', self::booking( $id ) );
+                continue;
+            }
+            if ( time() < $last || ! self::confirm_set( $id, 'asked', 'no', true ) ) continue;
+            self::log( $id, 'confirm_none', $r['no_answer'] );
+            if ( $r['no_answer'] === 'cancel' ) self::cancel( $id, 'noanswer', true, self::l( 'Not confirmed in time', 'לא אושר בזמן' ) );
+            $b = self::booking( $id );
+            self::send( 'booking_unconfirmed', $b );
+            do_action( 'qwoo_booking_status', $b, 'not_confirmed' );
+        }
+    }
+
+    /**
+     * The customer's answer (the booking page, later WhatsApp buttons), or the owner marking it after a
+     * call ($by owner). Coming: confirmed. Not coming: cancelled like the customer's own cancel.
+     */
+    public static function answer( int $id, bool $coming, string $by = 'shopper' ) {
+        global $wpdb;
+        $b = self::booking( $id );
+        if ( ! $b || $b['status'] !== 'confirmed' || self::ts( $b['start_utc'] ) <= time() ) return new WP_Error( 'status', self::l( 'This booking can\'t be answered any more.', 'כבר אי אפשר לענות על התור הזה.' ) );
+        if ( $coming ) {
+            $wpdb->update( self::bookings_table(), [ 'confirm_state' => 'yes', 'confirm_at' => self::now(), 'updated' => self::now() ], [ 'id' => $id ] );
+            self::log( $id, 'confirm_yes', $by );
+            do_action( 'qwoo_booking_status', self::booking( $id ), 'customer_confirmed' );
+            return true;
+        }
+        $done = self::cancel( $id, $by, true, self::l( 'Can\'t make it', 'לא יכול/ה להגיע' ) );
+        if ( is_wp_error( $done ) ) return $done;
+        $wpdb->update( self::bookings_table(), [ 'confirm_state' => 'cancel', 'confirm_at' => self::now() ], [ 'id' => $id ] );
+        return true;
+    }
+
+    /** What the customer may answer, for the booking page: [ can, until (unix) ]. */
+    public static function answer_window( array $b ): array {
+        $svc = self::service( (int) $b['service_id'] );
+        if ( $b['status'] !== 'confirmed' || ! in_array( $b['confirm_state'], [ 'asked', 'no' ], true ) || ! $svc ) return [ false, 0 ];
+        $start = self::ts( $b['start_utc'] );
+        // A booking kept after no answer can still be confirmed until it starts.
+        $until = $b['confirm_state'] === 'no' ? $start : $start - (int) $svc['confirm']['answer_by'] * 60;
+        return [ $until > time(), $until ];
+    }
+
     /* ---------------- reminders (the tick chain) ---------------- */
 
     public static function tick( float $until ) {
         self::expire_holds();
         if ( ! self::plan_allows() ) return;
         self::cal_retry( $until );
+        self::confirm_tick( $until );
         global $wpdb;
         $s    = self::settings()['reminders'];
         $jobs = [];
@@ -1862,6 +1997,8 @@ class Qwoo_Appointments {
         global $wpdb;
         $s     = self::settings()['reminders'];
         $cands = [];
+        $ask   = self::confirm_next();
+        if ( $ask ) $cands[] = $ask;
         foreach ( [ [ 'day', 1, DAY_IN_SECONDS ], [ 'hours2', 2, 2 * HOUR_IN_SECONDS ] ] as [ $key, $bit, $before ] ) {
             if ( ! $s[ $key ] ) continue;
             $first = $wpdb->get_var( $wpdb->prepare( 'SELECT MIN(start_utc) FROM ' . self::bookings_table() . " WHERE status = 'confirmed' AND email <> '' AND (reminded & %d) = 0 AND start_utc > %s", $bit, self::now() ) );
@@ -1894,6 +2031,10 @@ class Qwoo_Appointments {
             'customer_id' => (int) $b['customer_id'], 'source' => (string) $b['source'], 'note' => (string) $b['note'], 'moves' => (int) $b['moves'],
             'video' => (string) $b['video'], 'cal_state' => (string) $b['cal_state'], 'cal_flag' => (string) $b['cal_flag'], 'cal_note' => (string) $b['cal_note'], 'in_calendar' => $b['cal_event'] !== '',
             'hold_until' => $b['hold_until'] ? gmdate( 'c', self::ts( $b['hold_until'] ) ) : '', 'created' => gmdate( 'c', self::ts( $b['created'] ) ),
+            // The customer's answer: '' not asked, asked, yes, no (no answer), none (not needed), cancel (can't make it).
+            // The customer's own booking page, for the owner's WhatsApp messages ({link}).
+            'manage_url' => is_email( (string) $b['email'] ) ? self::manage_url( $b ) : '',
+            'confirm' => (string) ( $b['confirm_state'] ?? '' ), 'confirm_at' => ! empty( $b['confirm_at'] ) ? gmdate( 'c', self::ts( $b['confirm_at'] ) ) : '',
             'log' => is_array( $log ) ? array_map( static fn( $e ) => [ 'at' => gmdate( 'c', (int) $e['t'] ), 'type' => (string) $e['type'], 'note' => (string) $e['note'] ], $log ) : [],
         ];
     }
@@ -1950,6 +2091,9 @@ class Qwoo_Appointments {
         $status = (string) ( $p['status'] ?? '' );
         if ( $status === 'all' ) {
             $where .= " AND status NOT IN ('held','expired')";
+        } elseif ( $status === 'unconfirmed' ) {
+            // Waiting for the customer's answer, or not confirmed.
+            $where .= " AND status = 'confirmed' AND confirm_state IN ('asked','no')";
         } elseif ( in_array( $status, [ 'confirmed', 'cancelled', 'done', 'noshow', 'pending', 'requested' ], true ) ) {
             $where .= ' AND status = %s';
             $args[] = $status;
@@ -2022,6 +2166,9 @@ class Qwoo_Appointments {
                 $wpdb->update( self::bookings_table(), [ 'cal_tries' => 0 ], [ 'id' => $id ] );
                 self::cal_sync( $id );
                 $r = true;
+                break;
+            case 'customer_yes':
+                $r = self::answer( $id, true, 'owner' );
                 break;
             case 'resend':
                 if ( $b['email'] === '' ) return new WP_Error( 'email', 'This booking has no email address.' );

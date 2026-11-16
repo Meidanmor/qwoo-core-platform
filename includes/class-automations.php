@@ -30,7 +30,7 @@ class Qwoo_Automations {
     const MAX_STEPS = 12;
     const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed', 'audience_joined', 'event_done', 'booking_made', 'booking_status', 'booking_before', 'booking_after' ];
     // Appointments: what a booking_status automation can start on.
-    const BOOKING_STATUSES = [ 'requested', 'confirmed', 'cancelled', 'declined', 'done', 'noshow' ];
+    const BOOKING_STATUSES = [ 'requested', 'confirmed', 'cancelled', 'declined', 'done', 'noshow', 'customer_confirmed', 'not_confirmed' ];
     const SCAN_KEY  = 'qwoo_flows_scanned';
 
     public static function init() {

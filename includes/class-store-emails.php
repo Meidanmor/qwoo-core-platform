@@ -46,9 +46,11 @@ class Qwoo_Store_Emails {
             'booking_moved'             => [ 'name' => 'Booking moved', 'when' => 'When a booking moves to another time', 'group' => 'customer', 'kind' => 'booking' ],
             'booking_cancelled'         => [ 'name' => 'Booking cancelled', 'when' => 'When a booking is cancelled', 'group' => 'customer', 'kind' => 'booking' ],
             'booking_requested'         => [ 'name' => 'Booking request received', 'when' => 'When someone asks for a time you approve yourself', 'group' => 'customer', 'kind' => 'booking' ],
+            'booking_confirm_request'   => [ 'name' => 'Are you coming?', 'when' => 'Before a booking, when its service asks the customer to confirm', 'group' => 'customer', 'kind' => 'booking' ],
             'booking_declined'          => [ 'name' => 'Booking request declined', 'when' => 'When you decline a request, or don\'t answer in time', 'group' => 'customer', 'kind' => 'booking' ],
             'booking_new'               => [ 'name' => 'New booking', 'when' => 'When someone books or moves a time', 'group' => 'team', 'kind' => 'booking' ],
             'booking_request'           => [ 'name' => 'Booking request waiting for you', 'when' => 'When someone asks for a time you approve yourself', 'group' => 'team', 'kind' => 'booking' ],
+            'booking_unconfirmed'       => [ 'name' => 'Booking not confirmed', 'when' => 'When a customer doesn\'t answer "Are you coming?" in time', 'group' => 'team', 'kind' => 'booking' ],
             'booking_cancelled_team'    => [ 'name' => 'Booking cancelled by the customer', 'when' => 'When a customer cancels a booking', 'group' => 'team', 'kind' => 'booking' ],
             'new_order'                 => [ 'name' => 'New order', 'when' => 'When someone places an order', 'group' => 'team', 'kind' => 'order', 'wc' => true ],
             'cancelled_order'           => [ 'name' => 'Cancelled order', 'when' => 'When an order is cancelled', 'group' => 'team', 'kind' => 'order', 'wc' => true ],
@@ -208,6 +210,8 @@ class Qwoo_Store_Emails {
                 $rows[] = $button( self::l( 'Open the booking', 'פתיחת התור' ), 'booking' );
             } elseif ( $id === 'booking_requested' ) {
                 $rows[] = $button( self::l( 'See or withdraw my request', 'צפייה בבקשה או ביטול שלה' ), 'booking' );
+            } elseif ( $id === 'booking_confirm_request' ) {
+                $rows[] = $button( self::l( 'Yes, I\'m coming / I can\'t make it', 'כן, אני מגיע/ה / לא אוכל להגיע' ), 'booking' );
             } elseif ( ! $ended ) {
                 $rows[] = $text( self::l( 'Need a change? You can move or cancel your booking from this link.', 'צריך שינוי? אפשר להזיז או לבטל את התור מהקישור הזה.' ) );
                 $rows[] = $button( self::l( 'Move or cancel', 'הזזה או ביטול' ), 'booking' );
@@ -250,6 +254,8 @@ class Qwoo_Store_Emails {
             case 'booking_requested':         return [ 'title' => self::l( 'We got your request, {first_name}', 'קיבלנו את הבקשה שלך, {first_name}' ), 'text' => self::l( 'You asked for {service_name} on {booking_date} at {booking_time}. We\'re keeping the time for you and will confirm it soon.', 'ביקשת {service_name} ב{booking_date} בשעה {booking_time}. אנחנו שומרים לך את הזמן ונאשר בקרוב.' ) ];
             case 'booking_declined':          return [ 'title' => self::l( 'We can\'t make that time', 'לא נוכל להגיע לזמן הזה' ), 'text' => self::l( 'Sorry, {first_name}: we couldn\'t confirm {service_name} on {booking_date} at {booking_time}. If you paid, the payment is on its way back. You\'re welcome to pick another time.', 'מצטערים, {first_name}: לא יכולנו לאשר {service_name} ב{booking_date} בשעה {booking_time}. אם שילמת, התשלום בדרך חזרה. אפשר לבחור זמן אחר.' ) ];
             case 'booking_request':           return [ 'title' => self::l( 'Waiting for you: {customer_name}', 'מחכה לאישורך: {customer_name}' ), 'text' => self::l( '{service_name} on {booking_date} at {booking_time}. The time is held until you approve or decline.', '{service_name} ב{booking_date} בשעה {booking_time}. הזמן שמור עד שתאשר/י או תדחה/י.' ) ];
+            case 'booking_confirm_request':   return [ 'title' => self::l( 'Are you coming, {first_name}?', 'מגיעים, {first_name}?' ), 'text' => self::l( 'Your booking for {service_name} is on {booking_date} at {booking_time}. Please let us know if you\'re coming: it takes one tap.', 'התור שלך ל{service_name} ב{booking_date} בשעה {booking_time}. נשמח לדעת אם מגיעים: זה לוקח לחיצה אחת.' ) ];
+            case 'booking_unconfirmed':       return [ 'title' => self::l( '{customer_name} didn\'t confirm', '{customer_name} לא אישר/ה הגעה' ), 'text' => self::l( 'No answer for {service_name} on {booking_date} at {booking_time}. Check the booking: it may be worth a call.', 'אין תשובה לגבי {service_name} ב{booking_date} בשעה {booking_time}. כדאי לבדוק את התור, אולי להתקשר.' ) ];
             case 'booking_cancelled_team':    return [ 'title' => self::l( '{customer_name} cancelled', '{customer_name} ביטל/ה' ), 'text' => self::l( 'The booking for {service_name} on {booking_date} at {booking_time} was cancelled by the customer. The time is free again.', 'התור ל{service_name} ב{booking_date} בשעה {booking_time} בוטל על ידי הלקוח. הזמן פנוי שוב.' ) ];
             case 'new_order':                 return [ 'title' => self::l( 'New order #{order_number}', 'הזמנה חדשה {order_number}' ), 'text' => self::l( 'You have a new order from {first_name} {last_name}.', 'יש לך הזמנה חדשה מ{first_name} {last_name}.' ) ];
             case 'cancelled_order':           return [ 'title' => self::l( 'Order #{order_number} was cancelled', 'הזמנה {order_number} בוטלה' ), 'text' => self::l( 'The order from {first_name} {last_name} was cancelled.', 'ההזמנה של {first_name} {last_name} בוטלה.' ) ];

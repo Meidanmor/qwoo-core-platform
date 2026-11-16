@@ -206,7 +206,10 @@ class Qwoo_Appointments_Shop {
         $moves = (int) Qwoo_Appointments::settings()['rules']['moves'];
         $in_time = $start - $hours * HOUR_IN_SECONDS > time();
         $card  = Qwoo_Appointments::email_card( $b );
+        [ $can_answer, $answer_until ] = Qwoo_Appointments::answer_window( $b );
         return [
+            // "Are you coming?" (the service asks before the appointment).
+            'confirm' => (string) ( $b['confirm_state'] ?? '' ), 'can_answer' => $can_answer, 'answer_until' => $answer_until ? gmdate( 'Y-m-d\TH:i:s\Z', $answer_until ) : '',
             'id' => (int) $b['id'], 'service_id' => (int) $b['service_id'], 'service' => $s ? $s['name'] : '', 'status' => (string) $b['status'],
             'start' => gmdate( 'Y-m-d\TH:i:s\Z', $start ), 'end' => gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $b['end_utc'] . ' UTC' ) ),
             'local' => wp_date( 'Y-m-d H:i', $start ), 'tz' => wp_timezone_string(), 'seats' => (int) $b['seats'], 'place' => (string) $b['place'],
@@ -236,6 +239,11 @@ class Qwoo_Appointments_Shop {
             if ( $act === 'cancel' ) {
                 if ( ! $view['can_cancel'] ) return self::no_cache( [ 'message' => self::l( 'It\'s too late to cancel online. Please contact us.', 'כבר מאוחר לבטל באתר. אפשר ליצור איתנו קשר.' ) ], 403 );
                 $done = Qwoo_Appointments::cancel( (int) $b['id'], 'shopper' );
+                if ( is_wp_error( $done ) ) return self::fail( $done );
+            } elseif ( $act === 'coming' || $act === 'not_coming' ) {
+                // Answering the question may cancel even after the online-cancel deadline: the store asked.
+                if ( ! $view['can_answer'] ) return self::no_cache( [ 'message' => self::l( 'It\'s too late to answer online. Please contact us.', 'כבר מאוחר לענות באתר. אפשר ליצור איתנו קשר.' ) ], 403 );
+                $done = Qwoo_Appointments::answer( (int) $b['id'], $act === 'coming' );
                 if ( is_wp_error( $done ) ) return self::fail( $done );
             } elseif ( $act === 'move' ) {
                 if ( ! $view['can_move'] ) return self::no_cache( [ 'message' => self::l( 'This booking can\'t be moved online. Please contact us.', 'אי אפשר להזיז את התור הזה באתר. אפשר ליצור איתנו קשר.' ) ], 403 );

@@ -352,7 +352,7 @@ trait Qwoo_Platform_Package {
         $same  = static fn( $a, $b ) => mb_strtolower( trim( (string) $a ) ) === mb_strtolower( trim( (string) $b ) );
 
         if ( is_array( $data['settings'] ?? null ) ) {
-            $in   = array_intersect_key( $data['settings'], array_flip( [ 'enabled', 'hours', 'dates', 'rules', 'reminders', 'confirm_text', 'terms' ] ) );
+            $in   = array_intersect_key( $data['settings'], array_flip( [ 'enabled', 'hours', 'dates', 'rules', 'reminders', 'confirm_text', 'terms', 'quick' ] ) );
             $done = Qwoo_Appointments::save_settings( $in );
             if ( is_wp_error( $done ) ) {
                 unset( $in['enabled'] );
