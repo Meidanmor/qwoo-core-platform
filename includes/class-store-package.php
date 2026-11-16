@@ -13,9 +13,15 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   blog      posts and blog categories
  *   coupons   discount codes (without who used them)
  *   settings  currency, units, shipping zones, taxes, reviews, SEO and
- *             language settings
+ *             language settings, Sell online, products with no price,
+ *             gift card rules, Inbox settings and saved answers
+ *   appointments  Appointments: hours, days off, rules, team (without their
+ *             calendar connections) and services (no bookings)
+ *   marketing store emails and their look, email designer blocks, automations
+ *             with their emails, draft marketing emails, own events, audiences
  * Never: the store's name or addresses, payment keys, customers, orders,
- * reviews (all customers' data) or the owner's account.
+ * bookings, subscribers, reviews (all customers' data), sending addresses,
+ * webhooks, tracking codes or the owner's account.
  *
  * Inside the zip:
  *   manifest.json            { format, app, made, source, parts, counts, index }
@@ -44,7 +50,7 @@ class Qwoo_Store_Package {
     const PAGE          = 50;
     const KEEP          = 6 * HOUR_IN_SECONDS;
     const SECONDS       = 20;
-    const PARTS         = [ 'builder', 'products', 'blog', 'coupons', 'settings' ];
+    const PARTS         = [ 'builder', 'products', 'blog', 'coupons', 'settings', 'appointments', 'marketing' ];
 
     /** WooCommerce settings that come along (the move's list without the shop's own address). */
     const SETTINGS = [
@@ -68,6 +74,8 @@ class Qwoo_Store_Package {
         'products' => [ 'attributes', 'product_cat', 'product_tag', 'products' ],
         'coupons'  => [ 'coupons' ],
         'blog'     => [ 'post_categories', 'posts' ],
+        'appointments' => [ 'appointments' ],
+        'marketing'    => [ 'marketing' ],
         'builder'  => [ 'builder' ],
     ];
 
@@ -81,6 +89,8 @@ class Qwoo_Store_Package {
         'post_categories' => 'Blog categories',
         'posts'           => 'Blog posts',
         'builder'         => 'Store builder',
+        'appointments'    => 'Appointments',
+        'marketing'       => 'Emails and marketing',
         'media'           => 'Photos and videos',
         'zip'             => 'Making the file',
     ];
@@ -455,6 +465,15 @@ class Qwoo_Store_Package {
             'language'  => Qwoo_Store_Language::get(),
             'languages' => Qwoo_Store_Language::extra_settings(),
         ];
+        if ( class_exists( 'Qwoo_Shop_Mode' ) ) $qwoo['shop_mode'] = Qwoo_Shop_Mode::settings();
+        if ( class_exists( 'Qwoo_Zero_Price' ) ) $qwoo['zero_price'] = Qwoo_Zero_Price::settings();
+        if ( class_exists( 'Qwoo_Gift_Cards' ) ) $qwoo['giftcard_rules'] = Qwoo_Gift_Cards::rules();
+        if ( class_exists( 'Qwoo_Inbox' ) ) {
+            // Not where the alerts go: that's this store's own address.
+            $inbox = Qwoo_Inbox::settings();
+            unset( $inbox['notify_to'], $inbox['help_allowed'] );
+            $qwoo['inbox'] = $inbox;
+        }
         self::put( 'settings.json', [ 'options' => $options, 'zones' => $zones, 'shipping_classes' => $classes, 'tax_classes' => $tax_classes, 'tax_rates' => $rates, 'qwoo' => $qwoo ] );
         self::$ex['counts']['settings'] = 1;
         return true;
@@ -544,6 +563,8 @@ class Qwoo_Store_Package {
         return self::paged( 'products', static fn( $after, $limit ) => self::post_ids( 'product', self::PRODUCT_STATUSES, $after, $limit ), static function ( $id ) {
             $p = wc_get_product( $id );
             if ( ! $p ) return null;
+            // A service's product is made again by its service (the Appointments part).
+            if ( class_exists( 'Qwoo_Appointments' ) && in_array( $id, Qwoo_Appointments::product_ids(), true ) ) return null;
             $gallery = array_values( array_filter( array_map( [ __CLASS__, 'image' ], $p->get_gallery_image_ids( 'edit' ) ) ) );
             // The gallery's full order with videos (Qwoo_Media_Support), when it has any.
             $order = array_filter( array_map( 'absint', explode( ',', (string) $p->get_meta( Qwoo_Media_Support::GALLERY_META ) ) ) );
@@ -562,6 +583,11 @@ class Qwoo_Store_Package {
                 'faq' => Qwoo_Product_Extras::faq( $id ),
                 'media_order' => $order ? array_values( array_filter( array_map( [ __CLASS__, 'image' ], $order ) ) ) : [],
             ] + self::stock_fields( $p );
+            if ( class_exists( 'Qwoo_Gift_Cards' ) && Qwoo_Gift_Cards::is_gift( $p ) ) {
+                $gift = (array) Qwoo_Gift_Cards::settings( $p );
+                $gift['images'] = array_values( array_filter( array_map( [ __CLASS__, 'image' ], (array) ( $gift['images'] ?? [] ) ) ) );
+                $item['giftcard'] = $gift;
+            }
             if ( $p->is_type( 'variable' ) ) {
                 $item['variations'] = [];
                 foreach ( $p->get_children() as $vid ) {
@@ -609,6 +635,131 @@ class Qwoo_Store_Package {
                 'image' => self::image( get_post_thumbnail_id( $id ) ), 'seo' => self::seo( $id, 'post' ), 'i18n' => Qwoo_Translations::get( $id ),
             ];
         }, 20 );
+    }
+
+    /** Appointments: settings, team and services (never bookings: they're customers' data). */
+    private static function ex_appointments() {
+        $out = [ 'settings' => null, 'staff' => [], 'services' => [] ];
+        if ( class_exists( 'Qwoo_Appointments' ) ) {
+            Qwoo_Appointments::maybe_install();
+            $s = Qwoo_Appointments::settings();
+            // The calendar feed key and where alerts go belong to this store.
+            unset( $s['feed'], $s['notify_to'] );
+            $out['settings'] = $s;
+            foreach ( Qwoo_Appointments::staff_list() as $p ) {
+                $out['staff'][] = [
+                    'id' => (int) $p['id'], 'status' => (string) $p['status'], 'sort' => (int) $p['sort'],
+                    'name' => (string) $p['name'], 'email' => (string) $p['email'], 'bio' => (string) $p['bio'],
+                    'photo' => $p['photo'] ? self::image( $p['photo'] ) : null, 'color' => (string) $p['color'],
+                    'hours' => $p['hours'], 'dates' => $p['dates'], 'notify' => ! empty( $p['notify'] ),
+                    // Their own Google / Outlook connection stays with this store.
+                    'calendar' => $p['calendar'] === 'none' ? 'none' : 'store',
+                ];
+            }
+            foreach ( Qwoo_Appointments::services() as $svc ) {
+                $row = $svc;
+                unset( $row['product_id'] );
+                $row['image'] = $svc['image'] ? self::image( $svc['image'] ) : null;
+                $out['services'][] = $row;
+            }
+        }
+        self::put( 'appointments.json', $out );
+        self::$ex['counts']['services'] = count( $out['services'] );
+        self::$ex['counts']['staff']    = count( $out['staff'] );
+        return true;
+    }
+
+    /**
+     * An email design for the file: photos of this store become references to the
+     * file's media (data._media / _cover), so the importing store gets its own copies.
+     */
+    private static function design_out( $value ) {
+        if ( ! is_array( $value ) ) return $value;
+        if ( isset( $value['type'], $value['data'] ) && is_string( $value['type'] ) && is_array( $value['data'] ) ) {
+            $d    = $value['data'];
+            $refs = [ 'image' => [ 'url' => '_media' ], 'logo' => [ 'url' => '_media' ], 'video' => [ 'cover' => '_cover' ] ][ $value['type'] ] ?? [];
+            foreach ( $refs as $field => $ref ) {
+                $img = ! empty( $d[ $field ] ) ? self::image( self::url_media( (string) $d[ $field ] ) ) : null;
+                if ( $img ) $d[ $ref ] = $img;
+            }
+            $value['data'] = $d;
+            return $value;
+        }
+        foreach ( $value as $k => $v ) {
+            if ( is_array( $v ) ) $value[ $k ] = self::design_out( $v );
+        }
+        return $value;
+    }
+
+    /** This store's photo behind an address (also through the storefront's address), or 0. */
+    private static function url_media( string $url ) {
+        if ( $url === '' ) return 0;
+        $size  = '/-\d+x\d+(?=\.[a-z0-9]+$)/i';
+        $tries = [ $url, preg_replace( $size, '', $url ) ];
+        $at    = strpos( $url, '/wp-content/uploads/' );
+        if ( $at !== false ) {
+            $own     = rtrim( wp_upload_dir( null, false )['baseurl'], '/' ) . '/' . substr( $url, $at + strlen( '/wp-content/uploads/' ) );
+            $tries[] = $own;
+            $tries[] = preg_replace( $size, '', $own );
+        }
+        foreach ( array_unique( $tries ) as $try ) {
+            $id = attachment_url_to_postid( $try );
+            if ( $id ) return (int) $id;
+        }
+        return 0;
+    }
+
+    /** Emails and marketing: store emails, automations and their emails, draft emails, events, audiences. */
+    private static function ex_marketing() {
+        global $wpdb;
+        $out = [];
+        if ( class_exists( 'Qwoo_Store_Emails' ) ) {
+            $emails = [];
+            foreach ( (array) get_option( Qwoo_Store_Emails::OPTION, [] ) as $id => $row ) {
+                if ( ! is_array( $row ) || ! isset( Qwoo_Store_Emails::catalog()[ $id ] ) ) continue;
+                // Who gets the team emails stays this store's.
+                $keep = array_intersect_key( $row, array_flip( [ 'subject', 'preheader', 'on', 'design' ] ) );
+                if ( isset( $keep['design'] ) ) $keep['design'] = self::design_out( $keep['design'] );
+                if ( $keep ) $emails[ $id ] = $keep;
+            }
+            $out['store_emails'] = $emails;
+            $style = get_option( Qwoo_Store_Emails::STYLE, [] );
+            if ( is_array( $style ) && $style ) {
+                $logo = ! empty( $style['logo'] ) ? self::image( self::url_media( (string) $style['logo'] ) ) : null;
+                if ( $logo ) $style['_logo'] = $logo;
+                $out['email_style'] = $style;
+            }
+            $out['saved_blocks'] = array_map( static fn( $b ) => is_array( $b ) ? self::design_out( $b ) : $b, Qwoo_Store_Emails::saved_blocks() );
+        }
+        if ( class_exists( 'Qwoo_Email_Marketing' ) ) {
+            $em = Qwoo_Email_Marketing::settings();
+            // The sender name and reply address are this store's.
+            $out['email_settings'] = array_intersect_key( $em, array_flip( [ 'ad_label', 'ad_word', 'optin_on', 'optin_text' ] ) );
+            // The automations' emails, and emails not sent yet.
+            $rows = (array) $wpdb->get_results( 'SELECT id, kind, name, subject, preheader, design, segment, audience_id, segment_days FROM ' . Qwoo_Email_Marketing::campaigns_table() . " WHERE kind = 'flow' OR ( kind = 'campaign' AND status = 'draft' ) ORDER BY id ASC LIMIT 300", ARRAY_A );
+            $out['campaigns'] = [];
+            foreach ( $rows as $row ) {
+                $design = json_decode( (string) $row['design'], true );
+                $row['id']     = (int) $row['id'];
+                $row['design'] = self::design_out( is_array( $design ) ? $design : [] );
+                $out['campaigns'][] = $row;
+            }
+            self::$ex['counts']['emails'] = count( $out['campaigns'] );
+        }
+        if ( class_exists( 'Qwoo_Automations' ) ) {
+            $out['flows'] = array_values( array_filter( Qwoo_Automations::flows(), 'is_array' ) );
+            self::$ex['counts']['automations'] = count( $out['flows'] );
+        }
+        if ( class_exists( 'Qwoo_Events' ) ) {
+            $events = get_option( Qwoo_Events::OPTION, [] );
+            $out['events'] = is_array( $events ) ? $events : [];
+        }
+        if ( class_exists( 'Qwoo_Personalization' ) ) {
+            $out['audiences'] = Qwoo_Personalization::audiences();
+            self::$ex['counts']['audiences'] = count( $out['audiences'] );
+        }
+        self::put( 'marketing.json', $out );
+        return true;
     }
 
     private static function ex_builder() {
@@ -835,7 +986,7 @@ class Qwoo_Store_Package {
             for ( $i = 0; $i < $zip->numFiles; $i++ ) {
                 $stat = $zip->statIndex( $i );
                 $name = (string) ( $stat['name'] ?? '' );
-                if ( ! preg_match( '#^(manifest|builder|settings|attributes|media)\.json$|^data/[a-z_]{3,20}/\d{4}\.json$|^media/\d{1,12}\.(jpe?g|png|webp|gif|svg|mp4|webm)$#', $name ) ) {
+                if ( ! preg_match( '#^(manifest|builder|settings|attributes|media|appointments|marketing)\.json$|^data/[a-z_]{3,20}/\d{4}\.json$|^media/\d{1,12}\.(jpe?g|png|webp|gif|svg|mp4|webm)$#', $name ) ) {
                     throw new RuntimeException( 'This isn\'t a Openly store file (it has other files in it).' );
                 }
                 $total += (int) $stat['size'];
@@ -901,7 +1052,7 @@ class Qwoo_Store_Package {
      */
     public static function fetch( $type, $after = 0, $limit = 0 ) {
         try {
-            if ( in_array( $type, [ 'settings', 'attributes', 'builder' ], true ) ) {
+            if ( in_array( $type, [ 'settings', 'attributes', 'builder', 'appointments', 'marketing' ], true ) ) {
                 return self::json( $type . '.json' ) ?? new WP_Error( 'qwoo_package_part', 'The file has no ' . $type . '.', [ 'status' => 400 ] );
             }
             $index = (array) ( self::json( 'manifest.json', 5242880 )['index'][ $type ] ?? [] );

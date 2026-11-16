@@ -30,6 +30,8 @@ trait Qwoo_Platform_Package {
         'coupons'         => 'coupons',
         'post_categories' => 'blog',
         'posts'           => 'blog',
+        'appointments'    => 'appointments',
+        'marketing'       => 'marketing',
         'builder'         => 'builder',
     ];
 
@@ -302,6 +304,289 @@ trait Qwoo_Platform_Package {
                 }
             }
         }
+        // Sell online and Shopper accounts (Settings → General / Sign-in).
+        if ( is_array( $q['shop_mode'] ?? null ) && class_exists( 'Qwoo_Shop_Mode' ) ) {
+            $mode = $q['shop_mode'];
+            $done = Qwoo_Shop_Mode::save( $mode, 'shop' );
+            if ( ! is_wp_error( $done ) ) Qwoo_Shop_Mode::save( $mode, 'accounts' );
+            if ( ! is_wp_error( $done ) && array_key_exists( 'sell', $mode ) && empty( $mode['sell'] ) ) {
+                self::mig_note( 'Selling is off in the file\'s store, so it\'s off here too now (Settings → General → Sell online).' );
+            }
+        }
+        // Products with no price (Products → Product settings).
+        if ( is_array( $q['zero_price'] ?? null ) && class_exists( 'Qwoo_Zero_Price' ) ) {
+            $done = Qwoo_Zero_Price::save( $q['zero_price'] );
+            if ( is_wp_error( $done ) ) self::mig_problem( 'The settings for products with no price weren\'t copied: ' . $done->get_error_message() );
+        }
+        if ( is_array( $q['giftcard_rules'] ?? null ) && class_exists( 'Qwoo_Gift_Cards' ) ) {
+            update_option( Qwoo_Gift_Cards::RULES, Qwoo_Gift_Cards::clean_rules( $q['giftcard_rules'] ), false );
+        }
+        // Inbox: saved answers, automatic reply, the Help button (alerts keep going to this store's address).
+        if ( is_array( $q['inbox'] ?? null ) && class_exists( 'Qwoo_Inbox' ) ) {
+            $inbox = $q['inbox'];
+            $inbox['notify_to'] = (string) ( Qwoo_Inbox::settings()['notify_to'] ?? '' );
+            Qwoo_Inbox::save_settings( $inbox );
+        }
+    }
+
+    /* ---------------- Appointments ---------------- */
+
+    /**
+     * Appointments from the file: settings, the team, then the services (with this store's team,
+     * photos and categories). A service or person brought in before is updated; with "Replace",
+     * services that aren't in the file are turned off (their bookings stay).
+     */
+    private static function mig_phase_appointments() {
+        $data = self::mig_fetch( 'appointments' );
+        if ( is_wp_error( $data ) ) {
+            return $data;
+        }
+        if ( ! class_exists( 'Qwoo_Appointments' ) ) {
+            return true;
+        }
+        Qwoo_Appointments::maybe_install();
+        $maps  = (array) ( self::$mig['maps'] ?? [] );
+        $team  = (array) ( $maps['staff'] ?? [] );
+        $svcs  = (array) ( $maps['service'] ?? [] );
+        $mode  = (string) ( self::$mig['package_mode'] ?? 'add' );
+        $same  = static fn( $a, $b ) => mb_strtolower( trim( (string) $a ) ) === mb_strtolower( trim( (string) $b ) );
+
+        if ( is_array( $data['settings'] ?? null ) ) {
+            $in   = array_intersect_key( $data['settings'], array_flip( [ 'enabled', 'hours', 'dates', 'rules', 'reminders', 'confirm_text', 'terms' ] ) );
+            $done = Qwoo_Appointments::save_settings( $in );
+            if ( is_wp_error( $done ) ) {
+                unset( $in['enabled'] );
+                Qwoo_Appointments::save_settings( $in );
+                self::mig_note( 'Appointments aren\'t part of this store\'s plan, so they stay off. The services, team and hours are in place for when they\'re on.' );
+            }
+        }
+
+        $have = Qwoo_Appointments::staff_list();
+        foreach ( (array) ( $data['staff'] ?? [] ) as $p ) {
+            if ( ! is_array( $p ) ) continue;
+            $old = (int) ( $p['id'] ?? 0 );
+            $in  = array_intersect_key( $p, array_flip( [ 'name', 'email', 'bio', 'color', 'hours', 'dates', 'calendar', 'notify', 'status' ] ) );
+            $in['photo'] = ! empty( $p['photo'] ) ? self::mig_image( $p['photo'] ) : 0;
+            $id = (int) ( $team[ $old ] ?? 0 );
+            if ( ! $id || ! isset( $have[ $id ] ) ) {
+                $id = 0;
+                foreach ( $have as $h ) {
+                    if ( $same( $h['name'], $in['name'] ?? '' ) ) { $id = (int) $h['id']; break; }
+                }
+            }
+            if ( $id ) $in['id'] = $id;
+            $saved = Qwoo_Appointments::save_staff( $in );
+            if ( is_wp_error( $saved ) ) {
+                self::mig_problem( sprintf( 'Team member “%s” wasn\'t added: %s', (string) ( $p['name'] ?? '' ), $saved->get_error_message() ) );
+                continue;
+            }
+            $team[ $old ] = (int) $saved['id'];
+        }
+
+        $current = [];
+        foreach ( Qwoo_Appointments::services() as $h ) $current[ (int) $h['id'] ] = $h;
+        $kept = [];
+        foreach ( (array) ( $data['services'] ?? [] ) as $svc ) {
+            if ( ! is_array( $svc ) ) continue;
+            $old = (int) ( $svc['id'] ?? 0 );
+            $in  = $svc;
+            unset( $in['id'], $in['product_id'] );
+            $in['image']           = ! empty( $svc['image'] ) ? self::mig_image( $svc['image'] ) : 0;
+            $in['staff']           = array_values( array_filter( array_map( static fn( $o ) => (int) ( $team[ (int) $o ] ?? 0 ), (array) ( $svc['staff'] ?? [] ) ) ) );
+            $in['shop_categories'] = array_values( array_filter( array_map( static fn( $o ) => self::mig_term( 'product_cat', (int) $o ), (array) ( $svc['shop_categories'] ?? [] ) ) ) );
+            $id = (int) ( $svcs[ $old ] ?? 0 );
+            if ( ! $id || ! isset( $current[ $id ] ) ) {
+                $id = 0;
+                foreach ( $current as $h ) {
+                    if ( ! in_array( (int) $h['id'], $kept, true ) && $same( $h['name'], $in['name'] ?? '' ) ) { $id = (int) $h['id']; break; }
+                }
+            }
+            if ( $id ) $in['id'] = $id;
+            $saved = Qwoo_Appointments::save_service( $in );
+            if ( is_wp_error( $saved ) ) {
+                self::mig_count( 'appointments', 'skipped' );
+                self::mig_problem( sprintf( 'Service “%s” wasn\'t added: %s', (string) ( $svc['name'] ?? '' ), $saved->get_error_message() ) );
+                continue;
+            }
+            $svcs[ $old ] = (int) $saved['id'];
+            $kept[]       = (int) $saved['id'];
+            self::mig_count( 'appointments', $id ? 'updated' : 'created' );
+        }
+        if ( $mode === 'replace' ) {
+            $off = 0;
+            foreach ( $current as $h ) {
+                if ( in_array( (int) $h['id'], $kept, true ) || $h['status'] === 'off' ) continue;
+                if ( ! is_wp_error( Qwoo_Appointments::save_service( [ 'id' => (int) $h['id'], 'status' => 'off' ] ) ) ) $off++;
+            }
+            if ( $off ) self::mig_note( sprintf( '%d services that weren\'t in the file were turned off (their bookings stay). Appointments → Services.', $off ) );
+        }
+        $maps['staff']     = $team;
+        $maps['service']   = $svcs;
+        self::$mig['maps'] = $maps;
+        return true;
+    }
+
+    /* ---------------- Emails and marketing ---------------- */
+
+    /** An email design from the file: its photos as this store's, product IDs as this store's. */
+    private static function mig_design_in( $value ) {
+        if ( ! is_array( $value ) ) return $value;
+        if ( isset( $value['type'], $value['data'] ) && is_string( $value['type'] ) && is_array( $value['data'] ) ) {
+            $d = $value['data'];
+            foreach ( [ '_media' => 'url', '_cover' => 'cover' ] as $ref => $field ) {
+                if ( ! isset( $d[ $ref ] ) ) continue;
+                $id = self::mig_image( $d[ $ref ] );
+                if ( $id ) $d[ $field ] = (string) wp_get_attachment_url( $id );
+                unset( $d[ $ref ] );
+            }
+            if ( $value['type'] === 'products' && isset( $d['ids'] ) ) {
+                $d['ids'] = array_values( array_filter( array_map( static fn( $o ) => self::mig_post( [ 'product' ], (int) $o ), (array) $d['ids'] ) ) );
+            }
+            $value['data'] = $d;
+            return $value;
+        }
+        foreach ( $value as $k => $v ) {
+            if ( is_array( $v ) ) $value[ $k ] = self::mig_design_in( $v );
+        }
+        return $value;
+    }
+
+    /**
+     * Emails and marketing from the file, each through the dashboard's own checks: own events,
+     * audiences, store emails and their look, saved blocks, email settings, the automations'
+     * emails and draft emails, then the automations (they come in turned off).
+     */
+    private static function mig_phase_marketing() {
+        $data = self::mig_fetch( 'marketing' );
+        if ( is_wp_error( $data ) ) {
+            return $data;
+        }
+        $maps  = (array) ( self::$mig['maps'] ?? [] );
+        $camps = (array) ( $maps['campaign'] ?? [] );
+        $svcs  = (array) ( $maps['service'] ?? [] );
+        $prod  = static fn( $o ) => self::mig_post( [ 'product' ], (int) $o );
+        $cat   = static fn( $o ) => self::mig_term( 'product_cat', (int) $o );
+
+        // Own events first: audiences and automations can start from them.
+        if ( is_array( $data['events'] ?? null ) && class_exists( 'Qwoo_Events' ) ) {
+            $wanted = count( (array) ( $data['events']['own'] ?? [] ) );
+            $got    = Qwoo_Events::import( $data['events'] );
+            if ( $wanted > $got ) self::mig_note( sprintf( '%d of the file\'s own events weren\'t added (they\'re part of the Pro and Plus plans, or the store has 30 already).', $wanted - $got ) );
+        }
+
+        if ( is_array( $data['audiences'] ?? null ) && class_exists( 'Qwoo_Personalization' ) ) {
+            $list = [];
+            foreach ( $data['audiences'] as $a ) {
+                if ( ! is_array( $a ) ) continue;
+                foreach ( (array) ( $a['rules'] ?? [] ) as $i => $rule ) {
+                    if ( isset( $rule['category_id'] ) ) $a['rules'][ $i ]['category_id'] = $cat( $rule['category_id'] );
+                    if ( isset( $rule['product_id'] ) ) $a['rules'][ $i ]['product_id'] = $prod( $rule['product_id'] );
+                }
+                $list[] = $a;
+            }
+            $got = Qwoo_Personalization::import_audiences( $list );
+            if ( count( $list ) > $got ) self::mig_note( sprintf( '%d audiences weren\'t added: their conditions point at products or categories that didn\'t come in.', count( $list ) - $got ) );
+            for ( $i = 0; $i < $got; $i++ ) self::mig_count( 'marketing', 'created' );
+        }
+
+        if ( class_exists( 'Qwoo_Store_Emails' ) ) {
+            $catalog = Qwoo_Store_Emails::catalog();
+            foreach ( (array) ( $data['store_emails'] ?? [] ) as $id => $row ) {
+                if ( ! is_array( $row ) || ! isset( $catalog[ $id ] ) ) continue;
+                $cur = Qwoo_Store_Emails::saved( (string) $id );
+                $set = [
+                    'id'        => (string) $id,
+                    'subject'   => (string) ( $row['subject'] ?? ( $cur['subject'] ?? '' ) ),
+                    'preheader' => (string) ( $row['preheader'] ?? ( $cur['preheader'] ?? '' ) ),
+                    // Who gets it stays this store's.
+                    'to'        => (array) ( $cur['to'] ?? [] ),
+                    'copy'      => (array) ( $cur['copy'] ?? [] ),
+                ];
+                if ( array_key_exists( 'on', $row ) ) $set['on'] = ! empty( $row['on'] );
+                if ( $catalog[ $id ]['group'] !== 'team' || $set['to'] ) Qwoo_Store_Emails::save_settings( $set );
+                if ( ! empty( $row['design'] ) ) Qwoo_Store_Emails::save_design( [ 'id' => (string) $id, 'design' => self::mig_design_in( $row['design'] ) ] );
+            }
+            if ( is_array( $data['email_style'] ?? null ) ) {
+                $style = $data['email_style'];
+                if ( ! empty( $style['_logo'] ) ) {
+                    $logo          = self::mig_image( $style['_logo'] );
+                    $style['logo'] = $logo ? (string) wp_get_attachment_url( $logo ) : '';
+                } elseif ( strpos( (string) ( $style['logo'] ?? '' ), '/wp-content/uploads/' ) !== false ) {
+                    // The other store's photo that wasn't in the file: the Store builder logo is used.
+                    $style['logo'] = '';
+                }
+                unset( $style['_logo'] );
+                Qwoo_Store_Emails::save_style( $style );
+            }
+            $names = array_map( static fn( $b ) => (string) ( $b['name'] ?? '' ), Qwoo_Store_Emails::saved_blocks() );
+            foreach ( array_reverse( (array) ( $data['saved_blocks'] ?? [] ) ) as $b ) {
+                if ( ! is_array( $b ) || in_array( (string) ( $b['name'] ?? '' ), $names, true ) ) continue;
+                if ( is_wp_error( Qwoo_Store_Emails::save_block( [ 'name' => (string) ( $b['name'] ?? '' ), 'block' => self::mig_design_in( $b['block'] ?? [] ) ] ) ) ) break;
+            }
+        }
+
+        if ( class_exists( 'Qwoo_Email_Marketing' ) ) {
+            if ( is_array( $data['email_settings'] ?? null ) ) {
+                Qwoo_Email_Marketing::save_settings( array_merge( Qwoo_Email_Marketing::settings(), array_intersect_key( $data['email_settings'], array_flip( [ 'ad_label', 'ad_word', 'optin_on', 'optin_text' ] ) ) ) );
+            }
+            foreach ( (array) ( $data['campaigns'] ?? [] ) as $c ) {
+                if ( ! is_array( $c ) ) continue;
+                $old = (int) ( $c['id'] ?? 0 );
+                $in  = array_intersect_key( $c, array_flip( [ 'name', 'subject', 'preheader', 'segment', 'audience_id', 'segment_days' ] ) );
+                if ( ( $in['segment'] ?? '' ) === 'saved_audience' && ! ( class_exists( 'Qwoo_Personalization' ) && Qwoo_Personalization::exists( (string) ( $in['audience_id'] ?? '' ) ) ) ) {
+                    $in['segment'] = 'all';
+                }
+                $in['design'] = self::mig_design_in( $c['design'] ?? [] );
+                $id = (int) ( $camps[ $old ] ?? 0 );
+                if ( $id && Qwoo_Email_Marketing::campaign_row( $id ) ) $in['id'] = $id;
+                $saved = Qwoo_Email_Marketing::save_campaign( $in, ( $c['kind'] ?? '' ) === 'flow' ? 'flow' : 'campaign' );
+                if ( is_wp_error( $saved ) ) {
+                    self::mig_problem( sprintf( 'The email “%s” wasn\'t added: %s', (string) ( $c['name'] ?? $c['subject'] ?? '' ), $saved->get_error_message() ) );
+                    continue;
+                }
+                $camps[ $old ] = (int) $saved['id'];
+                self::mig_count( 'marketing', $id ? 'updated' : 'created' );
+            }
+            $maps['campaign']  = $camps;
+            self::$mig['maps'] = $maps;
+        }
+
+        if ( is_array( $data['flows'] ?? null ) && $data['flows'] && class_exists( 'Qwoo_Automations' ) ) {
+            $flows = [];
+            foreach ( $data['flows'] as $f ) {
+                if ( ! is_array( $f ) ) continue;
+                $t = (array) ( $f['trigger'] ?? [] );
+                if ( isset( $t['category_id'] ) ) $t['category_id'] = $cat( $t['category_id'] );
+                if ( isset( $t['service_id'] ) ) $t['service_id'] = (int) ( $svcs[ (int) $t['service_id'] ] ?? 0 );
+                $f['trigger'] = $t;
+                foreach ( (array) ( $f['rules'] ?? [] ) as $i => $rule ) {
+                    if ( ( $rule['check'] ?? '' ) === 'order_has_product' ) $f['rules'][ $i ]['ids'] = array_values( array_filter( array_map( $prod, (array) ( $rule['ids'] ?? [] ) ) ) );
+                    if ( ( $rule['check'] ?? '' ) === 'order_has_category' ) $f['rules'][ $i ]['ids'] = array_values( array_filter( array_map( $cat, (array) ( $rule['ids'] ?? [] ) ) ) );
+                }
+                $steps = [];
+                foreach ( (array) ( $f['steps'] ?? [] ) as $step ) {
+                    if ( ( $step['type'] ?? '' ) === 'email' ) {
+                        $step['campaign_id'] = (int) ( $camps[ (int) ( $step['campaign_id'] ?? 0 ) ] ?? 0 );
+                        if ( ! $step['campaign_id'] ) continue;
+                    }
+                    $steps[] = $step;
+                }
+                $f['steps'] = $steps;
+                // Nothing starts sending by itself in a store that was just filled in.
+                $f['on']    = false;
+                $flows[]    = $f;
+            }
+            $got = Qwoo_Automations::import( $flows );
+            if ( $got < 0 ) {
+                self::mig_note( 'Automations aren\'t part of this store\'s plan, so the file\'s automations weren\'t added.' );
+            } else {
+                if ( $got ) self::mig_note( 'The automations came in turned off. Check each one in Marketing → Automations, then turn it on.' );
+                if ( count( $flows ) > $got ) self::mig_problem( sprintf( '%d automations weren\'t added: what starts them (an audience, an event or a service) didn\'t come in.', count( $flows ) - $got ) );
+                for ( $i = 0; $i < $got; $i++ ) self::mig_count( 'marketing', 'created' );
+            }
+        }
+        if ( class_exists( 'Qwoo_Custom_Code' ) ) Qwoo_Custom_Code::touch();
+        return true;
     }
 
     /** The Store builder from the file: its photos first, then the settings with this store's IDs. */
@@ -334,6 +619,8 @@ trait Qwoo_Platform_Package {
         };
         $map = static function ( $kind, $old ) use ( $by_slug ) {
             switch ( $kind ) {
+                case 'service':
+                    return (int) ( self::$mig['maps']['service'][ (int) $old ] ?? 0 );
                 case 'media':
                     return self::mig_package_media( [ 'id' => $old ] );
                 case 'product':

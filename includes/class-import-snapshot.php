@@ -20,6 +20,8 @@ class Qwoo_Import_Snapshot {
     const TABLES = [
         'posts', 'postmeta', 'terms', 'term_taxonomy', 'term_relationships', 'termmeta', 'comments', 'commentmeta',
         'options', 'woocommerce_attribute_taxonomies', 'wc_product_meta_lookup', 'wc_product_attributes_lookup',
+        // Appointments and emails a store file brings (Qwoo_Appointments, Qwoo_Email_Marketing).
+        'qwoo_appt_services', 'qwoo_appt_staff', 'qwoo_em_campaigns',
     ];
 
     /** Options a restore leaves as they are now: the import's own state, schedules, caches. */

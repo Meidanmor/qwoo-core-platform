@@ -297,6 +297,37 @@ class Qwoo_Personalization {
         return [ 'audiences' => self::audiences(), 'audience' => $row ];
     }
 
+    /**
+     * A store file's audiences (Qwoo_Platform_Package), keeping their IDs (the Store builder,
+     * emails and automations point at them). Each goes through save_audience()'s checks; one
+     * whose conditions don't pass here is left out. Returns how many came in.
+     */
+    public static function import_audiences( array $list ): int {
+        $have = [];
+        foreach ( self::audiences() as $a ) $have[ $a['id'] ] = $a;
+        $ids = [];
+        foreach ( $list as $a ) {
+            $id = is_array( $a ) ? sanitize_key( (string) ( $a['id'] ?? '' ) ) : '';
+            if ( $id === '' || strlen( $id ) > 20 || ( ! isset( $have[ $id ] ) && count( $have ) >= self::MAX_AUDIENCES ) ) continue;
+            $have[ $id ] = ( $have[ $id ] ?? [] ) + [ 'id' => $id, 'name' => $id, 'match' => 'all', 'rules' => [], 'created_at' => time() ];
+            $ids[]       = $id;
+        }
+        $v = self::settings();
+        $v['audiences'] = array_values( $have );
+        update_option( self::OPTION, $v, false );
+        $got = 0;
+        foreach ( $list as $a ) {
+            if ( ! is_array( $a ) || ! in_array( sanitize_key( (string) ( $a['id'] ?? '' ) ), $ids, true ) ) continue;
+            $a['id'] = sanitize_key( (string) $a['id'] );
+            if ( is_wp_error( self::save_audience( $a ) ) ) {
+                self::delete_audience( $a['id'] );
+            } else {
+                $got++;
+            }
+        }
+        return $got;
+    }
+
     public static function add_template( string $key, string $name ) {
         if ( ! isset( self::TEMPLATES[ $key ] ) ) return new WP_Error( 'template', 'Unknown ready-made audience.' );
         return self::save_audience( self::TEMPLATES[ $key ] + [ 'name' => $name, 'template' => $key ] );

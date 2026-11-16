@@ -425,6 +425,37 @@ class Qwoo_Events {
         return self::state() + [ 'event' => $event ];
     }
 
+    /**
+     * A store file's events (Qwoo_Platform_Package): which tools hear the shop events, and the
+     * own events with their IDs (the Store builder and audiences point at them). Each own event
+     * goes through save_own()'s checks; one that doesn't pass is left out. Returns how many came in.
+     */
+    public static function import( array $in ): int {
+        $off = is_array( $in['off'] ?? null ) ? $in['off'] : self::off();
+        $own = [];
+        foreach ( self::own() as $e ) $own[ $e['id'] ] = $e;
+        $ids = [];
+        foreach ( (array) ( $in['own'] ?? [] ) as $e ) {
+            $id = is_array( $e ) ? (string) ( $e['id'] ?? '' ) : '';
+            if ( ! preg_match( self::ID_RE, $id ) || ( ! isset( $own[ $id ] ) && count( $own ) >= self::MAX_OWN ) ) continue;
+            $own[ $id ] = $e;
+            $ids[]      = $id;
+        }
+        self::write( $off, array_values( $own ) );
+        // The tools' choices, cleaned like a dashboard save.
+        self::write( self::off(), self::own() );
+        $got = 0;
+        foreach ( (array) ( $in['own'] ?? [] ) as $e ) {
+            if ( ! is_array( $e ) || ! in_array( (string) ( $e['id'] ?? '' ), $ids, true ) ) continue;
+            if ( is_wp_error( self::save_own( $e ) ) ) {
+                self::delete_own( (string) $e['id'] );
+            } else {
+                $got++;
+            }
+        }
+        return $got;
+    }
+
     public static function delete_own( string $id ): array {
         $own = array_values( array_filter( self::own(), static fn( $e ) => $e['id'] !== $id ) );
         self::write( self::off(), $own );

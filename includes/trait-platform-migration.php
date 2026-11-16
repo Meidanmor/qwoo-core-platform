@@ -42,6 +42,8 @@ trait Qwoo_Platform_Migration {
         'post_categories' => [ 'Blog categories', 'blog' ],
         'posts'           => [ 'Blog posts', 'blog' ],
         // Only when the source is a store file (trait-platform-package.php).
+        'appointments'    => [ 'Appointments', 'appointments' ],
+        'marketing'       => [ 'Emails and marketing', 'marketing' ],
         'builder'         => [ 'Store builder', 'builder' ],
     ];
 
@@ -103,7 +105,7 @@ trait Qwoo_Platform_Migration {
                 }
                 continue;
             }
-            if ( $part !== 'builder' && ( $part === 'always' || in_array( $part, $what, true ) ) ) {
+            if ( ! in_array( $part, [ 'builder', 'appointments', 'marketing' ], true ) && ( $part === 'always' || in_array( $part, $what, true ) ) ) {
                 $out[] = $key;
             }
         }
@@ -116,6 +118,8 @@ trait Qwoo_Platform_Migration {
         switch ( $phase ) {
             case 'settings':
             case 'builder':
+            case 'appointments':
+            case 'marketing':
                 return 1;
             case 'remove':
                 return count( (array) ( $s['remove_ids'] ?? [] ) );
@@ -1209,6 +1213,17 @@ trait Qwoo_Platform_Migration {
             $order = array_values( array_filter( array_map( [ __CLASS__, 'mig_image' ], (array) ( $p['media_order'] ?? [] ) ) ) );
             $has_video = (bool) array_filter( $order, static fn( $m ) => strpos( (string) get_post_mime_type( $m ), 'video/' ) === 0 );
             $has_video ? update_post_meta( $id, Qwoo_Media_Support::GALLERY_META, implode( ',', $order ) ) : delete_post_meta( $id, Qwoo_Media_Support::GALLERY_META );
+            // A gift card: its amounts, designs and photos (Qwoo_Gift_Cards).
+            if ( is_array( $p['giftcard'] ?? null ) && $type === 'simple' && class_exists( 'Qwoo_Gift_Cards' ) ) {
+                $gift           = $p['giftcard'];
+                $gift['images'] = array_values( array_filter( array_map( [ __CLASS__, 'mig_image' ], (array) ( $gift['images'] ?? [] ) ) ) );
+                $clean          = Qwoo_Gift_Cards::clean_settings( $gift );
+                if ( is_wp_error( $clean ) ) {
+                    self::mig_problem( sprintf( '“%s” came in as a regular product: its gift card settings weren\'t accepted (%s).', $name, $clean->get_error_message() ) );
+                } else {
+                    Qwoo_Gift_Cards::save_product( wc_get_product( $id ), $clean, null );
+                }
+            }
         }
         wc_delete_product_transients( $id );
         return $state;

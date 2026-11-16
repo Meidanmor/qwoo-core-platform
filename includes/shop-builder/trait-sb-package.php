@@ -48,6 +48,10 @@ trait SB_Package {
                     $item[ $i ] = $layout;
                 }
                 $value[ $key ] = $item;
+            } elseif ( $key === 'service_id' && is_scalar( $item ) && (int) $item > 0 ) {
+                // The Booking block's service (Appointments): 0 shows every service.
+                $new           = (int) $map( 'service', (int) $item );
+                $value[ $key ] = $new ? ( is_string( $item ) ? (string) $new : $new ) : '';
             } elseif ( $key === 'menus' && is_array( $item ) ) {
                 $value[ $key ] = self::package_walk_menus( $item, $map );
             } elseif ( is_array( $item ) ) {

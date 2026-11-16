@@ -263,6 +263,39 @@ class Qwoo_Automations {
         return [ 'id' => $id, 'flows' => self::overview() ];
     }
 
+    /**
+     * A store file's automations (Qwoo_Platform_Package), keeping their IDs; each goes through
+     * save()'s checks and one that doesn't pass is left out. Returns how many came in, or -1
+     * when the plan has no automations.
+     */
+    public static function import( array $list ): int {
+        if ( ! self::allowed() ) return -1;
+        $have = [];
+        foreach ( self::flows() as $f ) {
+            if ( is_array( $f ) && ! empty( $f['id'] ) ) $have[ $f['id'] ] = $f;
+        }
+        $ids = [];
+        foreach ( $list as $f ) {
+            $id = is_array( $f ) ? sanitize_key( (string) ( $f['id'] ?? '' ) ) : '';
+            if ( $id === '' || strlen( $id ) > 20 || ( ! isset( $have[ $id ] ) && count( $have ) >= self::MAX_FLOWS ) ) continue;
+            $have[ $id ] = ( $have[ $id ] ?? [] ) + [ 'id' => $id, 'name' => '', 'on' => false, 'trigger' => [], 'rules' => [], 'steps' => [] ];
+            $ids[]       = $id;
+        }
+        update_option( self::OPTION, array_values( $have ), false );
+        $got = 0;
+        foreach ( $list as $f ) {
+            if ( ! is_array( $f ) ) continue;
+            $f['id'] = sanitize_key( (string) ( $f['id'] ?? '' ) );
+            if ( ! in_array( $f['id'], $ids, true ) ) continue;
+            if ( is_wp_error( self::save( $f ) ) ) {
+                update_option( self::OPTION, array_values( array_filter( self::flows(), static fn( $x ) => ( $x['id'] ?? '' ) !== $f['id'] ) ), false );
+            } else {
+                $got++;
+            }
+        }
+        return $got;
+    }
+
     /** Sends the flow's emails to the owner right away, without the waits or the rules. Not counted. */
     public static function test( string $id, string $to ) {
         if ( ! is_email( $to ) ) return new WP_Error( 'email', 'Enter a valid email address.' );
