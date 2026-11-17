@@ -2543,6 +2543,8 @@ class Qwoo_Platform_Dashboard {
             'zones'     => $zones,
             'countries' => array_map( static fn( $n ) => html_entity_decode( $n, ENT_QUOTES ), WC()->countries->get_countries() ),
             'currency'  => get_woocommerce_currency(),
+            // The store's country: the shipping starter offers it first.
+            'base_country' => (string) WC()->countries->get_base_country(),
         ];
     }
 
