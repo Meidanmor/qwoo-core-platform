@@ -1111,19 +1111,26 @@ class Qwoo_Appointments {
             // [ start, end, the event's own page in Google / Outlook ] (the link only for the dashboard).
             $web = (string) ( $iv[2] ?? '' );
             $web = preg_match( '#^https://(www\.google\.com/calendar/|calendar\.google\.com/|outlook\.(live|office365|office)\.com/)#', $web ) ? esc_url_raw( $web ) : '';
+            // The event's keys, so the owner can tell the platform not to block with it (dashboard only).
+            $keys = [ 'id' => self::cal_key( $iv[3] ?? '' ), 'series' => self::cal_key( $iv[4] ?? '' ), 'cal' => mb_substr( sanitize_text_field( (string) ( $iv[5] ?? '' ) ), 0, 255 ) ];
             if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) $iv[0] ) ) {
                 // An all-day event: whole days in the store's time zone.
                 $s = date_create_immutable( $iv[0] . ' 00:00', $tz );
                 $e = date_create_immutable( $iv[1] . ' 00:00', $tz );
-                if ( $s && $e ) $out[] = [ $s->getTimestamp(), $e->getTimestamp(), $web ];
+                if ( $s && $e ) $out[] = [ $s->getTimestamp(), $e->getTimestamp(), $web, $keys ];
                 continue;
             }
             $s = strtotime( (string) $iv[0] );
             $e = strtotime( (string) $iv[1] );
-            if ( $s && $e && $e > $s ) $out[] = [ $s, $e, $web ];
+            if ( $s && $e && $e > $s ) $out[] = [ $s, $e, $web, $keys ];
         }
         set_transient( $key, $out, self::BUSY_TTL );
         return $out;
+    }
+
+    /** A Google / Microsoft event id: letters, digits and a few signs only. */
+    private static function cal_key( $v ): string {
+        return substr( (string) preg_replace( '/[^A-Za-z0-9_\-=@.+]/', '', (string) $v ), 0, 255 );
     }
 
     /**
@@ -2262,7 +2269,7 @@ class Qwoo_Appointments {
                 while ( $s < $e && count( $out ) < 600 ) {
                     $next = ( new DateTimeImmutable( '@' . $s ) )->setTimezone( $tz )->setTime( 0, 0 )->modify( '+1 day' )->getTimestamp();
                     $end  = min( $e, $next );
-                    $out[] = [ 'local' => wp_date( 'Y-m-d H:i', $s ), 'local_end' => wp_date( 'Y-m-d H:i', $end ), 'link' => (string) ( $iv[2] ?? '' ), 'staff' => $who ];
+                    $out[] = [ 'local' => wp_date( 'Y-m-d H:i', $s ), 'local_end' => wp_date( 'Y-m-d H:i', $end ), 'link' => (string) ( $iv[2] ?? '' ), 'staff' => $who, 'cal_staff' => (int) $link, 'event' => is_array( $iv[3] ?? null ) ? $iv[3] : null ];
                     $s = $end;
                 }
             }
