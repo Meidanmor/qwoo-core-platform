@@ -888,7 +888,7 @@ abstract class Shop_Builder_Constants {
                     'summary' => 'title',
                     'fields' => [
                             'title'    => [ 'type' => 'rich_text', 'label' => 'Title', 'tab' => 'content',
-                                    'help' => 'Inline HTML allowed: <strong>, <em>, <span>, <br>.' ],
+                                    'help' => 'To make words bold, write <strong>word</strong>. Also works: <em>, <span>, <br>.' ],
                             'subtitle' => [ 'type' => 'text', 'label' => 'Subtitle (optional)', 'tab' => 'content' ],
                             'tag'      => [ 'type' => 'select', 'label' => 'HTML Tag / Size', 'tab' => 'content', 'default' => 'h2',
                                     'options' => [ 'h1' => 'H1 — page title (use once per page)', 'h2' => 'H2 — large', 'h3' => 'H3 — medium', 'h4' => 'H4 — small', 'h5' => 'H5', 'h6' => 'H6' ] ],

@@ -429,6 +429,11 @@ trait SB_Platform {
         if ( preg_match( '/^(\d{4})-(\d{2})$/', (string) $month, $m ) ) {
             $args['m'] = $m[1] . $m[2];
         }
+        // WooCommerce's own placeholder picture isn't one of the owner's.
+        $placeholder = get_option( 'woocommerce_placeholder_image' );
+        if ( is_numeric( $placeholder ) && (int) $placeholder > 0 ) {
+            $args['post__not_in'] = [ (int) $placeholder ];
+        }
         $query = new WP_Query( $args );
         $items = [];
         foreach ( $query->posts as $id ) {

@@ -142,11 +142,6 @@ trait SB_Template_Import {
      * Israeli stores' week starting on Sunday. Every value is checked again here.
      */
     public static function apply_setup_settings( array $setup, string $lang = '' ): void {
-        $zone = (string) ( $setup['timezone'] ?? '' );
-        if ( $zone !== '' && in_array( $zone, timezone_identifiers_list(), true ) ) {
-            update_option( 'timezone_string', $zone );
-            update_option( 'gmt_offset', '' );
-        }
         $country = strtoupper( (string) ( $setup['country'] ?? '' ) );
         if ( preg_match( '/^[A-Z]{2}$/', $country ) && function_exists( 'WC' ) && isset( WC()->countries->get_countries()[ $country ] ) ) {
             update_option( 'woocommerce_default_country', $country );
@@ -160,10 +155,30 @@ trait SB_Template_Import {
             $value = mb_substr( trim( sanitize_text_field( (string) ( $setup[ $key ] ?? '' ) ) ), 0, 120 );
             if ( $value !== '' ) update_option( $option, $value );
         }
-        // Weeks start on Sunday in Israel (WordPress' default is Monday).
         $store_country = strtok( (string) get_option( 'woocommerce_default_country' ), ':' );
+        // Time zone (a new WordPress is on UTC). A browser on UTC (or none) says nothing about the
+        // business: then the country's zone when it has only one, else Israel's for a Hebrew store.
+        $zone = (string) ( $setup['timezone'] ?? '' );
+        if ( $zone === '' || $zone === 'UTC' || strpos( $zone, 'Etc/' ) === 0 || ! in_array( $zone, timezone_identifiers_list(), true ) ) {
+            $zone = '';
+            if ( is_string( $store_country ) && preg_match( '/^[A-Z]{2}$/', $store_country ) ) {
+                $zones = DateTimeZone::listIdentifiers( DateTimeZone::PER_COUNTRY, $store_country );
+                if ( is_array( $zones ) && count( $zones ) === 1 ) $zone = $zones[0];
+            }
+            if ( $zone === '' && $lang === 'he' ) $zone = 'Asia/Jerusalem';
+        }
+        if ( $zone !== '' ) {
+            update_option( 'timezone_string', $zone );
+            update_option( 'gmt_offset', '' );
+        }
+        // Weeks start on Sunday in Israel (WordPress' default is Monday).
         if ( $store_country === 'IL' || $zone === 'Asia/Jerusalem' || $lang === 'he' ) {
             update_option( 'start_of_week', 0 );
+        }
+        // Israeli / Hebrew stores: 24-hour times and day/month/year dates (WordPress' are "12:28 pm", "November 17, 2026").
+        if ( $store_country === 'IL' || $lang === 'he' ) {
+            update_option( 'time_format', 'H:i' );
+            update_option( 'date_format', 'd/m/Y' );
         }
     }
 
@@ -216,6 +231,15 @@ trait SB_Template_Import {
         $branding = (array) ( $options['branding'] ?? [] );
         $pwa      = (array) ( $options['pwa'] ?? [] );
         $warnings = [];
+
+        // A Hebrew store's Text font has Hebrew letters (the default, Roboto, has none). Only when no font was chosen.
+        if ( ( $input['lang'] ?? '' ) === 'he' && class_exists( 'Qwoo_Brand_Fonts' ) ) {
+            $fonts = Qwoo_Brand_Fonts::sanitize( $branding['fonts'] ?? [] );
+            if ( $fonts['text'] === '' && in_array( 'Heebo', Qwoo_Brand_Fonts::families(), true ) ) {
+                $fonts['text']      = 'Heebo';
+                $branding['fonts'] = $fonts;
+            }
+        }
 
         // 1. Files (kept in the state, so a retry doesn't upload them twice).
         foreach ( [ 'logo' => 'logo_id', 'icon' => 'app_icon_id' ] as $key => $field ) {
