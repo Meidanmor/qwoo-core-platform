@@ -173,8 +173,8 @@ trait SB_Platform {
                 'page_scroll'    => (string) ( $o['branding']['page_scroll'] ?? 'smooth' ),
                 'page_animation' => (string) ( $o['branding']['page_animation'] ?? 'none' ),
                 'page_speed'     => (string) ( $o['branding']['page_speed'] ?? 'normal' ),
-                // Products with options: what the page opens with (none / first variant).
-                'product_start'  => (string) ( $o['branding']['product_start'] ?? 'none' ),
+                // Products with options (what the page opens with) moved to Products → Product settings
+                // (Qwoo_Platform_Dashboard::product_start, 2026-11-17): not sent here, so the Branding card hides.
             ],
             'pwa'      => [
                 'name'             => (string) ( $o['pwa']['name'] ?? '' ),

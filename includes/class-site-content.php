@@ -119,6 +119,8 @@ class Qwoo_Site_Content {
         if ( class_exists( 'Qwoo_Platform_Dashboard' ) && Qwoo_Platform_Dashboard::is_free_plan() ) $body['free'] = true;
         // Sell online / Shopper accounts off (Qwoo_Shop_Mode): which pages the storefront sends away.
         if ( class_exists( 'Qwoo_Shop_Mode' ) ) $body += Qwoo_Shop_Mode::site_fields();
+        // Products → Product settings → Product options (live, no publish).
+        if ( class_exists( 'Qwoo_Platform_Dashboard' ) ) $body['product_start'] = Qwoo_Platform_Dashboard::product_start();
         // Tracking & custom code: only a hash of its stamp (the settings come from qwoo/v1/site/code).
         $body        += Qwoo_Custom_Code::site_fields();
         // An import is running: the storefront shows its pages under an "updating" overlay.

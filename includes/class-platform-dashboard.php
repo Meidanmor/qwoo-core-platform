@@ -1991,6 +1991,8 @@ class Qwoo_Platform_Dashboard {
             'general'  => self::general_settings(),
             // Products with no price or 0 (Qwoo_Zero_Price).
             'zero_price' => Qwoo_Zero_Price::for_dashboard(),
+            // Products with options: what's chosen when the product page opens (was Store builder → Branding).
+            'product_start' => self::product_start(),
             // Sell online + Shopper accounts (Qwoo_Shop_Mode).
             'shop_mode'  => class_exists( 'Qwoo_Shop_Mode' ) ? Qwoo_Shop_Mode::for_dashboard() : null,
             'store'    => [
@@ -2225,6 +2227,22 @@ class Qwoo_Platform_Dashboard {
     }
 
     /** { section: general | store | checkout | taxes, values }. */
+    const PRODUCT_START = 'qwoo_product_start';
+
+    /**
+     * Products with options: 'none' (the shopper picks) or 'first' (the first variant is chosen) when the
+     * product page opens. Until the owner saves it on Product settings, the old Store builder value counts.
+     */
+    public static function product_start(): string {
+        $own = get_option( self::PRODUCT_START, '' );
+        if ( in_array( $own, [ 'none', 'first' ], true ) ) return $own;
+        // First read: the owner's Store builder choice becomes the setting (later Branding saves can't change it).
+        $branding = (array) ( ( (array) get_option( 'shop_builder_options', [] ) )['branding'] ?? [] );
+        $start    = ( $branding['product_start'] ?? '' ) === 'first' ? 'first' : 'none';
+        update_option( self::PRODUCT_START, $start, true );
+        return $start;
+    }
+
     private static function action_settings_save( array $params ) {
         $v = is_array( $params['values'] ?? null ) ? $params['values'] : [];
         $text = static fn( $key, $max = 200 ) => mb_substr( trim( sanitize_text_field( (string) ( $v[ $key ] ?? '' ) ) ), 0, $max );
@@ -2251,6 +2269,16 @@ class Qwoo_Platform_Dashboard {
                 if ( is_wp_error( $saved ) ) {
                     return $saved;
                 }
+                break;
+
+            case 'product_start':
+                $start = (string) ( $v['product_start'] ?? '' );
+                if ( ! in_array( $start, [ 'none', 'first' ], true ) ) {
+                    return new WP_Error( 'qwoo_product_start', 'Choose one of the options.' );
+                }
+                update_option( self::PRODUCT_START, $start, true );
+                // The storefront reads it from the live pointer: no publish needed.
+                if ( class_exists( 'Qwoo_Site_Content' ) ) Qwoo_Site_Content::write_pointer();
                 break;
 
             case 'store':
