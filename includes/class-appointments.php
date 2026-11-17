@@ -664,8 +664,12 @@ class Qwoo_Appointments {
         update_option( self::LISTED, array_map( 'intval', $listed ), false );
     }
 
-    /** The service products kept out of product lists and searches (all but the ones shown in the shop). */
+    /**
+     * The service products kept out of product lists and searches: all but the ones shown in the shop,
+     * and all of them while Appointments is off (turned off, or not in the plan), since none can be booked.
+     */
     public static function hidden_product_ids(): array {
+        if ( ! self::active() ) return array_map( 'intval', self::product_ids() );
         return array_values( array_diff( self::product_ids(), array_map( 'intval', (array) get_option( self::LISTED, [] ) ) ) );
     }
 

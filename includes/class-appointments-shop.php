@@ -459,7 +459,8 @@ class Qwoo_Appointments_Shop {
     /* ---------------- out of product lists ---------------- */
 
     public static function mark_product_list( $response, $handler, $request ) {
-        if ( $request instanceof WP_REST_Request && $request->get_route() === '/wc/store/v1/products' && ! $request->get_param( 'include' ) ) {
+        // Lists of chosen products keep hidden services they name, except while Appointments is off (nothing can be booked).
+        if ( $request instanceof WP_REST_Request && $request->get_route() === '/wc/store/v1/products' && ( ! $request->get_param( 'include' ) || ! Qwoo_Appointments::active() ) ) {
             self::$listing = true;
         }
         return $response;
