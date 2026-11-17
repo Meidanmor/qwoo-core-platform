@@ -20,6 +20,7 @@ class Qwoo_Cart_Extras {
     public static function init() {
         add_action( 'init', [ __CLASS__, 'register' ] );
         add_filter( 'woocommerce_package_rates', [ __CLASS__, 'package_rates' ], 20, 2 );
+        add_filter( 'woocommerce_order_item_display_meta_key', [ __CLASS__, 'meta_label' ] );
     }
 
     /**
@@ -30,6 +31,13 @@ class Qwoo_Cart_Extras {
      *     hide while this free shipping is offered (WooCommerce only offers it
      *     when its own rule — amount, code — is met).
      */
+    /** The order's shipping line shows "Pickup address", not the meta key. */
+    public static function meta_label( $key ) {
+        if ( $key !== 'qwoo_pickup_address' ) return $key;
+        $he = class_exists( 'Qwoo_I18n' ) && Qwoo_I18n::default_code() === 'he';
+        return $he ? 'כתובת לאיסוף' : 'Pickup address';
+    }
+
     public static function package_rates( $rates, $package ) {
         if ( ! is_array( $rates ) || ! $rates ) return $rates;
         $total = null;
@@ -37,6 +45,12 @@ class Qwoo_Cart_Extras {
         foreach ( $rates as $rate ) {
             if ( ! $rate instanceof WC_Shipping_Rate ) continue;
             $type = $rate->get_method_id();
+            // Local pickup's address rides on the rate: the Store API shows it (meta_data) and WooCommerce
+            // copies it to the order's shipping line (emails, the order page).
+            if ( $type === 'local_pickup' ) {
+                $address = trim( (string) self::method_option( $type, $rate->get_instance_id(), 'qwoo_pickup_address' ) );
+                if ( $address !== '' ) $rate->add_meta_data( 'qwoo_pickup_address', $address );
+            }
             if ( $type === 'flat_rate' || $type === 'local_pickup' ) {
                 $from = (float) wc_format_decimal( self::method_option( $type, $rate->get_instance_id(), 'qwoo_free_from' ) );
                 if ( $from <= 0 ) continue;

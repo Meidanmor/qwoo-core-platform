@@ -677,6 +677,16 @@ class Qwoo_Email_Render {
         $cells = '';
         if ( $d['which'] !== 'shipping' ) $cells .= $one( $he ? 'כתובת לחיוב' : 'Billing address', (string) $order->get_formatted_billing_address() );
         if ( $d['which'] !== 'billing' ) $cells .= $one( $he ? 'כתובת למשלוח' : 'Shipping address', (string) $order->get_formatted_shipping_address() );
+        // Local pickup with an address (Settings → Shipping): where to collect the order.
+        if ( $d['which'] !== 'billing' ) {
+            foreach ( $order->get_items( 'shipping' ) as $line ) {
+                $pickup = trim( (string) $line->get_meta( 'qwoo_pickup_address' ) );
+                if ( $pickup !== '' ) {
+                    $cells .= $one( $he ? 'כתובת לאיסוף' : 'Pickup address', nl2br( esc_html( $pickup ) ) );
+                    break;
+                }
+            }
+        }
         return $cells === '' ? '' : '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' . $cells . '</tr></table>';
     }
 }

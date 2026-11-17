@@ -2527,6 +2527,7 @@ class Qwoo_Platform_Dashboard {
                     'requires'    => (string) $method->get_instance_option( 'requires', '' ),
                     // Our own rules, applied by Qwoo_Cart_Extras::package_rates.
                     'free_from'   => (string) $method->get_instance_option( 'qwoo_free_from', '' ),
+                    'pickup_address' => $method->id === 'local_pickup' ? (string) $method->get_instance_option( 'qwoo_pickup_address', '' ) : '',
                     'hide'        => array_values( array_map( 'intval', array_filter( explode( ',', (string) $method->get_instance_option( 'qwoo_hide', '' ) ) ) ) ),
                     'editable'    => in_array( $method->id, self::SHIPPING_METHODS, true ),
                 ];
@@ -2630,6 +2631,10 @@ class Qwoo_Platform_Dashboard {
                 }
                 $settings['qwoo_free_from'] = ( $from !== '' && (float) $from > 0 ) ? $from : '';
             }
+        }
+        // Local pickup: where to collect the order (shown at checkout and in order emails).
+        if ( $type === 'local_pickup' && array_key_exists( 'pickup_address', $params ) ) {
+            $settings['qwoo_pickup_address'] = mb_substr( trim( sanitize_textarea_field( (string) $params['pickup_address'] ) ), 0, 300 );
         }
         if ( $type === 'free_shipping' ) {
             $min = self::price( $params['min_amount'] ?? '' );
