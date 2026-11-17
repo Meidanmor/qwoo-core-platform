@@ -8,7 +8,11 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   ask      { when: views | cart | seconds | never, views, seconds, texts: { lang: { title, text, yes, no } } }
  *   quiet    { on, from 'HH:MM', to 'HH:MM' } (store time; marketing waits until `to`)
  *   cap      marketing notifications a device gets a day at most (order updates and back in stock don't count)
- *   back_form { on }  the "Notify me when it's back" form on sold-out products (push, or email: Qwoo_Back_In_Stock)
+ *   back_form { on, wa, sms }  the "Notify me when it's back" form on sold-out products (push, or email: Qwoo_Back_In_Stock;
+ *            wa / sms: the shopper may also pick WhatsApp / SMS, sent by the platform; off unless the owner turns them on)
+ *   install  { on, thanks, repeat, account, gift, push_gift }  asking shoppers to add the store to their home screen
+ *            (thank-you page, second visit, My account); gift = a coupon code shown inside the added app,
+ *            push_gift = a coupon code shown once a shopper turns on notifications
  *   automations [ automation ]
  *
  * An automation: { id, builtin, name, on, trigger { type, status, days }, wait (minutes),
@@ -148,7 +152,12 @@ class Qwoo_Push {
             ],
             'cap' => isset( $raw['cap'] ) ? max( 1, min( 10, (int) $raw['cap'] ) ) : 2,
             // The "Notify me when it's back" form on sold-out product pages (on unless turned off).
-            'back_form' => [ 'on' => ! isset( $raw['back_form']['on'] ) || ! empty( $raw['back_form']['on'] ) ],
+            'back_form' => [
+                'on'  => ! isset( $raw['back_form']['on'] ) || ! empty( $raw['back_form']['on'] ),
+                'wa'  => ! empty( $raw['back_form']['wa'] ),
+                'sms' => ! empty( $raw['back_form']['sms'] ),
+            ],
+            'install' => self::install_settings( (array) ( $raw['install'] ?? [] ) ),
         ];
 
         $saved = [];
@@ -175,6 +184,30 @@ class Qwoo_Push {
         }
         $out['automations'] = $list;
         return $out;
+    }
+
+    /** "Add to home screen" asks: every place on by default, no gifts. */
+    private static function install_settings( array $i ): array {
+        $flag = static fn( $k ) => ! array_key_exists( $k, $i ) || ! empty( $i[ $k ] );
+        return [
+            'on'        => $flag( 'on' ),
+            'thanks'    => $flag( 'thanks' ),
+            'repeat'    => $flag( 'repeat' ),
+            'account'   => $flag( 'account' ),
+            'gift'      => self::coupon_code( $i['gift'] ?? '' ),
+            'push_gift' => self::coupon_code( $i['push_gift'] ?? '' ),
+        ];
+    }
+
+    private static function coupon_code( $code ): string {
+        return mb_substr( preg_replace( '/[^\p{L}\p{N}_\-]/u', '', (string) $code ), 0, 40 );
+    }
+
+    /** Whether a coupon code exists and is published (only then is it shown to shoppers). */
+    public static function coupon_live( string $code ): bool {
+        if ( $code === '' || ! function_exists( 'wc_get_coupon_id_by_code' ) ) return false;
+        $id = (int) wc_get_coupon_id_by_code( $code );
+        return $id > 0 && get_post_status( $id ) === 'publish';
     }
 
     /** What an owner may change on a built-in (its trigger type and id stay). */
@@ -277,7 +310,27 @@ class Qwoo_Push {
             $now['cap'] = max( 1, min( 10, (int) $p['cap'] ) );
         }
         if ( isset( $p['back_form'] ) && is_array( $p['back_form'] ) ) {
-            $now['back_form'] = [ 'on' => ! empty( $p['back_form']['on'] ) ];
+            // Only the parts sent change (an older dashboard or an AI app may send just { on }).
+            $was = self::settings()['back_form'];
+            foreach ( [ 'on', 'wa', 'sms' ] as $k ) {
+                if ( array_key_exists( $k, $p['back_form'] ) ) $was[ $k ] = ! empty( $p['back_form'][ $k ] );
+            }
+            $now['back_form'] = $was;
+        }
+        if ( isset( $p['install'] ) && is_array( $p['install'] ) ) {
+            $was = self::settings()['install'];
+            foreach ( [ 'on', 'thanks', 'repeat', 'account' ] as $k ) {
+                if ( array_key_exists( $k, $p['install'] ) ) $was[ $k ] = ! empty( $p['install'][ $k ] );
+            }
+            foreach ( [ 'gift', 'push_gift' ] as $k ) {
+                if ( ! array_key_exists( $k, $p['install'] ) ) continue;
+                $code = self::coupon_code( $p['install'][ $k ] );
+                if ( $code !== '' && ! self::coupon_live( $code ) ) {
+                    return [ 'error' => sprintf( 'There\'s no discount code "%s". Make it in Discounts first.', $code ) ];
+                }
+                $was[ $k ] = $code;
+            }
+            $now['install'] = $was;
         }
         if ( isset( $p['sender'] ) ) {
             $email = sanitize_email( (string) $p['sender'] );
@@ -600,7 +653,7 @@ class Qwoo_Push {
         return [
             // The Free plan: the dashboard shows an upgrade card (the sold-out form's email part still works).
             'locked' => ! Qwoo_Push_Engine::allowed(),
-            'settings' => [ 'ask' => $s['ask'], 'quiet' => $s['quiet'], 'cap' => $s['cap'], 'back_form' => $s['back_form'], 'sender' => (string) ( is_array( $tech ) ? ( $tech['push_email'] ?? '' ) : '' ) ],
+            'settings' => [ 'ask' => $s['ask'], 'quiet' => $s['quiet'], 'cap' => $s['cap'], 'back_form' => $s['back_form'], 'install' => $s['install'], 'sender' => (string) ( is_array( $tech ) ? ( $tech['push_email'] ?? '' ) : '' ) ],
             'back_emails' => Qwoo_Back_In_Stock::waiting_count(),
             'automations' => $s['automations'],
             'audiences' => Qwoo_Personalization::audiences(),
@@ -671,6 +724,22 @@ class Qwoo_Push {
             // The form: shown at all, and whether it can offer push (else email only).
             'back_form' => $s['back_form']['on'],
             'back_push' => $push && $key !== '',
+            // WhatsApp / SMS on the sold-out form (the platform sends them; needs the platform connection).
+            'back_wa'   => $s['back_form']['on'] && $s['back_form']['wa'] && self::phone_ready(),
+            'back_sms'  => $s['back_form']['on'] && $s['back_form']['sms'] && self::phone_ready(),
+            // Asking to add the store to the home screen; gifts only while their coupon exists.
+            'install'   => [
+                'on'        => $s['install']['on'],
+                'thanks'    => $s['install']['thanks'],
+                'repeat'    => $s['install']['repeat'],
+                'account'   => $s['install']['account'],
+                'gift'      => self::coupon_live( $s['install']['gift'] ) ? $s['install']['gift'] : '',
+                'push_gift' => $key !== '' && self::coupon_live( $s['install']['push_gift'] ) ? $s['install']['push_gift'] : '',
+            ],
         ];
+    }
+
+    private static function phone_ready(): bool {
+        return class_exists( 'Qwoo_Platform_Connection' ) && Qwoo_Platform_Connection::is_connected();
     }
 }

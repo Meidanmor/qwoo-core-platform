@@ -8,7 +8,10 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * ({prefix}qwoo_push_wants).
  *
  * Requests: {prefix}qwoo_back_emails { product_id (the parent of a variation), email, lang,
- * due_at (set when the product is back) }. One email each, then the row is removed.
+ * due_at (set when the product is back), channel }. One email each, then the row is removed.
+ * WhatsApp / SMS requests (iPhone shoppers can't get push in the browser; the owner turns
+ * each on: back_form wa / sms) use the same table: email = "tel:<number as typed>", channel
+ * wa | sms. The platform sends them (QP_Messages, key back_in_stock; WhatsApp falls back to SMS).
  * Sent by Qwoo_Push_Engine::tick() (a run starts right after the product is back),
  * so a long list goes out in batches.
  * The form is on unless the owner turned it off (Qwoo_Push settings back_form).
@@ -41,6 +44,7 @@ class Qwoo_Back_In_Stock {
         lang VARCHAR(10) NULL,
         created_at DATETIME NOT NULL,
         due_at DATETIME NULL,
+        channel VARCHAR(8) NOT NULL DEFAULT 'email',
         PRIMARY KEY  (id),
         UNIQUE KEY product_email (product_id, email),
         KEY due (due_at)
@@ -53,6 +57,49 @@ class Qwoo_Back_In_Stock {
             'callback'            => [ __CLASS__, 'rest_email' ],
             'permission_callback' => '__return_true',
         ] );
+        register_rest_route( 'qwoo/v1', '/back-in-stock/phone', [
+            'methods'             => 'POST',
+            'callback'            => [ __CLASS__, 'rest_phone' ],
+            'permission_callback' => '__return_true',
+        ] );
+    }
+
+    /** { product_id, phone, channel: wa | sms, website } (only while the owner offers that channel). */
+    public static function rest_phone( WP_REST_Request $r ) {
+        $p = (array) $r->get_json_params();
+        $s = Qwoo_Push::settings()['back_form'];
+        $channel = ( $p['channel'] ?? '' ) === 'wa' ? 'wa' : 'sms';
+        if ( ! $s['on'] || empty( $s[ $channel ] ) || ! class_exists( 'Qwoo_Platform_Connection' ) || ! Qwoo_Platform_Connection::is_connected() ) {
+            return new WP_REST_Response( [ 'success' => false, 'message' => 'This store doesn\'t take these requests.' ], 403 );
+        }
+        if ( ! qwoo_rate_limit_check( 'back_in_stock_phone', 5, 15 * MINUTE_IN_SECONDS ) ) {
+            return new WP_REST_Response( [ 'success' => false, 'message' => 'Too many requests. Try again in a few minutes.' ], 429 );
+        }
+        if ( trim( (string) ( $p['website'] ?? '' ) ) !== '' ) {
+            return rest_ensure_response( [ 'success' => true ] );
+        }
+        $raw    = trim( (string) ( $p['phone'] ?? '' ) );
+        $digits = preg_replace( '/\D/', '', $raw );
+        if ( strlen( $digits ) < 7 || strlen( $digits ) > 15 ) {
+            return new WP_REST_Response( [ 'success' => false, 'message' => 'Enter a valid phone number.' ], 400 );
+        }
+        $phone = 'tel:' . ( str_starts_with( $raw, '+' ) ? '+' : '' ) . $digits;
+        $item = wc_get_product( absint( $p['product_id'] ?? 0 ) );
+        if ( ! $item || ( $item->get_parent_id() ? get_post_status( $item->get_parent_id() ) : $item->get_status() ) !== 'publish' ) {
+            return new WP_REST_Response( [ 'success' => false ], 404 );
+        }
+        $product = $item->get_parent_id() ?: $item->get_id();
+        global $wpdb;
+        $table = self::table();
+        $wpdb->query( $wpdb->prepare( "DELETE FROM $table WHERE product_id = %d AND email = %s", $product, $phone ) );
+        $wpdb->insert( $table, [
+            'product_id' => $product,
+            'email'      => $phone,
+            'lang'       => Qwoo_Push_Engine::request_lang(),
+            'created_at' => gmdate( 'Y-m-d H:i:s' ),
+            'channel'    => $channel,
+        ] );
+        return rest_ensure_response( [ 'success' => true ] );
     }
 
     /** { product_id, email, website (a field people never see: bots fill it) } */
@@ -137,8 +184,9 @@ class Qwoo_Back_In_Stock {
     private static function send( array $row ) {
         $product = wc_get_product( (int) $row['product_id'] );
         $front   = Qwoo_Technical_Settings::get_primary_frontend_domain();
+        $is_phone = str_starts_with( (string) $row['email'], 'tel:' );
         // Sold out again, or gone, by the time it's sent: nothing to tell.
-        if ( ! $product || $product->get_status() !== 'publish' || ! $product->is_in_stock() || $front === '' || ! is_email( $row['email'] ) ) return;
+        if ( ! $product || $product->get_status() !== 'publish' || ! $product->is_in_stock() || $front === '' || ( ! $is_phone && ! is_email( $row['email'] ) ) ) return;
         $lang  = (string) ( $row['lang'] ?: Qwoo_Push::main_lang() );
         $name  = $product->get_name();
         if ( $lang !== Qwoo_Push::main_lang() && class_exists( 'Qwoo_Translations' ) ) {
@@ -147,6 +195,11 @@ class Qwoo_Back_In_Stock {
         $name  = html_entity_decode( $name, ENT_QUOTES, 'UTF-8' );
         $store = html_entity_decode( get_bloginfo( 'name' ), ENT_QUOTES, 'UTF-8' );
         $url   = rtrim( $front, '/' ) . Qwoo_Push_Engine::link_url( [ 'type' => 'item' ], $lang, null, $product );
+
+        if ( $is_phone ) {
+            self::send_phone( $row, $name, $store, $url, $lang );
+            return;
+        }
 
         Qwoo_I18n::in_language( $lang, static function () use ( $row, $name, $store, $url ) {
             // The owner's design; only if it can't be made, the plain email below.
@@ -160,6 +213,24 @@ class Qwoo_Back_In_Stock {
             $mailer = WC()->mailer();
             $mailer->send( $row['email'], Qwoo_I18n::t( '{product} is back in stock', [ 'product' => $name ] ), $mailer->wrap_message( Qwoo_I18n::t( 'It\'s back' ), $html ) );
         } );
+    }
+
+    /** WhatsApp or SMS through the platform (WhatsApp's text is Meta's approved template: product, store, link). */
+    private static function send_phone( array $row, string $name, string $store, string $url, string $lang ): void {
+        if ( ! class_exists( 'Qwoo_Platform_Connection' ) || ! Qwoo_Platform_Connection::is_connected() ) return;
+        $he  = $lang === 'he';
+        $sms = $he
+            ? sprintf( '%s חזר למלאי ב%s. להזמנה: %s', $name, $store, $url )
+            : sprintf( '%s is back in stock at %s. Get it here: %s', $name, $store, $url );
+        $res = Qwoo_Platform_Connection::post( 'messages', [
+            'do' => 'send', 'pref' => $row['channel'] === 'wa' ? 'wa' : 'sms', 'key' => 'back_in_stock',
+            'to' => substr( (string) $row['email'], 4 ), 'lang' => $he ? 'he' : 'en',
+            'country' => function_exists( 'WC' ) && WC()->countries ? WC()->countries->get_base_country() : '',
+            'params' => [ $name, $store, $url ], 'sms' => $sms,
+        ], 20 );
+        if ( ! is_array( $res ) || ( $res['sent'] ?? '' ) === '' ) {
+            error_log( '[qwoo] back in stock message not sent: ' . ( is_array( $res ) ? (string) ( $res['error'] ?? '' ) : 'unreachable' ) );
+        }
     }
 
     /* ---------------- privacy (Tools → Erase personal data, and customer deletion) ---------------- */
