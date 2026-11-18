@@ -121,6 +121,8 @@ class Qwoo_Site_Content {
         if ( class_exists( 'Qwoo_Shop_Mode' ) ) $body += Qwoo_Shop_Mode::site_fields();
         // Products → Product settings → Product options (live, no publish).
         if ( class_exists( 'Qwoo_Platform_Dashboard' ) ) $body['product_start'] = Qwoo_Platform_Dashboard::product_start();
+        // Notifications → Settings → Home screen off: the app file offers no install (live, no publish).
+        if ( class_exists( 'Qwoo_Push' ) && empty( Qwoo_Push::settings()['install']['on'] ) ) $body['app'] = false;
         // Tracking & custom code: only a hash of its stamp (the settings come from qwoo/v1/site/code).
         $body        += Qwoo_Custom_Code::site_fields();
         // An import is running: the storefront shows its pages under an "updating" overlay.

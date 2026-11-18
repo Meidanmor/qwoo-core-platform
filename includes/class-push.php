@@ -319,6 +319,7 @@ class Qwoo_Push {
         }
         if ( isset( $p['install'] ) && is_array( $p['install'] ) ) {
             $was = self::settings()['install'];
+            $app_was = $was['on'];
             foreach ( [ 'on', 'thanks', 'repeat', 'account' ] as $k ) {
                 if ( array_key_exists( $k, $p['install'] ) ) $was[ $k ] = ! empty( $p['install'][ $k ] );
             }
@@ -331,6 +332,13 @@ class Qwoo_Push {
                 $was[ $k ] = $code;
             }
             $now['install'] = $was;
+            // Off: the storefront's app file stops offering an install (the browsers' own
+            // install buttons too). The live pointer carries it, so no publish is needed.
+            if ( $app_was !== $was['on'] ) {
+                add_action( 'shutdown', static function () {
+                    if ( class_exists( 'Qwoo_Site_Content' ) ) Qwoo_Site_Content::write_pointer();
+                } );
+            }
         }
         if ( isset( $p['sender'] ) ) {
             $email = sanitize_email( (string) $p['sender'] );
