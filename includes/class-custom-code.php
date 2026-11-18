@@ -5,7 +5,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * Tracking and custom code (dashboard → Settings → Tracking & code).
  *
  *   option qwoo_custom_code = {
- *     consent:   { mode: ask | notice, texts: { lang: { title, text, accept, reject, choose, save } } },
+ *     consent:   { mode: ask | notice, banner, texts: { lang: { title, text, accept, reject, choose, save, … } },
+ *                  design: { banner, choices window, cookie button looks }, months, version, gcm },
  *     shortcuts: { gtm | ga4 | meta: { id, state, group } },
  *     snippets:  [ { id sn_…, name, code, place, where, targets, group, state, by, updated } ],
  *     domains:   [ { host, kinds, from: auto | learned | owner, added } ],
@@ -102,7 +103,9 @@ class Qwoo_Custom_Code {
     ];
 
     /** Banner texts the owner can change (empty = the storefront's own, in the page's language). */
-    const TEXT_KEYS = [ 'title' => 80, 'text' => 600, 'accept' => 40, 'reject' => 40, 'choose' => 40, 'save' => 40 ];
+    const TEXT_KEYS = [ 'title' => 80, 'text' => 600, 'accept' => 40, 'reject' => 40, 'choose' => 40, 'save' => 40,
+        // The choices window and the cookie button (Settings → Cookie banner → Design). Empty: the storefront's own text.
+        'ptitle' => 80, 'nec' => 40, 'necd' => 200, 'ana' => 40, 'anad' => 200, 'mkt' => 40, 'mktd' => 200, 'fab' => 30, 'policy' => 40 ];
 
     /**
      * Title and message start with real texts (not placeholders): until the
@@ -455,6 +458,46 @@ class Qwoo_Custom_Code {
             'mode'   => ( $c['mode'] ?? 'ask' ) === 'notice' ? 'notice' : 'ask',
             'banner' => ! array_key_exists( 'banner', $c ) || ! empty( $c['banner'] ),
             'texts'  => (object) $texts,
+            'design' => self::design_of( is_array( $c['design'] ?? null ) ? $c['design'] : [] ),
+            // How long a choice lasts, the banner version ("Ask everyone again" raises it), Google Consent Mode.
+            'months'  => (int) ( $c['months'] ?? 6 ) === 12 ? 12 : 6,
+            'version' => max( 1, (int) ( $c['version'] ?? 1 ) ),
+            'gcm'     => ! array_key_exists( 'gcm', $c ) || ! empty( $c['gcm'] ),
+        ];
+    }
+
+    /**
+     * The banner's looks (Settings → Cookie banner → Design). Colours empty = the store's own
+     * (white card, text colour, the Secondary colour for buttons).
+     */
+    private static function design_of( array $d ): array {
+        $col  = static fn( $x ) => preg_match( '/^#[0-9a-f]{6}$/i', (string) $x ) ? strtolower( (string) $x ) : '';
+        $pick = static fn( $x, array $opts ) => in_array( $x, $opts, true ) ? $x : $opts[0];
+        $num  = static fn( $x, int $min, int $max, int $def ) => is_numeric( $x ) ? max( $min, min( $max, (int) $x ) ) : $def;
+        $on   = static fn( string $k ) => ! array_key_exists( $k, $d ) || ! empty( $d[ $k ] );
+        return [
+            'layout'       => $pick( $d['layout'] ?? '', [ 'bar', 'box', 'center' ] ),
+            'corner'       => $pick( $d['corner'] ?? '', [ 'start', 'end' ] ),
+            'dim'          => ! empty( $d['dim'] ),
+            'show_title'   => $on( 'show_title' ),
+            'show_policy'  => $on( 'show_policy' ),
+            'equal'        => $on( 'equal' ),
+            'bg'           => $col( $d['bg'] ?? '' ),
+            'ink'          => $col( $d['ink'] ?? '' ),
+            'accent'       => $col( $d['accent'] ?? '' ),
+            'radius'       => $num( $d['radius'] ?? null, 0, 32, 18 ),
+            'btn_radius'   => $num( $d['btn_radius'] ?? null, 0, 999, 10 ),
+            'font'         => $pick( $d['font'] ?? '', [ 'store', 'system' ] ),
+            'size'         => $num( $d['size'] ?? null, 12, 18, 14 ),
+            'prefs_layout' => $pick( $d['prefs_layout'] ?? '', [ 'center', 'box', 'bar' ] ),
+            'prefs_desc'   => $on( 'prefs_desc' ),
+            'fab'          => $on( 'fab' ),
+            'fab_corner'   => $pick( $d['fab_corner'] ?? '', [ 'start', 'end' ] ),
+            'fab_shape'    => $pick( $d['fab_shape'] ?? '', [ 'round', 'pill' ] ),
+            'fab_icon'     => $pick( $d['fab_icon'] ?? '', [ 'cookie', 'shield', 'sliders' ] ),
+            'fab_size'     => $num( $d['fab_size'] ?? null, 32, 60, 44 ),
+            'fab_bg'       => $col( $d['fab_bg'] ?? '' ),
+            'fab_ink'      => $col( $d['fab_ink'] ?? '' ),
         ];
     }
 
@@ -617,7 +660,14 @@ class Qwoo_Custom_Code {
         $ai_live = ! empty( $v['ai_live'] );
 
         if ( is_array( $p['consent'] ?? null ) ) {
-            $v['consent'] = self::consent_of( [ 'consent' => $p['consent'] ] );
+            // Only the parts sent change: an AI app that sends texts keeps the design and rules.
+            $old = self::consent_of( $v );
+            $old['texts'] = (array) $old['texts'];
+            $in  = $p['consent'] + $old;
+            if ( is_array( $p['consent']['design'] ?? null ) ) $in['design'] = $p['consent']['design'] + $old['design'];
+            // The version only goes up, through "Ask everyone again".
+            $in['version'] = $old['version'] + ( ! empty( $p['consent']['ask_again'] ) ? 1 : 0 );
+            $v['consent'] = self::consent_of( [ 'consent' => $in ] );
             $v['consent']['texts'] = (array) $v['consent']['texts'];
         }
 

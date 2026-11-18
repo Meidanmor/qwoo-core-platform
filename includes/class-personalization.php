@@ -586,8 +586,12 @@ class Qwoo_Personalization {
 
     private static function consent_allowed(): bool {
         $consent = (string) ( $_COOKIE['qwoo_consent'] ?? '' );
-        if ( preg_match( '/^1\.a([01])\.m[01](?:\.|$)/', $consent, $m ) ) return $m[1] === '1';
         $code = get_option( 'qwoo_custom_code', [] );
+        // "1.a1.m0.<time>.<banner version>.<ID>": a choice under an older banner version counts as none.
+        if ( preg_match( '/^1\.a([01])\.m[01](?:\.\d+(?:\.(\d+))?)?(?:\.|$)/', $consent, $m ) ) {
+            $now = max( 1, (int) ( is_array( $code ) ? ( $code['consent']['version'] ?? 1 ) : 1 ) );
+            if ( max( 1, (int) ( $m[2] ?? 1 ) ) >= $now ) return $m[1] === '1';
+        }
         $mode = is_array( $code ) ? ( $code['consent']['mode'] ?? 'ask' ) : 'ask';
         return $mode === 'notice';
     }

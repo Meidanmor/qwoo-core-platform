@@ -350,7 +350,7 @@ function get_wishlist() {
 --------------------------------------------------------------*/
 
 /** Bump when the CREATE TABLE below changes; dbDelta() applies the diff. */
-const QWOO_PUSH_DB_VERSION = '8'; // 8: back in stock channel column; 4: analytics, webhooks, email marketing, automations; 5: gift cards; 6: bounded personalization profiles; 7: audiences (email column, daily stats)
+const QWOO_PUSH_DB_VERSION = '9'; // 9: cookie banner record of choices; 8: back in stock channel column; 4: analytics, webhooks, email marketing, automations; 5: gift cards; 6: bounded personalization profiles; 7: audiences (email column, daily stats)
 
 /**
  * Creates the table on the first request after install/update.

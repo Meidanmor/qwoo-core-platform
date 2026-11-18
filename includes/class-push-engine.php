@@ -103,6 +103,7 @@ class Qwoo_Push_Engine {
         KEY product (product_id)
         ) $charset;" );
         Qwoo_Back_In_Stock::install_table();
+        if ( class_exists( 'Qwoo_Consent_Log' ) ) Qwoo_Consent_Log::install_table();
     }
 
     private static function now() {
