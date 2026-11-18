@@ -132,7 +132,7 @@ class Qwoo_Appointments_Shop {
         $s = self::service_from( $r->get_param( 'service' ) );
         if ( ! $s ) return self::no_cache( [ 'message' => self::l( 'This service can\'t be booked right now.', 'אי אפשר לקבוע את השירות הזה כרגע.' ) ], 404 );
         Qwoo_Appointments::expire_holds();
-        $days = Qwoo_Appointments::free_times( $s, (string) $r->get_param( 'from' ), (string) $r->get_param( 'to' ), [ 'seats' => max( 1, (int) $r->get_param( 'seats' ) ), 'staff' => absint( $r->get_param( 'staff' ) ) ] );
+        $days = Qwoo_Appointments::free_times( $s, (string) $r->get_param( 'from' ), (string) $r->get_param( 'to' ), [ 'seats' => max( 1, (int) $r->get_param( 'seats' ) ), 'staff' => absint( $r->get_param( 'staff' ) ), 'with_taken' => (bool) $r->get_param( 'taken' ) ] );
         // Who is free stays on the store: the shopper sees times only.
         foreach ( $days as $date => $list ) {
             $days[ $date ] = array_map( static fn( $slot ) => array_diff_key( $slot, [ 'staff' => 1 ] ), $list );

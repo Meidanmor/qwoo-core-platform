@@ -803,13 +803,14 @@ class Qwoo_Appointments {
             foreach ( self::free_times_of( $svc, $start, $end, $opt, $staff ) as $date => $list ) {
                 $out[ $date ] = $out[ $date ] ?? [];
                 foreach ( $list as $slot ) {
-                    $k = $slot['start'];
-                    if ( ! isset( $out[ $date ][ $k ] ) ) {
+                    $k    = $slot['start'];
+                    $busy = ! empty( $slot['taken'] ); // only with $opt['with_taken']
+                    if ( ! isset( $out[ $date ][ $k ] ) || ( ! $busy && ! empty( $out[ $date ][ $k ]['taken'] ) ) ) {
                         $out[ $date ][ $k ] = $slot + [ 'staff' => [] ];
-                    } elseif ( isset( $slot['left'] ) ) {
+                    } elseif ( ! $busy && isset( $slot['left'] ) ) {
                         $out[ $date ][ $k ]['left'] = max( (int) $out[ $date ][ $k ]['left'], (int) $slot['left'] );
                     }
-                    $out[ $date ][ $k ]['staff'][] = $staff;
+                    if ( ! $busy ) $out[ $date ][ $k ]['staff'][] = $staff;
                 }
             }
         }
@@ -828,6 +829,7 @@ class Qwoo_Appointments {
         $exclude = (int) ( $opt['exclude'] ?? 0 );
         $ex_sess = (string) ( $opt['exclude_sess'] ?? '' );
         $seats   = max( 1, (int) ( $opt['seats'] ?? 1 ) );
+        $show_taken = ! empty( $opt['with_taken'] );
         $now     = time();
         $min_ts  = $owner ? 0 : $now + (int) self::rule( $svc, 'notice' ) * 60;
         $max_ts  = $owner ? PHP_INT_MAX : $now + (int) self::rule( $svc, 'ahead' ) * DAY_IN_SECONDS;
@@ -873,11 +875,12 @@ class Qwoo_Appointments {
                     for ( $u = $a; $u < $b; $u++ ) {
                         if ( isset( $taken[ $u ] ) && ( $sess === '' || $taken[ $u ] !== $sess ) ) { $ok = false; break; }
                     }
-                    if ( ! $ok ) continue;
                     $slot = [ 'start' => gmdate( 'Y-m-d\TH:i:s\Z', $ts ), 'time' => sprintf( '%02d:%02d', intdiv( $m, 60 ), $m % 60 ) ];
+                    // The Booking block can show taken times in grey ("with_taken"); never for booking checks.
+                    if ( ! $ok ) { if ( $show_taken ) $list[] = $slot + [ 'taken' => true ]; continue; }
                     if ( $sess !== '' ) {
                         $left = (int) $svc['capacity'] - (int) ( $places[ $sess ] ?? 0 );
-                        if ( $left < $seats ) continue;
+                        if ( $left < $seats ) { if ( $show_taken ) $list[] = $slot + [ 'taken' => true ]; continue; }
                         $slot['left'] = $left;
                     }
                     $list[] = $slot;
