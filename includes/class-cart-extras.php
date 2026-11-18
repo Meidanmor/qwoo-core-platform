@@ -109,6 +109,23 @@ class Qwoo_Cart_Extras {
                 ],
             ],
         ] );
+        // The order (thank-you page): where to collect it, for local pickup with an address.
+        $order_schema = 'Automattic\WooCommerce\StoreApi\Schemas\V1\OrderSchema';
+        if ( class_exists( $order_schema ) ) {
+            woocommerce_store_api_register_endpoint_data( [
+                'endpoint'        => $order_schema::IDENTIFIER,
+                'namespace'       => 'qwoo_pickup',
+                'data_callback'   => static function ( $order ) {
+                    if ( ! $order instanceof WC_Order ) return [];
+                    foreach ( $order->get_items( 'shipping' ) as $line ) {
+                        $address = trim( (string) $line->get_meta( 'qwoo_pickup_address' ) );
+                        if ( $address !== '' ) return [ 'address' => $address ];
+                    }
+                    return [];
+                },
+                'schema_callback' => static fn() => [],
+            ] );
+        }
     }
 
     public static function data() {
