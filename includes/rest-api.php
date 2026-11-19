@@ -426,26 +426,76 @@ add_action('rest_api_init', function () {
     register_rest_route('qwoo/v1', '/pwa/save-subscription', [
         'methods'  => 'POST',
         'callback' => 'pwa_save_push_subscription',
-        'permission_callback' => function () {
-            return qwoo_rate_limit_check('pwa_save_subscription', 20, 5 * MINUTE_IN_SECONDS);
-        },
+        // Rate limit inside the callback (permission callbacks also run for the Allow header).
+        'permission_callback' => '__return_true',
     ]);
 
     register_rest_route('qwoo/v1', '/pwa/remove-subscription', [
         'methods'  => 'POST',
         'callback' => 'pwa_remove_push_subscription',
-        'permission_callback' => function () {
-            return qwoo_rate_limit_check('pwa_remove_subscription', 20, 5 * MINUTE_IN_SECONDS);
-        },
+        'permission_callback' => '__return_true',
     ]);
 });
 
 /*--------------------------------------------------------------
 # 3. Save / Update Subscription
 --------------------------------------------------------------*/
+/**
+ * A push address the store may send to. Web push: https on a known push
+ * service only (the store posts to this address, so anything else would let
+ * a visitor make the server call any URL). Native app tokens aren't URLs:
+ * they go to FCM inside the message body, so only their shape is checked.
+ */
+function qwoo_push_endpoint_ok($endpoint, $native)
+{
+    $endpoint = (string) $endpoint;
+    if ($endpoint === '' || strlen($endpoint) > 2048) {
+        return false;
+    }
+    if ($native) {
+        return (bool) preg_match('/^[A-Za-z0-9:_\-.]+$/', $endpoint);
+    }
+    $parts = wp_parse_url($endpoint);
+    if (!is_array($parts) || strtolower($parts['scheme'] ?? '') !== 'https' || empty($parts['host'])
+        || isset($parts['user']) || isset($parts['pass']) || (isset($parts['port']) && (int) $parts['port'] !== 443)) {
+        return false;
+    }
+    $host = strtolower($parts['host']);
+    if (in_array($host, ['fcm.googleapis.com', 'updates.push.services.mozilla.com'], true)) {
+        return true;
+    }
+    // web.push.apple.com and the like; Windows / Edge: wns2-xxx.notify.windows.com.
+    return (bool) preg_match('/^([a-z0-9-]+\.)+(push\.apple\.com|notify\.windows\.com)$/', $host);
+}
+
+/**
+ * Proof that the caller owns a device's subscription: its push address
+ * ("endpoint") or that address's sha256 ("endpoint_hash").
+ * Returns 'none' (no proof sent), 'ok' or 'bad'.
+ */
+function qwoo_push_device_proof($device_id, $data)
+{
+    global $wpdb;
+    $endpoint = isset($data['endpoint']) ? trim((string) $data['endpoint']) : '';
+    $hash = $endpoint !== '' ? hash('sha256', $endpoint) : strtolower(trim((string) ($data['endpoint_hash'] ?? '')));
+    if ($hash === '') {
+        return 'none';
+    }
+    $stored = (string) $wpdb->get_var($wpdb->prepare(
+        "SELECT endpoint_hash FROM {$wpdb->prefix}pwa_push_subscriptions WHERE device_id = %s LIMIT 1",
+        (string) $device_id
+    ));
+    return $stored !== '' && hash_equals($stored, $hash) ? 'ok' : 'bad';
+}
+
 function pwa_save_push_subscription($request)
 {
     global $wpdb;
+
+    $limited = qwoo_rate_limit_check('pwa_save_subscription', 20, 5 * MINUTE_IN_SECONDS);
+    if (is_wp_error($limited)) {
+        return $limited;
+    }
 
     $table = $wpdb->prefix . 'pwa_push_subscriptions';
     $data = $request->get_json_params();
@@ -461,7 +511,13 @@ function pwa_save_push_subscription($request)
         ], 400);
     }
 
-    $endpoint = trim($subscription['endpoint']);
+    $endpoint = trim((string) $subscription['endpoint']);
+    if (!qwoo_push_endpoint_ok($endpoint, !empty($subscription['native']))) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Unknown push address'
+        ], 400);
+    }
     $endpoint_hash = hash('sha256', $endpoint);
 
     $keys = $subscription['keys'] ?? [];
@@ -490,14 +546,23 @@ function pwa_save_push_subscription($request)
 
     $existing_id = null;
 
-// First priority = same device
+// First priority = same device, but only with that device's own push address:
+// a device id alone (it can leak) must never move someone else's row to
+// another address. A different address (the browser renewed it, or someone
+// else) is saved as its own row without the device id; the device id can be
+// claimed again once the old row is gone (its address stops working).
     if ($device_id) {
-        $existing_id = $wpdb->get_var(
+        $owned = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT id FROM $table WHERE device_id = %s LIMIT 1",
+                "SELECT id, endpoint_hash FROM $table WHERE device_id = %s LIMIT 1",
                 $device_id
             )
         );
+        if ($owned && hash_equals((string) $owned->endpoint_hash, $endpoint_hash)) {
+            $existing_id = $owned->id;
+        } elseif ($owned) {
+            $device_id = null;
+        }
     }
 
 // Second priority = same endpoint
@@ -514,8 +579,9 @@ function pwa_save_push_subscription($request)
 
         $wpdb->update(
             $table,
-            [
+            array_filter([
                 'device_id' => $device_id,
+            ]) + [
                 'endpoint' => $endpoint,
                 'endpoint_hash' => $endpoint_hash,
                 'cart_token' => $cart_token,
@@ -566,6 +632,11 @@ function pwa_save_push_subscription($request)
 function pwa_remove_push_subscription($request) {
     global $wpdb;
 
+    $limited = qwoo_rate_limit_check('pwa_remove_subscription', 20, 5 * MINUTE_IN_SECONDS);
+    if (is_wp_error($limited)) {
+        return $limited;
+    }
+
     $table = $wpdb->prefix . 'pwa_push_subscriptions';
     $data = $request->get_json_params();
 
@@ -576,7 +647,7 @@ function pwa_remove_push_subscription($request) {
     $id = 0;
     if ($endpoint) {
         $id = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM $table WHERE endpoint_hash = %s", hash('sha256', $endpoint)));
-    } elseif ($device_id) {
+    } elseif ($device_id && qwoo_push_device_proof($device_id, (array) $data) === 'ok') {
         $id = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM $table WHERE device_id = %s LIMIT 1", $device_id));
     }
     if ($endpoint || $device_id) {
@@ -608,6 +679,19 @@ function update_subscription_cart_token($request)
 
     $device_id = isset($data['device_id']) ? sanitize_text_field($data['device_id']) : null;
     $new_cart_token = isset($data['cart_token']) ? sanitize_text_field($data['cart_token']) : null;
+
+    // Legit clients send at most two calls per real background/foreground
+    // switch (see queueCartTokenSync() in the frontend), but many visitors
+    // can share one IP (offices, mobile carrier NAT), so the per-IP cap is
+    // generous; the same cap also applies per device_id.
+    $limited = qwoo_rate_limit_check('pwa_update_cart_token', 120, 5 * MINUTE_IN_SECONDS, $device_id);
+    if (is_wp_error($limited)) {
+        return $limited;
+    }
+    // A wrong push address for this device is refused (newer storefronts send it).
+    if ($device_id && qwoo_push_device_proof($device_id, (array) $data) === 'bad') {
+        return new WP_REST_Response(['success' => false], 403);
+    }
 
     // 'hidden' -> app went to background, start the abandoned-cart clock
     // 'active' -> app is in foreground, cancel any pending abandoned-cart send
@@ -671,16 +755,7 @@ add_action('rest_api_init', function() {
     register_rest_route('qwoo/v1', '/pwa/update-cart-token', [
         'methods' => 'POST',
         'callback' => 'update_subscription_cart_token',
-        // Legit clients send at most two calls per real background/foreground
-        // switch (see queueCartTokenSync() in the frontend), but many
-        // visitors can share one IP (offices, mobile carrier NAT), so the
-        // per-IP cap is generous; each call is a single indexed UPDATE. The
-        // same cap also applies per device_id, so one device can't exhaust a
-        // shared IP's allowance for everyone else.
-        'permission_callback' => function ( $request ) {
-            $params    = $request->get_json_params();
-            $device_id = isset( $params['device_id'] ) ? sanitize_text_field( (string) $params['device_id'] ) : null;
-            return qwoo_rate_limit_check( 'pwa_update_cart_token', 120, 5 * MINUTE_IN_SECONDS, $device_id );
-        },
+        // Rate limit inside the callback.
+        'permission_callback' => '__return_true',
     ]);
 });

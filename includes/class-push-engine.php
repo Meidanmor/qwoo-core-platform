@@ -164,8 +164,17 @@ class Qwoo_Push_Engine {
     public static function rest_sync( WP_REST_Request $r ) {
         $p = (array) $r->get_json_params();
         $device = sanitize_text_field( (string) ( $p['device_id'] ?? '' ) );
-        if ( $device === '' || ! qwoo_rate_limit_check( 'pwa_sync', 60, 5 * MINUTE_IN_SECONDS, $device ) ) {
+        if ( $device === '' || is_wp_error( qwoo_rate_limit_check( 'pwa_sync', 60, 5 * MINUTE_IN_SECONDS, $device ) ) ) {
             return new WP_REST_Response( [ 'success' => false ], $device === '' ? 400 : 429 );
+        }
+        // The device's push address (or its hash) proves the caller owns it.
+        // A wrong one is refused; without one (older storefronts) the
+        // language and saved products still update, but the device is never
+        // tied to the signed-in account (a leaked device id must not move
+        // someone's notifications to another account).
+        $proof = qwoo_push_device_proof( $device, $p );
+        if ( $proof === 'bad' ) {
+            return new WP_REST_Response( [ 'success' => false ], 403 );
         }
         global $wpdb;
         $fields = [ 'lang' => self::request_lang(), 'updated_at' => current_time( 'mysql' ) ];
@@ -173,7 +182,7 @@ class Qwoo_Push_Engine {
             $fields['wishlist'] = self::wishlist_value( $p['wishlist'] );
         }
         $user = get_current_user_id();
-        if ( $user ) {
+        if ( $user && $proof === 'ok' ) {
             $fields['customer_id'] = $user;
         }
         $wpdb->update( self::subs_table(), $fields, [ 'device_id' => $device ] );
@@ -187,8 +196,11 @@ class Qwoo_Push_Engine {
         $product = absint( $p['product_id'] ?? 0 );
         if ( $device === '' || ! $product ) return new WP_REST_Response( [ 'success' => false ], 400 );
         if ( ! self::allowed() ) return new WP_REST_Response( [ 'success' => false, 'message' => 'no_push' ], 403 );
-        if ( ! qwoo_rate_limit_check( 'pwa_notify_me', 30, 5 * MINUTE_IN_SECONDS, $device ) ) {
+        if ( is_wp_error( qwoo_rate_limit_check( 'pwa_notify_me', 30, 5 * MINUTE_IN_SECONDS, $device ) ) ) {
             return new WP_REST_Response( [ 'success' => false ], 429 );
+        }
+        if ( qwoo_push_device_proof( $device, $p ) === 'bad' ) {
+            return new WP_REST_Response( [ 'success' => false ], 403 );
         }
         $item = wc_get_product( $product );
         if ( ! $item || $item->get_status() !== 'publish' ) return new WP_REST_Response( [ 'success' => false ], 404 );
@@ -211,7 +223,7 @@ class Qwoo_Push_Engine {
         if ( ! $id || ! hash_equals( self::open_key( $id ), (string) ( $p['k'] ?? '' ) ) ) {
             return new WP_REST_Response( [ 'success' => false ], 400 );
         }
-        if ( ! qwoo_rate_limit_check( 'pwa_opened', 60, 5 * MINUTE_IN_SECONDS ) ) {
+        if ( is_wp_error( qwoo_rate_limit_check( 'pwa_opened', 60, 5 * MINUTE_IN_SECONDS ) ) ) {
             return new WP_REST_Response( [ 'success' => false ], 429 );
         }
         global $wpdb;

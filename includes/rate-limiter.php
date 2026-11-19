@@ -78,21 +78,37 @@ function qwoo_rate_limit_window( string $key, int $window_secs, int $now ): arra
 }
 
 /**
- * Best-effort client IP resolution. Trusts X-Forwarded-For only if you're
- * behind a known proxy (Vercel/Cloudflare) — adjust if your infra differs.
+ * The shopper's IP. Shoppers reach this store only through the
+ * storefront's server, which sends the shopper's address in
+ * X-Qwoo-Client-IP together with the proxy secret. That header is trusted
+ * only when the request carries a valid secret; any other caller gets its
+ * own connection address (REMOTE_ADDR). CF-Connecting-IP and
+ * X-Forwarded-For are never trusted: anyone can send them.
  */
 function qwoo_get_client_ip(): ?string {
-    // Cloudflare
-    if ( ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) {
-        return sanitize_text_field( $_SERVER['HTTP_CF_CONNECTING_IP'] );
+    static $ip = false;
+    if ( $ip !== false ) {
+        return $ip;
     }
-    // Common proxy header — take the first (client) IP in the chain
-    if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-        $parts = explode( ',', $_SERVER['HTTP_X_FORWARDED_FOR'] );
-        return sanitize_text_field( trim( $parts[0] ) );
+    $ip = null;
+    $client = trim( (string) ( $_SERVER['HTTP_X_QWOO_CLIENT_IP'] ?? '' ) );
+    if ( $client !== '' && filter_var( $client, FILTER_VALIDATE_IP ) && qwoo_request_has_proxy_secret() ) {
+        $ip = $client;
+        return $ip;
     }
-    if ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
-        return sanitize_text_field( $_SERVER['REMOTE_ADDR'] );
+    $remote = trim( (string) ( $_SERVER['REMOTE_ADDR'] ?? '' ) );
+    if ( $remote !== '' && filter_var( $remote, FILTER_VALIDATE_IP ) ) {
+        $ip = $remote;
     }
-    return null;
+    return $ip;
+}
+
+/** True when this request carries the storefront's proxy secret (constant-time compare). */
+function qwoo_request_has_proxy_secret(): bool {
+    $provided = (string) ( $_SERVER['HTTP_X_PROXY_SECRET'] ?? '' );
+    if ( $provided === '' || ! class_exists( 'Qwoo_Technical_Settings' ) ) {
+        return false;
+    }
+    $expected = (string) Qwoo_Technical_Settings::get_proxy_secret();
+    return $expected !== '' && hash_equals( $expected, $provided );
 }

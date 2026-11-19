@@ -45,15 +45,29 @@ add_action('rest_api_init', function () {
         'permission_callback' => '__return_true',
     ]);
 });
+/**
+ * A REST callback that checks a rate limit first (per IP, and per the value
+ * of $id_param when given) and only then runs $handler.
+ */
+function qwoo_limited( callable $handler, string $action, int $max, int $window, string $id_param = '' ): Closure {
+    return static function ( WP_REST_Request $request ) use ( $handler, $action, $max, $window, $id_param ) {
+        $id      = $id_param !== '' ? (string) $request->get_param( $id_param ) : null;
+        $limited = qwoo_rate_limit_check( $action, $max, $window, $id );
+        if ( is_wp_error( $limited ) ) {
+            return $limited;
+        }
+        return call_user_func( $handler, $request );
+    };
+}
+
 add_action('rest_api_init', function () {
 
     // Login
     register_rest_route('qwoo/v1', '/login', [
         'methods'             => 'POST',
-        'callback'            => 'qwoo_handle_login',
-        'permission_callback' => function ( $request ) {
-            return qwoo_rate_limit_check( 'login', 20, 5 * MINUTE_IN_SECONDS, $request->get_param( 'username' ) );
-        },
+        // Rate limits run in the callback (permission callbacks also run to build the Allow header).
+        'callback'            => qwoo_limited( 'qwoo_handle_login', 'login', 20, 5 * MINUTE_IN_SECONDS, 'username' ),
+        'permission_callback' => '__return_true',
         'args'                => [
             'username' => [
                 'required'          => true,
@@ -104,31 +118,25 @@ add_action('rest_api_init', function () {
     // Google Login
     register_rest_route('qwoo/v1', '/google-login', [
         'methods'             => 'POST',
-        'callback'            => 'qwoo_handle_google_login',
-        'permission_callback' => function () {
-            return qwoo_rate_limit_check('google_login', 10, 5 * MINUTE_IN_SECONDS);
-        },
+        'callback'            => qwoo_limited( 'qwoo_handle_google_login', 'google_login', 10, 5 * MINUTE_IN_SECONDS ),
+        'permission_callback' => '__return_true',
     ]);
 
     // Google Login Redirect (OAuth code exchange)
     register_rest_route('qwoo/v1', '/google-login-redirect', [
         'methods'             => 'POST',
-        'callback'            => 'qwoo_handle_google_login_redirect',
-        'permission_callback' => function () {
-            return qwoo_rate_limit_check('google_login', 10, 5 * MINUTE_IN_SECONDS);
-        },
+        'callback'            => qwoo_limited( 'qwoo_handle_google_login_redirect', 'google_login', 10, 5 * MINUTE_IN_SECONDS ),
+        'permission_callback' => '__return_true',
     ]);
 
     // Forgot Password — sends a reset-password email if the account exists
     register_rest_route('qwoo/v1', '/forgot-password', [
         'methods'             => 'POST',
-        'callback'            => 'qwoo_handle_forgot_password',
-        'permission_callback' => function ( $request ) {
-            // Deliberately stricter than /login — this endpoint sends email
-            // to whatever address is supplied, so it's also a spam vector,
-            // not just a brute-force target.
-            return qwoo_rate_limit_check( 'forgot_password', 5, 15 * MINUTE_IN_SECONDS, $request->get_param( 'username' ) );
-        },
+        // Deliberately stricter than /login — this endpoint sends email
+        // to whatever address is supplied, so it's also a spam vector,
+        // not just a brute-force target.
+        'callback'            => qwoo_limited( 'qwoo_handle_forgot_password', 'forgot_password', 5, 15 * MINUTE_IN_SECONDS, 'username' ),
+        'permission_callback' => '__return_true',
         'args'                => [
             'username' => [
                 'required'          => true,
@@ -141,10 +149,8 @@ add_action('rest_api_init', function () {
     // Reset Password — consumes the key from the emailed link
     register_rest_route('qwoo/v1', '/reset-password', [
         'methods'             => 'POST',
-        'callback'            => 'qwoo_handle_reset_password',
-        'permission_callback' => function ( $request ) {
-            return qwoo_rate_limit_check( 'reset_password', 10, 15 * MINUTE_IN_SECONDS, $request->get_param( 'login' ) );
-        },
+        'callback'            => qwoo_limited( 'qwoo_handle_reset_password', 'reset_password', 10, 15 * MINUTE_IN_SECONDS, 'login' ),
+        'permission_callback' => '__return_true',
         'args'                => [
             'login' => [
                 'required'          => true,
@@ -193,13 +199,16 @@ function qwoo_handle_login(WP_REST_Request $request): WP_REST_Response {
             }
         }
 
+        // One answer for a wrong email and a wrong password, so nobody can
+        // find out which addresses have an account here.
+        if (in_array($code, ['invalid_username', 'invalid_email', 'incorrect_password', 'invalidcombo'], true)) {
+            $code = 'invalid_login';
+        }
         $messages = [
-            'invalid_username'   => 'No account found with that username or email.',
-            'invalid_email'      => 'No account found with that email address.',
-            'incorrect_password' => 'Incorrect password. Please try again.',
-            'empty_username'     => 'Please enter your username or email.',
-            'empty_password'     => 'Please enter your password.',
-            'invalidcombo'       => 'Incorrect username or password.',
+            'invalid_login'  => 'Wrong email or password.',
+            'empty_username' => 'Please enter your username or email.',
+            'empty_password' => 'Please enter your password.',
+            'qwoo_locked'    => 'Too many failed login attempts. Try again in 15 minutes.',
         ];
 
         return new WP_REST_Response(

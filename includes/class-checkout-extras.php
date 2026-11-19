@@ -163,7 +163,7 @@ class Qwoo_Checkout_Extras {
 
     public static function subscribe_from_order( $order ) {
         if ( ! $order || ! $order->get_meta( '_qwoo_marketing_optin' ) ) return;
-        Qwoo_Email_Marketing::subscribe( (string) $order->get_billing_email(), trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ), 'checkout', Qwoo_Email_Marketing::checkout_optin()['text'] );
+        Qwoo_Email_Marketing::subscribe( (string) $order->get_billing_email(), trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ), 'checkout', Qwoo_Email_Marketing::checkout_optin()['text'], '', false ); // a typed email: never re-adds an address that left
     }
 
     /** WooCommerce's own switches for creating an account at checkout. */

@@ -235,7 +235,9 @@ trait SB_Forms {
                     ],
             ] );
             // The Form block's own wording (its button or message) is the record of what they signed up for.
-            Qwoo_Email_Marketing::subscribe( strtolower( $reply_to ), '', 'form', 'Signed up with the newsletter form', Qwoo_Push_Engine::request_lang() );
+            // Never brings back an address that unsubscribed or was blocked: anyone can type
+            // any address here. The form still answers with its usual success message.
+            Qwoo_Email_Marketing::subscribe( strtolower( $reply_to ), '', 'form', 'Signed up with the newsletter form', Qwoo_Push_Engine::request_lang(), false );
             if ( $existing ) {
                 return rest_ensure_response( [ 'success' => true, 'message' => $success_message ] );
             }

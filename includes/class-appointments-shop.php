@@ -284,9 +284,12 @@ class Qwoo_Appointments_Shop {
     public static function rest_mine( WP_REST_Request $r ) {
         global $wpdb;
         $user = wp_get_current_user();
+        if ( ! $user->ID ) return self::no_cache( [ 'bookings' => [] ] );
+        // Only bookings made while signed in to this account (or tied to it by its order):
+        // a guest can type any email, so an email match proves nothing.
         $rows = (array) $wpdb->get_results( $wpdb->prepare(
-            'SELECT * FROM ' . Qwoo_Appointments::bookings_table() . " WHERE (customer_id = %d OR (email <> '' AND email = %s)) AND status IN ('confirmed','pending','requested','done','noshow','cancelled') ORDER BY start_utc DESC LIMIT 100",
-            (int) $user->ID, (string) $user->user_email
+            'SELECT * FROM ' . Qwoo_Appointments::bookings_table() . " WHERE customer_id = %d AND status IN ('confirmed','pending','requested','done','noshow','cancelled') ORDER BY start_utc DESC LIMIT 100",
+            (int) $user->ID
         ), ARRAY_A );
         $out = [];
         foreach ( $rows as $b ) {

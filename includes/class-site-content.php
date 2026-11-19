@@ -78,7 +78,12 @@ class Qwoo_Site_Content {
      * here, which switches publishing over for good.
      */
     public static function rest_site( WP_REST_Request $request ) {
-        if ( (int) $request->get_header( 'x-qwoo-storefront' ) >= self::STOREFRONT_VERSION && ! self::enabled() ) {
+        // Only the storefront's own server may switch it: the header must come with
+        // x-qwoo-storefront-sig = HMAC-SHA256('qwoo-storefront', proxy secret), which a
+        // visitor's header passed through the /wp-json proxy can't carry.
+        $sig = (string) $request->get_header( 'x-qwoo-storefront-sig' );
+        if ( (int) $request->get_header( 'x-qwoo-storefront' ) >= self::STOREFRONT_VERSION && ! self::enabled()
+            && $sig !== '' && hash_equals( hash_hmac( 'sha256', 'qwoo-storefront', Qwoo_Technical_Settings::get_proxy_secret() ), $sig ) ) {
             update_option( self::MODE, 'local', true );
         }
 

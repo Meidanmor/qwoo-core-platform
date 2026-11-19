@@ -199,10 +199,38 @@ class Qwoo_Reviews {
         if ( self::already_reviewed( $product_id, (int) $user->ID, $user->user_email ) ) {
             return 'reviewed';
         }
-        return wc_customer_bought_product( $user->user_email, $user->ID, $product_id ) ? 'ok' : 'not_bought';
+        return self::account_bought( (int) $user->ID, (int) $product_id ) ? 'ok' : 'not_bought';
     }
 
     /** Any review of this product by this person (waiting, approved or hidden), so each person reviews once. */
+    /**
+     * Whether this account's own paid orders hold the product. Not by email:
+     * wc_customer_bought_product() also counts guest orders with the
+     * account's email, and anyone can check out as a guest with any email.
+     */
+    private static function account_bought( int $user_id, int $product_id ): bool {
+        if ( ! $user_id || ! $product_id || ! function_exists( 'wc_get_orders' ) ) {
+            return false;
+        }
+        $ids = wc_get_orders( [
+            'customer_id' => $user_id,
+            'status'      => wc_get_is_paid_statuses(),
+            'type'        => 'shop_order',
+            'limit'       => 200,
+            'return'      => 'ids',
+        ] );
+        foreach ( $ids as $id ) {
+            $order = wc_get_order( $id );
+            if ( ! $order ) continue;
+            foreach ( $order->get_items() as $item ) {
+                if ( (int) $item->get_product_id() === $product_id || (int) $item->get_variation_id() === $product_id ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static function already_reviewed( $product_id, $user_id, $email ) {
         $base = [ 'post_id' => $product_id, 'type' => 'review', 'status' => [ 'hold', 'approve' ], 'count' => true ];
         if ( $user_id && get_comments( $base + [ 'user_id' => $user_id ] ) ) {
@@ -255,7 +283,7 @@ class Qwoo_Reviews {
             if ( ! $user || ! $user->ID ) {
                 return new WP_Error( 'qwoo_reviews_login', 'Sign in to write a review.', [ 'status' => 401 ] );
             }
-            if ( ! wc_customer_bought_product( $user->user_email, $user->ID, $product->get_id() ) ) {
+            if ( ! self::account_bought( (int) $user->ID, (int) $product->get_id() ) ) {
                 return new WP_Error( 'qwoo_reviews_buyers', 'Only customers who bought this product can review it.', [ 'status' => 403 ] );
             }
             $user_id = (int) $user->ID;

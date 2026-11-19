@@ -11,8 +11,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   - the theme/plugin file editor in wp-admin;
  *   - listing users without being signed in (REST /wp/v2/users, ?author=N);
  *   - the WordPress version in the page source;
- *   - repeated failed logins: 5 per address or account in 15 minutes,
- *     then a 15 minute pause;
+ *   - repeated failed logins: 5 per address in 15 minutes (an account
+ *     only when attacked from several addresses; see below);
  *   - basic security headers on every response.
  */
 class Qwoo_Platform_Hardening {
@@ -72,26 +72,70 @@ class Qwoo_Platform_Hardening {
         }
     }
 
-    /* ---------------- login throttling ---------------- */
+    /* ---------------- login throttling ----------------
+     *
+     * Two counters, each with a FIXED 15 minute window that starts at the
+     * first failure (a new failure never moves the window's end):
+     *
+     *  - per client IP (qwoo_get_client_ip: the shopper's address sent by
+     *    the storefront with the proxy secret, otherwise REMOTE_ADDR):
+     *    5 failures lock that address until the window ends;
+     *  - per username: only locked when it fails 10 times from 3 or more
+     *    different addresses (a spread-out attack). One address can't lock
+     *    someone else's account (its own IP lock stops it first), the lock
+     *    ends with the window, and resetting the password still works.
+     */
 
-    private static function keys( $username ) {
-        $ip = (string) ( $_SERVER['REMOTE_ADDR'] ?? '' );
-        return [ 'qwoo_lf_ip_' . md5( $ip ), 'qwoo_lf_user_' . md5( strtolower( (string) $username ) ) ];
+    const USER_MAX_FAILURES = 10;
+    const USER_MIN_IPS      = 3;
+
+    private static function ip_key() {
+        $ip = function_exists( 'qwoo_get_client_ip' ) ? (string) qwoo_get_client_ip() : (string) ( $_SERVER['REMOTE_ADDR'] ?? '' );
+        return 'qwoo_lf_ip_' . md5( $ip );
+    }
+
+    private static function user_key( $username ) {
+        return 'qwoo_lf_user_' . md5( strtolower( (string) $username ) );
+    }
+
+    /** A counter's current window: [ n, until, ips ]. */
+    private static function window( $key ) {
+        $w = get_transient( $key );
+        if ( ! is_array( $w ) || (int) ( $w['until'] ?? 0 ) <= time() ) {
+            return [ 'n' => 0, 'until' => time() + self::LOCK_SECONDS, 'ips' => [] ];
+        }
+        $w['ips'] = isset( $w['ips'] ) && is_array( $w['ips'] ) ? $w['ips'] : [];
+        return $w;
     }
 
     public static function refuse_when_locked( $user, $username ) {
-        foreach ( self::keys( $username ) as $key ) {
-            if ( (int) get_transient( $key ) >= self::MAX_FAILURES ) {
-                return new WP_Error( 'qwoo_locked', __( 'Too many failed login attempts. Try again in 15 minutes.' ) );
-            }
+        $locked = self::window( self::ip_key() )['n'] >= self::MAX_FAILURES;
+        if ( ! $locked && (string) $username !== '' ) {
+            $u      = self::window( self::user_key( $username ) );
+            $locked = $u['n'] >= self::USER_MAX_FAILURES && count( $u['ips'] ) >= self::USER_MIN_IPS;
+        }
+        if ( $locked ) {
+            return new WP_Error( 'qwoo_locked', __( 'Too many failed login attempts. Try again in 15 minutes.' ) );
         }
         return $user;
     }
 
     public static function count_failure( $username ) {
-        foreach ( self::keys( $username ) as $key ) {
-            set_transient( $key, (int) get_transient( $key ) + 1, self::LOCK_SECONDS );
+        $ip_key = self::ip_key();
+        $w      = self::window( $ip_key );
+        set_transient( $ip_key, [ 'n' => $w['n'] + 1, 'until' => $w['until'] ], max( 1, $w['until'] - time() ) );
+
+        if ( (string) $username === '' ) {
+            return;
         }
+        $key = self::user_key( $username );
+        $u   = self::window( $key );
+        $ips = $u['ips'];
+        $h   = substr( $ip_key, -12 );
+        if ( ! in_array( $h, $ips, true ) && count( $ips ) < 20 ) {
+            $ips[] = $h;
+        }
+        set_transient( $key, [ 'n' => $u['n'] + 1, 'until' => $u['until'], 'ips' => $ips ], max( 1, $u['until'] - time() ) );
     }
 }
 

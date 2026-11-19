@@ -64,6 +64,34 @@ class Qwoo_Back_In_Stock {
         ] );
     }
 
+    const PHONE_PER_PRODUCT_DAY = 50;
+    const EMAIL_PER_PRODUCT_DAY = 200;
+
+    /** Sign-ups for one product in the last 24 hours (phone or email). */
+    private static function today_count( $product, $phone ) {
+        global $wpdb;
+        $table = self::table();
+        $like  = $phone ? 'LIKE' : 'NOT LIKE';
+        return (int) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM $table WHERE product_id = %d AND email $like 'tel:%%' AND created_at > %s",
+            $product, gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS )
+        ) );
+    }
+
+    /** A fixed 24 hour counter for one key (no IP part). False once $max is reached. */
+    private static function daily_cap( $key, $max ) {
+        $now = time();
+        $hit = get_transient( $key );
+        if ( ! is_array( $hit ) || (int) ( $hit['until'] ?? 0 ) <= $now ) {
+            $hit = [ 'n' => 0, 'until' => $now + DAY_IN_SECONDS ];
+        }
+        if ( (int) $hit['n'] >= $max ) {
+            return false;
+        }
+        set_transient( $key, [ 'n' => (int) $hit['n'] + 1, 'until' => (int) $hit['until'] ], max( 1, (int) $hit['until'] - $now ) );
+        return true;
+    }
+
     /** { product_id, phone, channel: wa | sms, website } (only while the owner offers that channel). */
     public static function rest_phone( WP_REST_Request $r ) {
         $p = (array) $r->get_json_params();
@@ -72,7 +100,7 @@ class Qwoo_Back_In_Stock {
         if ( ! $s['on'] || empty( $s[ $channel ] ) || ! class_exists( 'Qwoo_Platform_Connection' ) || ! Qwoo_Platform_Connection::is_connected() ) {
             return new WP_REST_Response( [ 'success' => false, 'message' => 'This store doesn\'t take these requests.' ], 403 );
         }
-        if ( ! qwoo_rate_limit_check( 'back_in_stock_phone', 5, 15 * MINUTE_IN_SECONDS ) ) {
+        if ( is_wp_error( qwoo_rate_limit_check( 'back_in_stock_phone', 5, 15 * MINUTE_IN_SECONDS ) ) ) {
             return new WP_REST_Response( [ 'success' => false, 'message' => 'Too many requests. Try again in a few minutes.' ], 429 );
         }
         if ( trim( (string) ( $p['website'] ?? '' ) ) !== '' ) {
@@ -91,6 +119,11 @@ class Qwoo_Back_In_Stock {
         $product = $item->get_parent_id() ?: $item->get_id();
         global $wpdb;
         $table = self::table();
+        // Each message costs money: one number takes at most 5 sign-ups a day,
+        // one product at most PHONE_PER_PRODUCT_DAY new numbers a day.
+        if ( ! self::daily_cap( 'qwoo_bis_tel_' . md5( $digits ), 5 ) || self::today_count( $product, true ) >= self::PHONE_PER_PRODUCT_DAY ) {
+            return new WP_REST_Response( [ 'success' => false, 'message' => 'Too many requests. Try again tomorrow.' ], 429 );
+        }
         $wpdb->query( $wpdb->prepare( "DELETE FROM $table WHERE product_id = %d AND email = %s", $product, $phone ) );
         $wpdb->insert( $table, [
             'product_id' => $product,
@@ -109,7 +142,7 @@ class Qwoo_Back_In_Stock {
             return new WP_REST_Response( [ 'success' => false, 'message' => 'This store doesn\'t take these requests.' ], 403 );
         }
         // Limits in the callback: WordPress runs permission callbacks for the Allow header too.
-        if ( ! qwoo_rate_limit_check( 'back_in_stock_email', 8, 15 * MINUTE_IN_SECONDS ) ) {
+        if ( is_wp_error( qwoo_rate_limit_check( 'back_in_stock_email', 8, 15 * MINUTE_IN_SECONDS ) ) ) {
             return new WP_REST_Response( [ 'success' => false, 'message' => 'Too many requests. Try again in a few minutes.' ], 429 );
         }
         if ( trim( (string) ( $p['website'] ?? '' ) ) !== '' ) {
@@ -126,6 +159,9 @@ class Qwoo_Back_In_Stock {
         $product = $item->get_parent_id() ?: $item->get_id();
         global $wpdb;
         $table = self::table();
+        if ( self::today_count( $product, false ) >= self::EMAIL_PER_PRODUCT_DAY ) {
+            return new WP_REST_Response( [ 'success' => false, 'message' => 'Too many requests. Try again tomorrow.' ], 429 );
+        }
         $wpdb->query( $wpdb->prepare( "DELETE FROM $table WHERE product_id = %d AND email = %s", $product, $email ) );
         $wpdb->insert( $table, [
             'product_id' => $product,

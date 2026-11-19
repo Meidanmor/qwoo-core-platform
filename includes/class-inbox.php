@@ -275,9 +275,13 @@ class Qwoo_Inbox {
     /** Opens a conversation with its first message, tells the owner, and confirms to the shopper. */
     private static function open( array $conv, string $body ): int {
         global $wpdb;
-        $user = get_user_by( 'email', $conv['email'] );
+        // Tied to an account only when that shopper is signed in: a typed email
+        // proves nothing, so a guest's conversation never joins the account
+        // that has the same address (the dashboard shows it as not signed in).
+        $user = is_user_logged_in() ? wp_get_current_user() : null;
+        $mine = $user && $user->ID && strtolower( (string) $user->user_email ) === strtolower( (string) $conv['email'] );
         $ok   = $wpdb->insert( self::conversations(), $conv + [
-            'user_id' => $user ? (int) $user->ID : 0,
+            'user_id' => $mine ? (int) $user->ID : 0,
             'status'  => 'open',
             'unread'  => 1,
             'lang'    => class_exists( 'Qwoo_Push_Engine' ) ? mb_substr( (string) Qwoo_Push_Engine::request_lang(), 0, 8 ) : '',
@@ -359,6 +363,8 @@ class Qwoo_Inbox {
             'unread'      => (bool) $c['unread'],
             'preview'     => $c['preview'],
             'last_author' => $c['last_author'],
+            // Written while signed in to their account; false = a guest, the email address wasn't checked.
+            'verified'    => (int) $c['user_id'] > 0,
             'created'     => strtotime( $c['created'] . ' UTC' ),
             'updated'     => strtotime( $c['updated'] . ' UTC' ),
         ];
@@ -619,7 +625,10 @@ class Qwoo_Inbox {
             'product_id' => $product_id,
         ], $body );
         if ( ! $id ) return new WP_Error( 'failed', $he ? 'לא הצלחנו לשמור את ההודעה. נסו שוב.' : 'We couldn\'t save your message. Please try again.', [ 'status' => 500 ] );
-        return rest_ensure_response( [ 'ok' => true, 'k' => self::key( $id, $email ) ] );
+        // A guest gets no key: the conversation link goes only to the email
+        // address (the answers are emailed with it), so typing someone else's
+        // address never opens their conversation. Signed-in shoppers keep it.
+        return rest_ensure_response( $user ? [ 'ok' => true, 'k' => self::key( $id, $email ) ] : [ 'ok' => true, 'emailed' => true ] );
     }
 
     /** A conversation as the shopper sees it: no notes, no email, nothing about other shoppers. */
@@ -659,10 +668,10 @@ class Qwoo_Inbox {
     public static function rest_mine() {
         global $wpdb;
         $user  = wp_get_current_user();
-        $email = strtolower( (string) $user->user_email );
         $t     = self::conversations();
         $since = gmdate( 'Y-m-d H:i:s', time() - self::LINK_DAYS * DAY_IN_SECONDS );
-        $rows  = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE ( user_id = %d OR email = %s ) AND updated > %s ORDER BY updated DESC LIMIT 30", (int) $user->ID, $email, $since ), ARRAY_A ) ?: [];
+        // Only conversations written while signed in to this account (an email match isn't proof).
+        $rows  = $user->ID ? ( $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $t WHERE user_id = %d AND updated > %s ORDER BY updated DESC LIMIT 30", (int) $user->ID, $since ), ARRAY_A ) ?: [] ) : [];
         $list  = [];
         foreach ( $rows as $c ) {
             $list[] = [
