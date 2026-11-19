@@ -2870,6 +2870,11 @@ abstract class Shop_Builder_Constants {
                     ] + self::PRODUCT_LIST_EXTRAS + [
                             'columns'      => [ 'type' => 'number', 'label' => 'Columns', 'tab' => 'content', 'responsive' => true, 'min' => 1, 'max' => 6,
                                     'default' => [ 'desktop' => 4, 'tablet' => 3, 'mobile' => 2 ] ],
+                            // Fewer products than columns (3 products, 4 columns): the empty column stayed, so the
+                            // products couldn't be centred (owner, 2026-11-19). Default keeps saved grids as they are.
+                            'short_row' => [ 'type' => 'select', 'label' => 'Fewer Products Than Columns', 'tab' => 'content', 'default' => 'start',
+                                    'options' => [ 'start' => 'Keep the empty columns', 'center' => 'Center the products', 'end' => 'Products at the end' ],
+                                    'help' => 'When there are fewer products than columns, the products keep their width and move to the center or the end.' ],
                             'card_template' => [ 'type' => 'loop_template', 'loop' => 'product', 'label' => 'Loop Template', 'tab' => 'content', 'default' => '' ],
 
                             'show_view_all' => [ 'type' => 'toggle', 'label' => 'Show a "View all" button', 'tab' => 'content' ],
