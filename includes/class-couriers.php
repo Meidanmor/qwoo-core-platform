@@ -674,7 +674,7 @@ class Qwoo_Couriers {
         // Lionwheel's servers have no proxy secret: outside the protected "qwoo" namespace on purpose.
         // The secret in the address picks the store's hook; the task is then read from Lionwheel.
         register_rest_route( 'qwoo-couriers/v1', '/lionwheel/(?P<hook>[A-Za-z0-9]{40})', [
-            'methods'             => [ 'POST' ],
+            'methods'             => [ 'POST', 'PUT' ],
             'callback'            => [ __CLASS__, 'rest_lionwheel' ],
             'permission_callback' => '__return_true',
         ] );
@@ -694,8 +694,7 @@ class Qwoo_Couriers {
             return new WP_REST_Response( [ 'ok' => false ], 404 );
         }
         // The body only says which task: never trusted for the status.
-        $body = $r->get_json_params();
-        if ( ! is_array( $body ) ) $body = $r->get_body_params();
+        $body = $r->get_params(); // JSON, form or query: only the task id is read
         $task = '';
         foreach ( [ 'task_id', 'id' ] as $k ) {
             $v = $body[ $k ] ?? ( $body['task'][ $k ] ?? ( $body['data'][ $k ] ?? '' ) );
