@@ -70,6 +70,7 @@ class Qwoo_Media_Support {
         'odp'  => [ 'application/vnd.oasis.opendocument.presentation', 'file', [ 'application/vnd.oasis.opendocument.presentation', 'application/zip', 'application/octet-stream' ], 'zip' ],
         'csv'  => [ 'text/csv', 'file', [ 'text/csv', 'text/plain', 'application/csv' ], '' ],
         'txt'  => [ 'text/plain', 'file', [ 'text/plain' ], '' ],
+        'md'   => [ 'text/markdown', 'file', [ 'text/plain', 'text/markdown' ], '' ],
         'rtf'  => [ 'application/rtf', 'file', [ 'text/rtf', 'application/rtf' ], '' ],
         'mp3'  => [ 'audio/mpeg', 'audio', [ 'audio/mpeg', 'audio/mp3', 'audio/x-mpeg' ], '' ],
         'm4a'  => [ 'audio/mp4', 'audio', [ 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'video/mp4' ], '' ],
