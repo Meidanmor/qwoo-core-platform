@@ -3,7 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * The Media screen and image picker of the platform dashboard (used by
- * Qwoo_Platform_Dashboard): one image or video with where it's used, its
+ * Qwoo_Platform_Dashboard): one image, video, audio or other file (PDF,
+ * ZIP, office files…) with where it's used, its
  * alt text and name, and deleting it. The list itself is design_media
  * (Shop_Settings_Builder::platform_media), which the Store builder uses too.
  */
@@ -147,12 +148,13 @@ trait Qwoo_Platform_Media {
 
     /* ---------------- helpers ---------------- */
 
-    /** The attachment ID from { id }: an image or video, else a 404 error. */
+    /** The attachment ID from { id }: an image, video, audio or one of the file types the Media screen lists, else a 404 error. */
     private static function media_id( array $params ) {
         $id   = absint( $params['id'] ?? 0 );
         $post = $id ? get_post( $id ) : null;
         $mime = $post ? (string) get_post_mime_type( $post ) : '';
-        if ( ! $post || $post->post_type !== 'attachment' || ! preg_match( '#^(image|video)/#', $mime ) ) {
+        $ok   = preg_match( '#^(image|video|audio)/#', $mime ) || in_array( $mime, Qwoo_Media_Support::file_mimes(), true );
+        if ( ! $post || $post->post_type !== 'attachment' || ! $ok ) {
             return self::error( 'qwoo_dashboard_not_found', 'This file doesn\'t exist any more.', 404 );
         }
         return $id;

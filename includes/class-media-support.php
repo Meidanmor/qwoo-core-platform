@@ -34,9 +34,81 @@ class Qwoo_Media_Support {
         return $id && in_array( get_post_mime_type( $id ), [ 'video/mp4', 'video/webm' ], true );
     }
 
-    /** "image", "svg" or "video". */
+    /**
+     * "image", "svg", "video", "audio" or "file". MOV videos count as video
+     * here (the Media screen) but not in is_video(): browsers other than
+     * Safari often can't play them, so pickers and galleries leave them out.
+     */
     public static function kind( $id ) {
-        return self::is_svg( $id ) ? 'svg' : ( self::is_video( $id ) ? 'video' : 'image' );
+        if ( self::is_svg( $id ) ) return 'svg';
+        $mime = (string) get_post_mime_type( $id );
+        if ( self::is_video( $id ) || $mime === 'video/quicktime' ) return 'video';
+        if ( strpos( $mime, 'audio/' ) === 0 ) return 'audio';
+        if ( strpos( $mime, 'image/' ) === 0 ) return 'image';
+        return 'file';
+    }
+
+    /**
+     * Files the dashboard's file upload (file_upload) takes, by ending:
+     * [ saved mime, kind, what finfo may call it, container ]. Container
+     * "zip" / "ole": the file must also start like one (office files are
+     * zips or OLE files inside, and finfo often says just that). Never:
+     * HTML, SVG (it has its own cleaned image upload), scripts, programs,
+     * JSON. The platform checks the same list first (QP_Portal_API).
+     */
+    const FILE_TYPES = [
+        'pdf'  => [ 'application/pdf', 'file', [ 'application/pdf' ], '' ],
+        'zip'  => [ 'application/zip', 'file', [ 'application/zip', 'application/x-zip-compressed' ], 'zip' ],
+        'doc'  => [ 'application/msword', 'file', [ 'application/msword', 'application/vnd.ms-office', 'application/CDFV2', 'application/x-ole-storage' ], 'ole' ],
+        'xls'  => [ 'application/vnd.ms-excel', 'file', [ 'application/vnd.ms-excel', 'application/vnd.ms-office', 'application/CDFV2', 'application/x-ole-storage' ], 'ole' ],
+        'ppt'  => [ 'application/vnd.ms-powerpoint', 'file', [ 'application/vnd.ms-powerpoint', 'application/vnd.ms-office', 'application/CDFV2', 'application/x-ole-storage' ], 'ole' ],
+        'docx' => [ 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'file', [ 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip', 'application/octet-stream' ], 'zip' ],
+        'xlsx' => [ 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'file', [ 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/octet-stream' ], 'zip' ],
+        'pptx' => [ 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'file', [ 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/zip', 'application/octet-stream' ], 'zip' ],
+        'odt'  => [ 'application/vnd.oasis.opendocument.text', 'file', [ 'application/vnd.oasis.opendocument.text', 'application/zip', 'application/octet-stream' ], 'zip' ],
+        'ods'  => [ 'application/vnd.oasis.opendocument.spreadsheet', 'file', [ 'application/vnd.oasis.opendocument.spreadsheet', 'application/zip', 'application/octet-stream' ], 'zip' ],
+        'odp'  => [ 'application/vnd.oasis.opendocument.presentation', 'file', [ 'application/vnd.oasis.opendocument.presentation', 'application/zip', 'application/octet-stream' ], 'zip' ],
+        'csv'  => [ 'text/csv', 'file', [ 'text/csv', 'text/plain', 'application/csv' ], '' ],
+        'txt'  => [ 'text/plain', 'file', [ 'text/plain' ], '' ],
+        'rtf'  => [ 'application/rtf', 'file', [ 'text/rtf', 'application/rtf' ], '' ],
+        'mp3'  => [ 'audio/mpeg', 'audio', [ 'audio/mpeg', 'audio/mp3', 'audio/x-mpeg' ], '' ],
+        'm4a'  => [ 'audio/mp4', 'audio', [ 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'video/mp4' ], '' ],
+        'wav'  => [ 'audio/wav', 'audio', [ 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/vnd.wave' ], '' ],
+        'ogg'  => [ 'audio/ogg', 'audio', [ 'audio/ogg', 'application/ogg', 'audio/x-ogg' ], '' ],
+        'gif'  => [ 'image/gif', 'image', [ 'image/gif' ], '' ],
+    ];
+
+    /** Documents, archives and text files (what the Media screen's Files filter lists). */
+    public static function file_mimes() {
+        $out = [];
+        foreach ( self::FILE_TYPES as $t ) {
+            if ( $t[1] === 'file' ) $out[ $t[0] ] = true;
+        }
+        return array_keys( $out );
+    }
+
+    /**
+     * [ ext, saved mime, kind ] for a file_upload, from its name and its
+     * real content, or an owner-facing error string.
+     */
+    public static function check_file( $name, $bytes ) {
+        $ext = strtolower( (string) pathinfo( (string) $name, PATHINFO_EXTENSION ) );
+        if ( ! isset( self::FILE_TYPES[ $ext ] ) ) {
+            return 'This kind of file can\'t be uploaded. Use a PDF, ZIP, Word, Excel, PowerPoint, OpenDocument, CSV, TXT, RTF, MP3, M4A, WAV, OGG or GIF file.';
+        }
+        if ( ! class_exists( 'finfo' ) ) {
+            return 'File uploads are not available on this server.';
+        }
+        [ $mime, $kind, $real, $box ] = self::FILE_TYPES[ $ext ];
+        $found = (string) ( new finfo( FILEINFO_MIME_TYPE ) )->buffer( $bytes );
+        $head  = substr( (string) $bytes, 0, 8 );
+        $ok    = in_array( $found, $real, true )
+            && ( $box !== 'zip' || strpos( $head, "PK\x03\x04" ) === 0 || strpos( $head, "PK\x05\x06" ) === 0 )
+            && ( $box !== 'ole' || strpos( $head, "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" ) === 0 );
+        if ( ! $ok ) {
+            return 'This file\'s content doesn\'t match its type. Save it again from the app that made it and try again.';
+        }
+        return [ $ext, $mime, $kind ];
     }
 
     /** WordPress has no sizes for an SVG: the file itself, every time. */

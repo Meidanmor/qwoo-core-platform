@@ -179,7 +179,8 @@ class Qwoo_Platform_Dashboard {
         'template_get'    => 'action_template_get',
         'template_delete' => 'action_template_delete',
         'video_upload'    => 'action_video_upload',
-        'payments_get'          => 'action_payments_get',
+        'file_upload'     => 'action_file_upload',
+        'payments_get'         => 'action_payments_get',
         'payment_save'          => 'action_payment_save',
         'grow_save'             => 'action_grow_save',
         'cardcom_save'          => 'action_cardcom_save',
@@ -215,6 +216,7 @@ class Qwoo_Platform_Dashboard {
     ];
 
     const MAX_VIDEO_BYTES = 20971520; // 20 MB
+    const MAX_FILE_BYTES  = 20971520; // 20 MB: documents, archives, audio (GIFs: MAX_IMAGE_BYTES)
 
     /** Shipping methods the dashboard can add and edit. */
     const SHIPPING_METHODS = [ 'flat_rate', 'free_shipping', 'local_pickup', 'qwoo_hfd_pickup' ];
@@ -1962,7 +1964,11 @@ class Qwoo_Platform_Dashboard {
         return [ 'items' => Shop_Settings_Builder::platform_template_delete( $id ) ];
     }
 
-    /** { name, data (base64) }: an MP4 or WebM for video blocks and backgrounds. */
+    /**
+     * { name, data (base64) }: an MP4 or WebM for video blocks and
+     * backgrounds, or a MOV (iPhone) for the Media Library only: pickers
+     * list MP4 / WebM (Qwoo_Media_Support::kind()).
+     */
     private static function action_video_upload( array $params ) {
         $bytes = base64_decode( (string) ( $params['data'] ?? '' ), true );
         if ( $bytes === false || $bytes === '' || strlen( $bytes ) > self::MAX_VIDEO_BYTES ) {
@@ -1972,9 +1978,9 @@ class Qwoo_Platform_Dashboard {
             return self::bad( 'Video uploads are not available on this server.' );
         }
         $mime  = ( new finfo( FILEINFO_MIME_TYPE ) )->buffer( $bytes );
-        $types = [ 'video/mp4' => 'mp4', 'video/webm' => 'webm' ];
+        $types = [ 'video/mp4' => 'mp4', 'video/webm' => 'webm', 'video/quicktime' => 'mov' ];
         if ( ! isset( $types[ $mime ] ) ) {
-            return self::bad( 'Use an MP4 or WebM video.' );
+            return self::bad( 'Use an MP4, WebM or MOV video.' );
         }
         require_once ABSPATH . 'wp-admin/includes/file.php';
         require_once ABSPATH . 'wp-admin/includes/media.php';
@@ -1984,6 +1990,63 @@ class Qwoo_Platform_Dashboard {
         $tmp  = wp_tempnam( $base . '.' . $types[ $mime ] );
         file_put_contents( $tmp, $bytes );
         $id = media_handle_sideload( [ 'name' => $base . '.' . $types[ $mime ], 'tmp_name' => $tmp ], 0 );
+        if ( is_wp_error( $id ) ) {
+            @unlink( $tmp );
+            return self::bad( $id->get_error_message() );
+        }
+        return [ 'id' => (int) $id ] + (array) Shop_Settings_Builder::platform_media_item( $id );
+    }
+
+    /**
+     * { name, data (base64) }: a document, archive, text, audio file or GIF
+     * for the Media Library (Qwoo_Media_Support::FILE_TYPES), checked by its
+     * ending and its real content. Saved as it is (GIFs keep their
+     * animation). WordPress takes only this one type for this upload.
+     */
+    private static function action_file_upload( array $params ) {
+        $bytes = base64_decode( (string) ( $params['data'] ?? '' ), true );
+        if ( $bytes === false || $bytes === '' || strlen( $bytes ) > self::MAX_FILE_BYTES ) {
+            return self::bad( 'Files can be up to 20 MB.' );
+        }
+        $name  = (string) ( $params['name'] ?? '' );
+        $found = Qwoo_Media_Support::check_file( $name, $bytes );
+        if ( ! is_array( $found ) ) {
+            return self::bad( $found );
+        }
+        [ $ext, $mime ] = $found;
+        if ( $ext === 'gif' ) {
+            $info = @getimagesizefromstring( $bytes );
+            if ( strlen( $bytes ) > self::MAX_IMAGE_BYTES ) {
+                return self::bad( 'GIFs can be up to 8 MB.' );
+            }
+            if ( ! $info || $info[2] !== IMAGETYPE_GIF ) {
+                return self::bad( 'This GIF can\'t be read. Try another one.' );
+            }
+            if ( $info[0] * $info[1] > 40000000 ) {
+                return self::bad( 'This GIF is too large. Use one under 40 megapixels.' );
+            }
+        }
+
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        $base = mb_substr( sanitize_file_name( pathinfo( $name, PATHINFO_FILENAME ) ), 0, 100 ) ?: 'file';
+        $file = $base . '.' . $ext;
+        $tmp  = wp_tempnam( $file );
+        file_put_contents( $tmp, $bytes );
+
+        // Only this type, only for this upload; already checked above, so WordPress's own guess is replaced.
+        $allow = static fn() => [ $ext => $mime ];
+        $check = static fn( $data, $path, $filename ) => strtolower( (string) pathinfo( (string) $filename, PATHINFO_EXTENSION ) ) === $ext
+            ? [ 'ext' => $ext, 'type' => $mime, 'proper_filename' => false ]
+            : $data;
+        add_filter( 'upload_mimes', $allow, 999 );
+        add_filter( 'wp_check_filetype_and_ext', $check, 999, 3 );
+        $id = media_handle_sideload( [ 'name' => $file, 'tmp_name' => $tmp ], 0 );
+        remove_filter( 'upload_mimes', $allow, 999 );
+        remove_filter( 'wp_check_filetype_and_ext', $check, 999 );
+
         if ( is_wp_error( $id ) ) {
             @unlink( $tmp );
             return self::bad( $id->get_error_message() );

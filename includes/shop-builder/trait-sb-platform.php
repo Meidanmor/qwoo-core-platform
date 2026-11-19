@@ -394,21 +394,31 @@ trait SB_Platform {
         return array_slice( $out, 0, 300 );
     }
 
-    /** What each list filter shows (post_mime_type). image = every image, SVGs too. */
+    /**
+     * What each list filter shows (post_mime_type). image = every image, SVGs
+     * too. Pickers ask for image / video / all / photo / svg, so they list
+     * only what they can use (videos: MP4 and WebM). The Media screen asks
+     * for library (everything), videos (MOV too), audio and file.
+     */
     private static function media_kinds() {
+        $files = Qwoo_Media_Support::file_mimes();
         return [
-            'image' => 'image',
-            'video' => 'video',
-            'all'   => [ 'image', 'video' ],
-            'photo' => [ 'image/jpeg', 'image/png', 'image/webp', 'image/gif' ],
-            'svg'   => 'image/svg+xml',
+            'image'   => 'image',
+            'video'   => [ 'video/mp4', 'video/webm' ],
+            'all'     => [ 'image', 'video/mp4', 'video/webm' ],
+            'photo'   => [ 'image/jpeg', 'image/png', 'image/webp', 'image/gif' ],
+            'svg'     => 'image/svg+xml',
+            'videos'  => 'video',
+            'audio'   => 'audio',
+            'file'    => $files,
+            'library' => array_merge( [ 'image', 'video', 'audio' ], $files ),
         ];
     }
 
     /**
      * The Media Library, newest first, 30 a page: $kind is a media_kinds() key,
-     * $month "2026-10" or ''. Every item has its kind (image, svg, video);
-     * images also carry their alt text and the sizes the dashboard's editors
+     * $month "2026-10" or ''. Every item has its kind (image, svg, video,
+     * audio, file), mime and size; images also carry their alt text and the sizes the dashboard's editors
      * show: product (product photos, categories) and large (blog posts).
      * With $months, also the months that have files (newest first).
      */
@@ -439,8 +449,8 @@ trait SB_Platform {
         foreach ( $query->posts as $id ) {
             $payload = self::admin_media_payload( $id );
             if ( ! $payload ) continue;
-            $item = [ 'id' => (int) $id, 'name' => get_the_title( $id ), 'kind' => Qwoo_Media_Support::kind( $id ) ] + $payload;
-            if ( $item['kind'] !== 'video' ) {
+            $item = [ 'id' => (int) $id, 'name' => get_the_title( $id ), 'kind' => Qwoo_Media_Support::kind( $id ), 'mime' => (string) get_post_mime_type( $id ), 'size' => self::media_file_size( $id ) ] + $payload;
+            if ( in_array( $item['kind'], [ 'image', 'svg' ], true ) ) {
                 $item['alt']     = (string) get_post_meta( $id, '_wp_attachment_image_alt', true );
                 $item['large']   = wp_get_attachment_image_url( $id, 'large' ) ?: $payload['url'];
                 $item['product'] = wp_get_attachment_image_url( $id, 'woocommerce_thumbnail' ) ?: $payload['thumb'];
@@ -450,9 +460,11 @@ trait SB_Platform {
         $out = [ 'items' => $items, 'pages' => (int) $query->max_num_pages ];
         if ( $months ) {
             global $wpdb;
-            $dates = $wpdb->get_col(
-                "SELECT post_date FROM {$wpdb->posts} WHERE post_type = 'attachment' AND ( post_mime_type LIKE 'image/%' OR post_mime_type LIKE 'video/%' ) ORDER BY post_date DESC LIMIT 5000"
-            );
+            $files = Qwoo_Media_Support::file_mimes();
+            $dates = $wpdb->get_col( $wpdb->prepare(
+                "SELECT post_date FROM {$wpdb->posts} WHERE post_type = 'attachment' AND ( post_mime_type LIKE 'image/%' OR post_mime_type LIKE 'video/%' OR post_mime_type LIKE 'audio/%' OR post_mime_type IN ( " . implode( ',', array_fill( 0, count( $files ), '%s' ) ) . " ) ) ORDER BY post_date DESC LIMIT 5000",
+                ...$files
+            ) );
             $out['months'] = array_values( array_unique( array_map( static fn( $d ) => substr( (string) $d, 0, 7 ), $dates ) ) );
         }
         return $out;
@@ -483,9 +495,27 @@ trait SB_Platform {
         }
     }
 
-    /** Display data for one uploaded attachment (url, thumb, width, height). */
+    /**
+     * Display data for one uploaded attachment: url, thumb, width, height,
+     * plus name, kind (image | svg | video | audio | file), mime and size.
+     */
     public static function platform_media_item( $id ) {
-        return self::admin_media_payload( (int) $id );
+        $payload = self::admin_media_payload( (int) $id );
+        if ( ! $payload ) return $payload;
+        return $payload + [
+            'name' => get_the_title( (int) $id ),
+            'kind' => Qwoo_Media_Support::kind( (int) $id ),
+            'mime' => (string) get_post_mime_type( (int) $id ),
+            'size' => self::media_file_size( (int) $id ),
+        ];
+    }
+
+    /** Bytes of the original file (0 when unknown). */
+    private static function media_file_size( $id ) {
+        $meta = wp_get_attachment_metadata( $id );
+        if ( ! empty( $meta['filesize'] ) ) return (int) $meta['filesize'];
+        $file = get_attached_file( $id );
+        return $file && file_exists( $file ) ? (int) filesize( $file ) : 0;
     }
 
     /* ---------------- versions ---------------- */
