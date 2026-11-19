@@ -44,8 +44,9 @@ class Qwoo_Platform_Dashboard {
     use Qwoo_Platform_Package;
     use Qwoo_Platform_Attributes;
     use Qwoo_Platform_Growth;
+    use Qwoo_Platform_Exports;
 
-    const KEY_OPTION   = 'qwoo_platform_dashboard_key';
+    const KEY_OPTION  = 'qwoo_platform_dashboard_key';
     const TOKEN_HEADER = 'X-Qwoo-Platform-Token';
     const CONTEXT      = 'qwoo-dashboard-v1.';
     const MAX_LIFETIME = 120;
@@ -67,6 +68,14 @@ class Qwoo_Platform_Dashboard {
         'product_duplicate'     => 'action_product_duplicate',
         'products_bulk'         => 'action_products_bulk',
         'products_export'       => 'action_products_export',
+        // Data exports (trait-platform-exports.php): one page of CSV rows each.
+        'orders_export'         => 'action_orders_export',
+        'customers_export'      => 'action_customers_export',
+        'reviews_export'        => 'action_reviews_export',
+        'subscribers_export'    => 'action_subscribers_export',
+        'bookings_export'       => 'action_bookings_export',
+        'gift_cards_export'     => 'action_gift_cards_export',
+        'export_counts'         => 'action_export_counts',
         'products_import_check' => 'action_products_import_check',
         'products_import_run'   => 'action_products_import_run',
         'customers_list'        => 'action_customers_list',
