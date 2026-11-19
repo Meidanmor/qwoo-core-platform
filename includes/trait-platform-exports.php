@@ -389,8 +389,10 @@ trait Qwoo_Platform_Exports {
             return self::export_table_exists( $table ) ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table WHERE $where" ) : 0;
         };
         $orders = wc_get_orders( [ 'type' => 'shop_order', 'status' => array_map( static fn( $s ) => substr( $s, 3 ), array_keys( wc_get_order_statuses() ) ), 'limit' => 1, 'paginate' => true, 'return' => 'ids' ] );
+        $products = wp_count_posts( 'product' );
         return [
             'orders'      => (int) $orders->total,
+            'products'    => (int) ( $products->publish ?? 0 ) + (int) ( $products->draft ?? 0 ) + (int) ( $products->private ?? 0 ) + (int) ( $products->pending ?? 0 ),
             'customers'   => count( self::customer_groups() ),
             'reviews'     => (int) get_comments( [ 'type' => 'review', 'post_type' => 'product', 'status' => 'all', 'count' => true ] ),
             'subscribers' => $count( Qwoo_Email_Marketing::subs_table(), "source <> 'suppressed'" ),
