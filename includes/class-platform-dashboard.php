@@ -44,6 +44,7 @@ class Qwoo_Platform_Dashboard {
     use Qwoo_Platform_Package;
     use Qwoo_Platform_Attributes;
     use Qwoo_Platform_Growth;
+    use Qwoo_Platform_Couriers;
     use Qwoo_Platform_Exports;
 
     const KEY_OPTION  = 'qwoo_platform_dashboard_key';
@@ -123,6 +124,14 @@ class Qwoo_Platform_Dashboard {
         'order_refund'    => 'action_order_refund',
         'order_email'     => 'action_order_email',
         'order_auto_cancel' => 'action_order_auto_cancel',
+        'order_ship'          => 'action_order_ship',
+        'order_label'         => 'action_order_label',
+        'order_ship_cancel'   => 'action_order_ship_cancel',
+        'order_tracking_save' => 'action_order_tracking_save',
+        'couriers_get'        => 'action_couriers_get',
+        'couriers_save'       => 'action_couriers_save',
+        'couriers_test'       => 'action_couriers_test',
+        'couriers_disconnect' => 'action_couriers_disconnect',
         'usage'           => 'action_usage',
         'settings_get'    => 'action_settings_get',
         'settings_save'   => 'action_settings_save',
@@ -208,7 +217,7 @@ class Qwoo_Platform_Dashboard {
     const MAX_VIDEO_BYTES = 20971520; // 20 MB
 
     /** Shipping methods the dashboard can add and edit. */
-    const SHIPPING_METHODS = [ 'flat_rate', 'free_shipping', 'local_pickup' ];
+    const SHIPPING_METHODS = [ 'flat_rate', 'free_shipping', 'local_pickup', 'qwoo_hfd_pickup' ];
 
     /** Order statuses the owner can move an order to, from each status. */
     const ORDER_MOVES = [
@@ -2633,7 +2642,7 @@ class Qwoo_Platform_Dashboard {
         if ( $settings['title'] === '' ) {
             return self::bad( 'Give the method a name customers will see, like "Standard delivery".' );
         }
-        if ( $type === 'flat_rate' || $type === 'local_pickup' ) {
+        if ( $type === 'flat_rate' || $type === 'local_pickup' || $type === 'qwoo_hfd_pickup' ) {
             $cost = self::price( $params['cost'] ?? '' );
             if ( $cost === null ) {
                 return self::bad( 'The cost must be a number, like 25 or 9.90.' );
@@ -3036,6 +3045,8 @@ class Qwoo_Platform_Dashboard {
             'currency' => $o->get_currency(),
             'customer' => trim( $o->get_billing_first_name() . ' ' . $o->get_billing_last_name() ),
             'items'    => $o->get_item_count(),
+            // Courier shipment or a typed tracking number (Qwoo_Couriers).
+            'shipment' => Qwoo_Couriers::summary( $o ),
         ];
     }
 
@@ -3103,6 +3114,8 @@ class Qwoo_Platform_Dashboard {
             'gift_cards'   => Qwoo_Gift_Cards::for_order( $o ),
             // What can be emailed from this order now, and the automatic emails still waiting for it.
             'emails'       => self::order_emails( $o ),
+            // The shipping card: send to a courier, label, tracking (Qwoo_Couriers).
+            'shipping_info' => Qwoo_Couriers::order_view( $o ),
         ];
     }
 

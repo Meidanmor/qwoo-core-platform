@@ -28,7 +28,7 @@ class Qwoo_Automations {
     const OPTION    = 'qwoo_flows';
     const MAX_FLOWS = 20;
     const MAX_STEPS = 12;
-    const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed', 'audience_joined', 'event_done', 'booking_made', 'booking_status', 'booking_before', 'booking_after' ];
+    const TRIGGERS  = [ 'subscribed', 'order_placed', 'order_status', 'cart_left', 'no_order', 'product_view', 'cart_changed', 'wishlist_changed', 'audience_joined', 'event_done', 'booking_made', 'booking_status', 'booking_before', 'booking_after', 'order_shipped' ];
     // Appointments: what a booking_status automation can start on.
     const BOOKING_STATUSES = [ 'requested', 'confirmed', 'cancelled', 'declined', 'done', 'noshow', 'customer_confirmed', 'not_confirmed' ];
     const SCAN_KEY  = 'qwoo_flows_scanned';
@@ -40,6 +40,7 @@ class Qwoo_Automations {
         add_action( 'qwoo_personalization_event', [ __CLASS__, 'on_personalization_event' ], 10, 4 );
         add_action( 'qwoo_audience_joined', [ __CLASS__, 'on_audience_joined' ], 10, 3 );
         add_action( 'qwoo_booking_status', [ __CLASS__, 'on_booking' ], 20, 2 );
+        add_action( 'qwoo_order_shipped', [ __CLASS__, 'on_order_shipped' ], 20, 2 );
         add_action( 'qwoo_push_tick', [ __CLASS__, 'run_due' ] );
         add_filter( 'qwoo_push_next_due', [ __CLASS__, 'next_due' ] );
     }
@@ -368,6 +369,11 @@ class Qwoo_Automations {
     public static function on_order_status( $order_id, $from, $to, $order = null ) {
         $order = $order ?: wc_get_order( $order_id );
         if ( $order ) self::start( 'order_status', 'st:' . $order->get_id() . ':' . $to, (string) $order->get_billing_email(), (int) $order->get_id(), [ 'status' => (string) $to ] );
+    }
+
+    /** Sent to a courier (or a tracking number typed): once per order. */
+    public static function on_order_shipped( $order, $shipment = [] ) {
+        if ( $order instanceof WC_Order ) self::start( 'order_shipped', 'ship:' . $order->get_id(), (string) $order->get_billing_email(), (int) $order->get_id() );
     }
 
     public static function on_personalization_event( string $type, array $profile, array $event, string $visitor_key = '' ): void {

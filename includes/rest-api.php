@@ -219,6 +219,9 @@ function store_api_get_my_orders() {
       'total' => $order->get_total(),
       'currency' => $order->get_currency(),
       'date_created' => $order->get_date_created()->date('Y-m-d H:i:s'),
+      // The shipment's number and tracking page, and the pickup point (Qwoo_Couriers).
+      'tracking' => class_exists('Qwoo_Couriers') ? Qwoo_Couriers::tracking($order) : null,
+      'pickup_point' => class_exists('Qwoo_Couriers') ? Qwoo_Couriers::pickup_point($order) : null,
       'items' => array_map(function ($item) {
           $thumbnailID = get_post_thumbnail_id( $item->get_product_id() );
 

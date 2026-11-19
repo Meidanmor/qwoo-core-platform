@@ -51,7 +51,7 @@ class Qwoo_Cart_Extras {
                 $address = trim( (string) self::method_option( $type, $rate->get_instance_id(), 'qwoo_pickup_address' ) );
                 if ( $address !== '' ) $rate->add_meta_data( 'qwoo_pickup_address', $address );
             }
-            if ( $type === 'flat_rate' || $type === 'local_pickup' ) {
+            if ( $type === 'flat_rate' || $type === 'local_pickup' || $type === 'qwoo_hfd_pickup' ) {
                 $from = (float) wc_format_decimal( self::method_option( $type, $rate->get_instance_id(), 'qwoo_free_from' ) );
                 if ( $from <= 0 ) continue;
                 if ( $total === null ) $total = self::cart_amount( false, $package );

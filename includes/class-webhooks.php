@@ -27,7 +27,7 @@ class Qwoo_Webhooks {
         'order.created', 'order.paid', 'order.status_changed', 'order.refunded',
         'customer.created', 'product.created', 'product.updated', 'stock.low',
         'review.created', 'subscriber.created', 'subscriber.unsubscribed',
-        'booking.created', 'booking.status_changed',
+        'booking.created', 'booking.status_changed', 'order.shipped',
     ];
 
     private static $products_seen = [];
@@ -43,6 +43,8 @@ class Qwoo_Webhooks {
         add_action( 'comment_post', [ __CLASS__, 'on_review' ], 60, 3 );
         // Appointments: a new booking (or request), and every status after it.
         add_action( 'qwoo_booking_status', [ __CLASS__, 'on_booking' ], 60, 2 );
+        // Couriers: a shipment opened, or a tracking number typed (Qwoo_Couriers).
+        add_action( 'qwoo_order_shipped', [ __CLASS__, 'on_shipped' ], 60, 2 );
         add_action( 'qwoo_push_tick', [ __CLASS__, 'deliver_due' ] );
         add_filter( 'qwoo_push_next_due', [ __CLASS__, 'next_due' ] );
     }
@@ -258,6 +260,16 @@ class Qwoo_Webhooks {
         self::emit( 'order.status_changed', $data );
         $paid = wc_get_is_paid_statuses();
         if ( in_array( $to, $paid, true ) && ! in_array( $from, $paid, true ) ) self::emit( 'order.paid', $data );
+    }
+
+    public static function on_shipped( $order, $shipment ) {
+        if ( ! $order instanceof WC_Order || ! is_array( $shipment ) ) return;
+        self::emit( 'order.shipped', self::order_data( $order ) + [
+            'courier'         => (string) $order->get_meta( '_qwoo_courier' ),
+            'tracking_number' => (string) $order->get_meta( '_qwoo_tracking_number' ),
+            'tracking_url'    => (string) $order->get_meta( '_qwoo_tracking_url' ),
+            'service'         => (string) ( $shipment['service'] ?? '' ),
+        ] );
     }
 
     public static function on_refund( $order_id, $refund_id ) {

@@ -380,6 +380,8 @@ class Qwoo_Store_Emails {
             $out['{order_number}'] = (string) $order->get_order_number();
             $out['{order_total}']  = html_entity_decode( wp_strip_all_tags( $order->get_formatted_order_total() ), ENT_QUOTES );
             $out['{order_date}']   = $order->get_date_created() ? wc_format_datetime( $order->get_date_created() ) : '';
+            // Couriers (Qwoo_Couriers): the shipment / tracking number, when the order has one.
+            $out['{tracking_number}'] = (string) $order->get_meta( '_qwoo_tracking_number' );
         }
         return $out;
     }

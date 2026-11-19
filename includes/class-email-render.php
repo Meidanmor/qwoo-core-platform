@@ -441,7 +441,7 @@ class Qwoo_Email_Render {
             case 'order_info':
                 if ( ! $order ) return '';
                 $date = $order->get_date_created() ? wc_format_datetime( $order->get_date_created() ) : '';
-                return '<div style="font-family:' . $font . ';font-size:' . (int) $d['size'] . 'px;color:' . esc_attr( $d['color'] ) . ';text-align:' . self::align( (string) $d['align'], $env ) . ';">#' . esc_html( $order->get_order_number() ) . ( $date ? ' · ' . esc_html( $date ) : '' ) . '</div>';
+                return '<div style="font-family:' . $font . ';font-size:' . (int) $d['size'] . 'px;color:' . esc_attr( $d['color'] ) . ';text-align:' . self::align( (string) $d['align'], $env ) . ';">#' . esc_html( $order->get_order_number() ) . ( $date ? ' · ' . esc_html( $date ) : '' ) . '</div>' . self::tracking( $env, $order );
             case 'order_items':
                 return $order ? self::order_items( $d, $env, $order ) : '';
             case 'order_totals':
@@ -665,6 +665,28 @@ class Qwoo_Email_Render {
             $rows  .= '<tr><td style="padding:3px 0;font-family:' . $font . ';' . $strong . 'color:' . esc_attr( $s['color'] ) . ';">' . wp_kses_post( rtrim( (string) $total['label'], ':' ) ) . '</td><td style="padding:3px 0;font-family:' . $font . ';' . $strong . 'color:' . esc_attr( $s['color'] ) . ';text-align:' . $env['end'] . ';">' . wp_kses_post( (string) $total['value'] ) . '</td></tr>';
         }
         return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' . $rows . '</table>';
+    }
+
+    /**
+     * The order's shipment (Qwoo_Couriers), under the order number: the courier, the
+     * number and a "Track your shipment" button. Nothing when the order has none.
+     */
+    private static function tracking( array $env, $order ): string {
+        if ( ! class_exists( 'Qwoo_Couriers' ) || ! $order instanceof WC_Order || ! empty( $env['ctx']['admin'] ) ) return '';
+        $t = Qwoo_Couriers::tracking( $order );
+        if ( ! $t ) return '';
+        $s    = $env['s'];
+        $font = $env['font'];
+        $he   = class_exists( 'Qwoo_I18n' ) && Qwoo_I18n::default_code() === 'he';
+        $html = '<div style="margin:14px 0 4px;padding:14px 16px;border:1px solid rgba(0,0,0,.12);border-radius:10px;text-align:center;font-family:' . $font . ';color:' . esc_attr( $s['color'] ) . ';">';
+        if ( $t['number'] !== '' ) {
+            $html .= '<div style="font-size:13px;opacity:.75;">' . esc_html( $he ? 'מספר משלוח' : 'Shipment number' ) . ( $t['courier'] !== '' ? ' · ' . esc_html( $t['courier'] ) : '' ) . '</div>';
+            $html .= '<div style="font-size:20px;font-weight:bold;letter-spacing:1px;margin:2px 0;" dir="ltr">' . esc_html( $t['number'] ) . '</div>';
+        }
+        if ( $t['url'] !== '' ) {
+            $html .= '<div style="margin-top:10px;">' . self::button( [ 'label' => $he ? 'מעקב אחרי המשלוח' : 'Track your shipment', 'align' => 'center', 'size' => 15 ], $env, $t['url'] ) . '</div>';
+        }
+        return $html . '</div>';
     }
 
     private static function addresses( array $d, array $env, $order ): string {
