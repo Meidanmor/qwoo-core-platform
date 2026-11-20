@@ -568,6 +568,9 @@ class Qwoo_Platform_Dashboard {
             'reviews'  => self::action_reviews_pending(),
             // Legal pages written and published at setup: the owner is asked to read them.
             'legal_review' => Shop_Settings_Builder::legal_review(),
+            // "Add to home screen" is on but the store has no app icon (nor a logo to make one from):
+            // the storefront asks no one, and Home tells the owner (2026-11-20).
+            'app_icon_missing' => self::app_icon_missing(),
             // The store's clock: the Overview asks the owner to check it once.
             'time_check'   => get_option( 'qwoo_time_checked' ) ? null : [
                 'zone'  => wp_timezone_string(),
@@ -1892,6 +1895,13 @@ class Qwoo_Platform_Dashboard {
         // Popups (Store builder → Popups): main language too.
         $popups        = is_array( $params['popups'] ?? null ) ? self::to_arrays( $params['popups'] ) : null;
         return Shop_Settings_Builder::platform_save( self::to_arrays( $options ), self::to_arrays( $pages ), $custom, $menus, $layouts, $sync, $loops, $loops_default, $popups );
+    }
+
+    private static function app_icon_missing() {
+        $install = class_exists( 'Qwoo_Push' ) ? (array) ( Qwoo_Push::settings()['install'] ?? [] ) : [];
+        if ( empty( $install['on'] ) ) return false;
+        $branding = (array) ( ( (array) get_option( 'shop_builder_options', [] ) )['branding'] ?? [] );
+        return ! (int) ( $branding['app_icon_id'] ?? 0 ) && ! (int) ( $branding['logo_id'] ?? 0 );
     }
 
     private static function action_design_publish() {
