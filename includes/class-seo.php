@@ -409,6 +409,8 @@ class Qwoo_Seo {
     private static function shop(): array {
         $shop_id = function_exists( 'wc_get_page_id' ) ? wc_get_page_id( 'shop' ) : 0;
         $name    = $shop_id > 0 ? self::plain( get_the_title( $shop_id ) ) : '';
+        // The page WooCommerce made is called "Shop" in every store: the store's own word instead.
+        if ( $name === 'Shop' ) $name = '';
         return [
             'title'       => self::with_pattern( $name !== '' && self::lang() === '' ? $name : self::word( 'Shop' ) ),
             'description' => self::home_defaults()['description'],
