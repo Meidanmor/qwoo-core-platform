@@ -815,6 +815,8 @@ class Qwoo_Store_Package {
             'made'   => time(),
             'source' => [
                 'name' => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
+                // The store's description (its tagline), for "Store name and description" on the import (2026-11-20).
+                'description' => wp_specialchars_decode( get_bloginfo( 'description' ), ENT_QUOTES ),
                 'key'  => self::source_key(),
                 'lang' => Qwoo_Store_Language::get(),
             ],
@@ -1015,6 +1017,8 @@ class Qwoo_Store_Package {
             }
             $s['file'] = [
                 'name'   => mb_substr( sanitize_text_field( (string) ( $m['source']['name'] ?? '' ) ), 0, 100 ),
+                // Files made before 2026-11-20 have no description: null (the store keeps its own).
+                'description' => isset( $m['source']['description'] ) && is_string( $m['source']['description'] ) ? mb_substr( sanitize_text_field( $m['source']['description'] ), 0, 200 ) : null,
                 'lang'   => sanitize_key( (string) ( $m['source']['lang'] ?? '' ) ),
                 'made'   => (int) ( $m['made'] ?? 0 ),
                 'parts'  => $parts,

@@ -454,6 +454,7 @@ trait Qwoo_Platform_Migration {
         wc_delete_product_transients();
         if ( self::mig_is_package() ) {
             Qwoo_Store_Package::import_mark( 'done' );
+            if ( ! empty( self::$mig['package_publish'] ) ) self::package_go_live();
             // Finished: the copy kept for Cancel isn't needed any more.
             Qwoo_Import_Snapshot::drop();
         }

@@ -13,7 +13,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *   package_status                  { export, import, run }
  *   package_export_start { parts }  package_export_step  package_chunk { index }  package_export_discard
  *   package_upload { index, total, size, data }   package_inspect
- *   package_import_start { parts, mode: add | replace, template }   package_import_cancel   package_import_discard
+ *   package_import_start { parts, mode: add | replace, template, identity, publish }   package_import_cancel   package_import_discard
+ *     identity: the store takes the file's name and description. publish: the Store builder is
+ *     published when the import ends, so the storefront changes with it (2026-11-20).
  *   package_import_revert: stops the import and puts the store back as it was (Qwoo_Import_Snapshot)
  */
 trait Qwoo_Platform_Package {
@@ -34,6 +36,21 @@ trait Qwoo_Platform_Package {
         'marketing'       => 'marketing',
         'builder'         => 'builder',
     ];
+
+    /**
+     * The import ended and the owner asked for the changes to go live: the Store builder is published
+     * (the same as its Publish button), so the storefront shows the file's design and the store's new name.
+     */
+    private static function package_go_live() {
+        try {
+            $result = Shop_Settings_Builder::platform_publish();
+        } catch ( Throwable $e ) {
+            $result = [ 'error' => $e->getMessage() ];
+        }
+        self::mig_note( isset( $result['error'] )
+            ? 'The import is done, but the changes couldn\'t go live by themselves. Open the Store builder and press Publish.'
+            : 'The changes are live in your store.' );
+    }
 
     private static function mig_is_package() {
         return ( self::$mig['source']['kind'] ?? '' ) === 'package';
@@ -119,6 +136,16 @@ trait Qwoo_Platform_Package {
             if ( is_wp_error( $saved ) ) return $saved;
         }
 
+        // "Store name and description": after the snapshot, so Cancel puts the old ones back.
+        $identity = ! empty( $params['identity'] ) && empty( $params['template'] );
+        if ( $identity ) {
+            $fname = trim( (string) ( $file['file']['name'] ?? '' ) );
+            if ( $fname !== '' ) update_option( 'blogname', $fname );
+            if ( isset( $file['file']['description'] ) && is_string( $file['file']['description'] ) ) {
+                update_option( 'blogdescription', $file['file']['description'] );
+            }
+        }
+
         // Replace: what's here and didn't come from this file's store goes to the trash first.
         $remove = [];
         $types  = array_values( array_filter( [ in_array( 'products', $parts, true ) ? 'product' : '', in_array( 'blog', $parts, true ) ? 'post' : '', in_array( 'coupons', $parts, true ) ? 'shop_coupon' : '' ] ) );
@@ -141,6 +168,9 @@ trait Qwoo_Platform_Package {
             'package_mode' => $mode,
             // A store copy template the platform brings in while setting up a new store.
             'package_template' => ! empty( $params['template'] ),
+            // "Put the changes live when the import ends" (mig_finish → package_go_live).
+            'package_publish'  => ! empty( $params['publish'] ) && empty( $params['template'] ),
+            'package_identity' => $identity,
             'phase'        => 0,
             'cursor'       => 0,
             'counts'       => [],
@@ -642,7 +672,7 @@ trait Qwoo_Platform_Package {
         if ( $result['skipped'] ) {
             self::mig_note( 'These pages weren\'t added because your store already has a page at the same address (or one with the same role): ' . implode( ', ', array_slice( $result['skipped'], 0, 20 ) ) . '.' );
         }
-        if ( $mode === 'replace' || $result['pages'] > 0 ) self::mig_note( $mode === 'replace'
+        if ( empty( self::$mig['package_publish'] ) && ( $mode === 'replace' || $result['pages'] > 0 ) ) self::mig_note( $mode === 'replace'
             ? 'Your Store builder now has the file\'s design and pages. Open the Store builder and publish to put them live.'
             : 'The file\'s pages were added to your Store builder as drafts. Publish them when they\'re ready.' );
         return true;
