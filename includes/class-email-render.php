@@ -549,6 +549,12 @@ class Qwoo_Email_Render {
 
     /** What the block's "which products" comes to. */
     private static function product_list( array $d, array $ctx ): array {
+        $list = self::product_list_all( $d, $ctx );
+        // Sample products (the AI's prompt setup) aren't offered in emails, unless the owner chose them.
+        return $d['source'] !== 'chosen' && class_exists( 'Qwoo_Sample_Products' ) ? Qwoo_Sample_Products::drop( (array) $list ) : $list;
+    }
+
+    private static function product_list_all( array $d, array $ctx ): array {
         $count = (int) $d['count'];
         $base  = [ 'status' => 'publish', 'limit' => $count, 'visibility' => 'catalog' ];
         switch ( $d['source'] ) {

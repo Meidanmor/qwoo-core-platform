@@ -69,6 +69,8 @@ class Qwoo_Product_Feed {
         $out  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . '<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0"><channel>';
         $out .= '<title>' . self::x( $store ) . '</title><link>' . self::x( $front ) . '</link><description>' . self::x( get_bloginfo( 'description' ) ?: $store ) . '</description>';
         foreach ( wc_get_products( [ 'status' => 'publish', 'limit' => self::MAX, 'visibility' => 'visible' ] ) as $product ) {
+            // Sample products (the AI's prompt setup) are never offered anywhere else.
+            if ( class_exists( 'Qwoo_Sample_Products' ) && Qwoo_Sample_Products::is_sample( $product ) ) continue;
             $image = wp_get_attachment_image_url( $product->get_image_id(), 'large' );
             // No photo or no price: every service would refuse the item.
             $regular = (float) ( $product->is_type( 'variable' ) ? $product->get_variation_regular_price( 'min' ) : $product->get_regular_price() );

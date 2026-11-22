@@ -189,6 +189,8 @@ trait Qwoo_Platform_Media {
             'thumb'   => $image ? ( self::image_url( $id, 'medium' ) ?: $url ) : '',
             'large'   => $image ? ( self::image_url( $id, 'large' ) ?: $url ) : $url,
             'product' => $image ? ( self::image_url( $id, 'woocommerce_thumbnail' ) ?: $url ) : $url,
+            // Made by the AI (image_upload ai): the "AI picture" label.
+            'ai'      => get_post_meta( $id, '_qp_ai_picture', true ) === 'yes',
         ];
         if ( $with_uses ) {
             $out['uses'] = self::media_uses( $id );

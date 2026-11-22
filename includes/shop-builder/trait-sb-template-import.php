@@ -151,6 +151,11 @@ trait SB_Template_Import {
                 update_option( 'woocommerce_dimension_unit', 'cm' );
             }
         }
+        // An explicit currency (the prompt setup) wins over the country's.
+        $currency = strtoupper( (string) ( $setup['currency'] ?? '' ) );
+        if ( preg_match( '/^[A-Z]{3}$/', $currency ) && function_exists( 'get_woocommerce_currencies' ) && isset( get_woocommerce_currencies()[ $currency ] ) ) {
+            update_option( 'woocommerce_currency', $currency );
+        }
         foreach ( [ 'address1' => 'woocommerce_store_address', 'city' => 'woocommerce_store_city', 'postcode' => 'woocommerce_store_postcode' ] as $key => $option ) {
             $value = mb_substr( trim( sanitize_text_field( (string) ( $setup[ $key ] ?? '' ) ) ), 0, 120 );
             if ( $value !== '' ) update_option( $option, $value );

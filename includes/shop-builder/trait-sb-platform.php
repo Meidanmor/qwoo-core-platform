@@ -455,6 +455,8 @@ trait SB_Platform {
                 $item['large']   = wp_get_attachment_image_url( $id, 'large' ) ?: $payload['url'];
                 $item['product'] = wp_get_attachment_image_url( $id, 'woocommerce_thumbnail' ) ?: $payload['thumb'];
             }
+            // Made by the AI (image_upload ai): the dashboard's "AI picture" label.
+            if ( get_post_meta( $id, '_qp_ai_picture', true ) === 'yes' ) $item['ai'] = true;
             $items[] = $item;
         }
         $out = [ 'items' => $items, 'pages' => (int) $query->max_num_pages ];
@@ -507,7 +509,7 @@ trait SB_Platform {
             'kind' => Qwoo_Media_Support::kind( (int) $id ),
             'mime' => (string) get_post_mime_type( (int) $id ),
             'size' => self::media_file_size( (int) $id ),
-        ];
+        ] + ( get_post_meta( (int) $id, '_qp_ai_picture', true ) === 'yes' ? [ 'ai' => true ] : [] );
     }
 
     /** Bytes of the original file (0 when unknown). */

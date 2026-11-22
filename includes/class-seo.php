@@ -438,7 +438,8 @@ class Qwoo_Seo {
             'title'       => $custom['title'] !== '' ? $custom['title'] : $defaults['title'],
             'description' => $custom['description'] !== '' ? $custom['description'] : $defaults['description'],
             'canonical'   => self::url( '/product/' . $post->post_name ),
-            'robots'      => self::robots( ! self::is_noindex( $post->ID ) ),
+            // Sample products (the AI's prompt setup) stay out of search engines.
+            'robots'      => self::robots( ! self::is_noindex( $post->ID ) && get_post_meta( $post->ID, '_qp_sample', true ) !== 'yes' ),
             'og_image'    => self::image_url( $image ) ?: self::image_url( absint( self::settings()['image_id'] ) ),
             'og_type'     => 'product',
             'type'        => 'product',
@@ -718,7 +719,8 @@ class Qwoo_Seo {
             'orderby'                => 'modified',
             'order'                  => 'DESC',
             'post__not_in'           => $hidden,
-            'meta_query'             => [ [ 'key' => self::NOINDEX_META, 'compare' => 'NOT EXISTS' ] ],
+            // Not the noindex ones, nor sample products (the AI's prompt setup).
+            'meta_query'             => [ 'relation' => 'AND', [ 'key' => self::NOINDEX_META, 'compare' => 'NOT EXISTS' ], [ 'key' => '_qp_sample', 'compare' => 'NOT EXISTS' ] ],
             'no_found_rows'          => true,
             'update_post_term_cache' => false,
         ] );

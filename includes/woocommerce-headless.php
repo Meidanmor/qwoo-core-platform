@@ -100,6 +100,8 @@ add_action( 'init', function() {
                 // With the shop off (Settings → General → Sell online), catalog mode: no price, no Add to cart.
                 $extras['zero_price'] = (class_exists('Qwoo_Shop_Mode') ? Qwoo_Shop_Mode::for_storefront($product) : null)
                     ?? (class_exists('Qwoo_Zero_Price') ? Qwoo_Zero_Price::for_storefront($product) : null);
+                // A sample product (the AI's prompt setup): the storefront shows a "Sample" badge and no Add to cart.
+                $extras['sample'] = class_exists('Qwoo_Sample_Products') && Qwoo_Sample_Products::is_sample($product);
 
                 if (empty($terms) || is_wp_error($terms)) {
                     return ['default_category' => null, 'reviews' => $reviews, 'videos' => $videos, 'variation_prices' => $variation_prices] + $extras;
@@ -160,6 +162,12 @@ add_action( 'init', function() {
                         'bought_together' => [
                             'description' => 'Single product answers only: ids of the products shown as "bought together"; null otherwise.',
                             'type' => ['array', 'null'],
+                            'context' => ['view', 'edit'],
+                            'readonly' => true,
+                        ],
+                        'sample' => [
+                            'description' => 'A sample product (shown as an example, never sold).',
+                            'type' => 'boolean',
                             'context' => ['view', 'edit'],
                             'readonly' => true,
                         ],

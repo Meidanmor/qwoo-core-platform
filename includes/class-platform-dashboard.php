@@ -66,6 +66,8 @@ class Qwoo_Platform_Dashboard {
         'product_save'    => 'action_product_save',
         'product_quick'   => 'action_product_quick',
         'product_delete'  => 'action_product_delete',
+        // Sample products (the AI's prompt setup): { dry: true } → { count }; {} → { deleted, pictures }.
+        'samples_delete'  => 'action_samples_delete',
         'product_duplicate'     => 'action_product_duplicate',
         'products_bulk'         => 'action_products_bulk',
         'products_export'       => 'action_products_export',
@@ -917,6 +919,10 @@ class Qwoo_Platform_Dashboard {
         Qwoo_Translations::save( 'product', $product->get_id(), ( is_array( $params['fields'] ?? null ) ? ( $params['fields']['translations'] ?? null ) : null ) );
         // Questions and answers, bought-together products (only when sent).
         Qwoo_Product_Extras::save( $product, $f );
+        // A sample product (the AI's prompt setup): only when sent.
+        if ( array_key_exists( 'sample', $f ) ) {
+            Qwoo_Sample_Products::set( $product->get_id(), filter_var( $f['sample'], FILTER_VALIDATE_BOOLEAN ) );
+        }
         // Made a gift card, or no longer one (only when the editor said what it is: options always do).
         if ( $gift !== null || isset( $f['type'] ) ) {
             Qwoo_Gift_Cards::save_product( wc_get_product( $product->get_id() ), $gift, $rules );
@@ -1418,6 +1424,17 @@ class Qwoo_Platform_Dashboard {
         return [ 'deleted' => $product->get_id() ];
     }
 
+    /**
+     * Sample products (Qwoo_Sample_Products): { dry: true } → { count }; without dry, deletes
+     * every one for good, with its pictures when nothing else uses them → { deleted, pictures }.
+     */
+    private static function action_samples_delete( array $params ) {
+        if ( ! empty( $params['dry'] ) ) {
+            return [ 'count' => count( Qwoo_Sample_Products::ids() ) ];
+        }
+        return Qwoo_Sample_Products::delete_all( static fn( $id ) => self::media_uses( (int) $id ) );
+    }
+
     private static function action_categories_list() {
         $default = (int) get_option( 'default_product_cat' );
         $terms   = get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => false, 'orderby' => 'name', 'number' => 500 ] );
@@ -1655,7 +1672,9 @@ class Qwoo_Platform_Dashboard {
     }
 
     /**
-     * { name, data (base64) } → a Media Library image { id, url }. The photo
+     * { name, data (base64), ai?, alt? } → a Media Library image { id, url }. ai: a picture
+     * made by the AI (attachment meta _qp_ai_picture, the dashboard's "AI picture" label);
+     * alt: its alt text (up to 300 characters). The photo
      * is decoded and saved again (preferably with GD), which turns it upright
      * and drops everything else in the file: camera data, GPS location,
      * anything hidden. Large photos are scaled to MAX_IMAGE_SIDE.
@@ -1710,8 +1729,20 @@ class Qwoo_Platform_Dashboard {
             @unlink( $saved['path'] );
             return self::bad( $id->get_error_message() );
         }
+        self::image_marks( (int) $id, $params );
         // url: the product-size thumbnail; large: for blog posts; media: what the Design screen shows and previews.
         return [ 'id' => (int) $id, 'url' => self::image_url( $id, 'woocommerce_thumbnail' ), 'large' => self::image_url( $id, 'large' ), 'media' => Shop_Settings_Builder::platform_media_item( $id ) ];
+    }
+
+    /** image_upload's optional ai (bool) and alt (text). */
+    private static function image_marks( int $id, array $params ): void {
+        if ( ! empty( $params['ai'] ) && filter_var( $params['ai'], FILTER_VALIDATE_BOOLEAN ) ) {
+            update_post_meta( $id, '_qp_ai_picture', 'yes' );
+        }
+        $alt = trim( sanitize_text_field( (string) ( $params['alt'] ?? '' ) ) );
+        if ( $alt !== '' ) {
+            update_post_meta( $id, '_wp_attachment_image_alt', mb_substr( $alt, 0, 300 ) );
+        }
     }
 
     /* ---------------- orders ---------------- */
@@ -3245,6 +3276,8 @@ class Qwoo_Platform_Dashboard {
             'created'      => $p->get_date_created() ? $p->get_date_created()->getTimestamp() : null,
             // WooCommerce's own count (paid orders; cancelled ones taken off).
             'sold'         => (int) $p->get_total_sales(),
+            // A sample product (the AI's prompt setup): shown, never sold.
+            'sample'       => Qwoo_Sample_Products::is_sample( $p ),
         ];
     }
 
