@@ -210,7 +210,9 @@ trait SB_Store_Pages {
     private static function store_page_facts( $name = '' ) {
         $name      = trim( (string) $name ) !== '' ? trim( (string) $name ) : html_entity_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
         $new_order = (array) get_option( 'woocommerce_new_order_settings', [] );
-        $email     = (string) ( $new_order['recipient'] ?? '' ) ?: (string) get_option( 'admin_email' );
+        // The contact email the owner gave at setup ("Start from a template") comes first.
+        $own       = (array) get_option( 'qwoo_store_contact', [] );
+        $email     = (string) ( $own['email'] ?? '' ) ?: ( (string) ( $new_order['recipient'] ?? '' ) ?: (string) get_option( 'admin_email' ) );
         $email     = is_email( $email ) ? $email : '';
         $street    = trim( (string) get_option( 'woocommerce_store_address' ) );
         $country   = explode( ':', (string) get_option( 'woocommerce_default_country', '' ) )[0];

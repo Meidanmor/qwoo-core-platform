@@ -223,6 +223,13 @@ trait SB_Template_Import {
         }
         // Time zone (the owner's browser) and the business address (optional): before the legal pages, which use them.
         self::apply_setup_settings( (array) ( $input['setup'] ?? [] ), (string) ( $input['lang'] ?? '' ) );
+        // How shoppers reach the store ("Start from a template" details, optional): the legal pages' email too.
+        $contact = (array) ( $input['contact'] ?? [] );
+        $contact_email = sanitize_email( (string) ( $contact['email'] ?? '' ) );
+        $contact_phone = preg_replace( '/[^\d+]/', '', (string) ( $contact['phone'] ?? '' ) );
+        if ( $contact_email !== '' || $contact_phone !== '' ) {
+            update_option( 'qwoo_store_contact', [ 'email' => is_email( $contact_email ) ? $contact_email : '', 'phone' => (string) $contact_phone ], false );
+        }
         // Home (from the template's homepage), privacy policy, terms, shipping & returns.
         self::ensure_store_pages( true, trim( (string) ( $input['name'] ?? '' ) ) );
         // Templates published before "Default" alignment existed say "left".
@@ -292,6 +299,10 @@ trait SB_Template_Import {
         if ( $template && empty( $template['keep'] ) && $name !== '' ) {
             self::template_brand_swap( $final, (array) ( $template['names'] ?? [] ), (int) ( $options['branding']['logo_id'] ?? 0 ), (int) ( $state['logo_id'] ?? 0 ), $name );
         }
+        // The owner's contact details and social links replace the template's (only what the owner gave).
+        if ( $contact ) {
+            self::apply_contact_details( $final, $contact );
+        }
         // Templates made before the header was built from blocks have none. Only the owner's
         // own logo goes in it (the template's logo isn't theirs); without one, the store's name.
         self::ensure_default_header( $final, (int) ( $state['logo_id'] ?? 0 ), $name );
@@ -313,6 +324,54 @@ trait SB_Template_Import {
 
         update_option( self::$branding_option, [ 'done' => true, 'warnings' => $warnings ], false );
         return [ 'done' => true, 'warnings' => $warnings ];
+    }
+
+    /**
+     * "Start from a template" (platform 0.197.0): the owner's social links go into every Social Links block
+     * (header, footer, pages, popups, drawers), and their phone / email into the contact button's WhatsApp,
+     * phone and email methods. Nothing changes where the owner gave nothing.
+     */
+    private static function apply_contact_details( array &$options, array $contact ) {
+        $items = [];
+        foreach ( (array) ( $contact['social'] ?? [] ) as $s ) {
+            $url = esc_url_raw( (string) ( $s['url'] ?? '' ), [ 'https', 'http' ] );
+            $net = (string) ( $s['network'] ?? '' );
+            if ( $url !== '' && in_array( $net, [ 'instagram', 'facebook', 'tiktok' ], true ) ) {
+                $items[] = [ 'network' => $net, 'url' => $url, 'label' => '' ];
+            }
+        }
+        if ( $items ) {
+            $walk = static function ( &$node ) use ( &$walk, $items ) {
+                if ( ! is_array( $node ) ) return;
+                if ( ( $node['type'] ?? '' ) === 'social_links' && isset( $node['data'] ) && is_array( $node['data'] ) ) {
+                    $node['data']['items'] = $items;
+                }
+                foreach ( $node as &$child ) {
+                    if ( is_array( $child ) ) $walk( $child );
+                }
+            };
+            $walk( $options );
+        }
+
+        $email = sanitize_email( (string) ( $contact['email'] ?? '' ) );
+        $phone = preg_replace( '/[^\d+]/', '', (string) ( $contact['phone'] ?? '' ) );
+        if ( ( $email === '' && $phone === '' ) || empty( $options['contact']['methods'] ) || ! is_array( $options['contact']['methods'] ) ) {
+            return;
+        }
+        // WhatsApp wants the number with its country code and no "+": a local Israeli 05… becomes 9725….
+        $country = strtok( (string) get_option( 'woocommerce_default_country' ), ':' );
+        $wa      = ltrim( (string) $phone, '+' );
+        if ( strpos( (string) $phone, '+' ) !== 0 && strpos( $wa, '0' ) === 0 && $country === 'IL' ) {
+            $wa = '972' . substr( $wa, 1 );
+        }
+        foreach ( $options['contact']['methods'] as &$m ) {
+            if ( ! is_array( $m ) ) continue;
+            $type = (string) ( $m['type'] ?? '' );
+            if ( $type === 'whatsapp' && $wa !== '' ) $m['value'] = $wa;
+            elseif ( $type === 'phone' && $phone !== '' ) $m['value'] = (string) $phone;
+            elseif ( $type === 'email' && $email !== '' ) $m['value'] = $email;
+        }
+        unset( $m );
     }
 
     /* ---------------- a store copy template's brand ---------------- */
