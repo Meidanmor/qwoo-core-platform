@@ -419,7 +419,8 @@ abstract class Shop_Builder_Constants {
                     'help' => 'An uploaded background video moves forward and back with the scroll instead of looping. Short videos (under 10 seconds) work best; iPhones play backwards less smoothly.' ],
             'scene_snap' => [ 'type' => 'toggle', 'label' => 'Settle On A Step', 'tab' => 'layout', 'group' => 'When scrolling', 'show_if' => [ 'scene_mode' => 'story' ],
                     'help' => 'When scrolling stops between two steps, the page glides to the nearest one.' ],
-            'scene_phone' => [ 'type' => 'select', 'label' => 'On Phones', 'tab' => 'layout', 'group' => 'When scrolling', 'default' => 'simple',
+            // The same by default (owner, 2026-11-22): scenes are there for their effect, and most shoppers are on phones.
+            'scene_phone' => [ 'type' => 'select', 'label' => 'On Phones', 'tab' => 'layout', 'group' => 'When scrolling', 'default' => 'same',
                     'options' => [ 'same' => 'The same', 'simple' => 'Simpler (sideways: a swipe row; a story: shorter)', 'off' => 'A normal section' ],
                     'show_if' => [ 'scene_mode' => [ 'sideways', 'story' ] ] ],
     ];
