@@ -377,6 +377,96 @@ abstract class Shop_Builder_Constants {
             'shadow_inset' => [ 'type' => 'toggle', 'label' => 'Inside the box (inset)', 'tab' => 'style', 'group' => 'Shadow', 'responsive' => true, 'screens' => true, 'show_if' => [ 'shadow' => true ] ],
     ];
 
+    /** Entrance animations of sections and blocks (aura src/utils/entrance.js, app.css). */
+    const ENTRANCE_OPTIONS = [
+            'none' => 'None', 'fade_up' => 'Fade in and rise', 'fade' => 'Fade in', 'zoom_in' => 'Grow in', 'reveal' => 'Reveal from the bottom',
+            'slide_start' => 'Slide in from the start side', 'slide_end' => 'Slide in from the end side', 'blur_in' => 'Come into focus',
+            'flip' => 'Flip up', 'words' => 'Words one by one (headings; other blocks fade in)',
+    ];
+
+    /**
+     * Scroll scenes (2026-11-22, plans/scroll-scenes.md): a top-level section that stays on screen while the
+     * page scrolls, and either moves its row sideways or plays a story with its blocks. Only top-level
+     * sections (`top_only`; the dashboard leaves it out of nested ones, aura ignores it there). Rendered by
+     * aura's SectionTemplate + src/utils/scroll-scene.js (sticky pin, own engine, no animation library).
+     * Visitors who turned animations off, and phones set to "A normal section", get the normal section.
+     */
+    const SCENE_FIELDS = [
+            'scene_mode' => [ 'type' => 'select', 'label' => 'When Scrolling', 'tab' => 'layout', 'group' => 'When scrolling', 'top_only' => true, 'default' => 'none',
+                    // Not in the header, footer, drawers, popups or card designs (they don't scroll as a page).
+                    'not_pages' => [ 'header', 'footer', 'drawer_', 'popup', 'loop_' ],
+                    'options' => [ 'none' => 'Normally', 'sideways' => 'Move sideways', 'story' => 'Play a story' ],
+                    'help' => 'Move sideways: the section stays on screen while its blocks slide across as a row, then the page goes on. Play a story: the section stays on screen while scrolling shows, moves and hides its blocks (Advanced → Scroll story on each block).' ],
+            'scene_length' => [ 'type' => 'number', 'label' => 'Length (Screens Of Scrolling)', 'tab' => 'layout', 'group' => 'When scrolling', 'min' => 1, 'max' => 8, 'default' => 3,
+                    'show_if' => [ 'scene_mode' => 'story' ], 'help' => 'About one screen per step reads well. 2 to 4 for most stories.' ],
+            'scene_steps' => [ 'type' => 'number', 'label' => 'Steps', 'tab' => 'layout', 'group' => 'When scrolling', 'min' => 1, 'max' => 8, 'default' => 4,
+                    'show_if' => [ 'scene_mode' => 'story' ],
+                    'help' => 'Splits the story into equal parts for the progress dots, "Settle on a step" and the story strip. With 4 steps, step 2 is 25% to 50%.' ],
+            'scene_speed' => [ 'type' => 'select', 'label' => 'Speed', 'tab' => 'layout', 'group' => 'When scrolling', 'default' => 'normal',
+                    'options' => [ 'slow' => 'Slow', 'normal' => 'Normal', 'fast' => 'Fast' ], 'show_if' => [ 'scene_mode' => 'sideways' ] ],
+            'scene_card_width' => [ 'type' => 'length', 'label' => 'Card Width For Grids', 'tab' => 'layout', 'group' => 'When scrolling', 'responsive' => true,
+                    'placeholder' => '300px', 'show_if' => [ 'scene_mode' => 'sideways' ],
+                    'help' => 'Product Grid, Category Grid, Blog Posts and Testimonials put their cards in the row at this width. Other blocks use their own Block Width.' ],
+            'scene_progress' => [ 'type' => 'select', 'label' => 'Progress', 'tab' => 'layout', 'group' => 'When scrolling', 'default' => 'none',
+                    'options' => [ 'none' => 'None', 'line' => 'A line at the bottom', 'dots' => 'Dots, one per step' ], 'show_if' => [ 'scene_mode' => [ 'sideways', 'story' ] ],
+                    'help' => 'Dots: stories only.' ],
+            'scene_progress_color' => [ 'type' => 'color', 'label' => 'Progress Color', 'tab' => 'layout', 'group' => 'When scrolling', 'show_if' => [ 'scene_progress' => [ 'line', 'dots' ] ] ],
+            'scene_bg_motion' => [ 'type' => 'select', 'label' => 'Background While Scrolling', 'tab' => 'layout', 'group' => 'When scrolling', 'default' => 'none',
+                    'options' => [ 'none' => 'Stays still', 'zoom_in' => 'Zoom in', 'zoom_out' => 'Zoom out', 'move_up' => 'Move up', 'move_down' => 'Move down', 'move_side' => 'Move sideways', 'blur_in' => 'Comes into focus', 'darken' => 'Gets darker' ],
+                    'show_if' => [ 'scene_mode' => [ 'sideways', 'story' ] ], 'help' => 'For a picture, video or slideshow background.' ],
+            'scene_video' => [ 'type' => 'toggle', 'label' => 'Play The Background Video With The Scroll', 'tab' => 'layout', 'group' => 'When scrolling',
+                    'show_if' => [ 'scene_mode' => 'story' ],
+                    'help' => 'An uploaded background video moves forward and back with the scroll instead of looping. Short videos (under 10 seconds) work best; iPhones play backwards less smoothly.' ],
+            'scene_snap' => [ 'type' => 'toggle', 'label' => 'Settle On A Step', 'tab' => 'layout', 'group' => 'When scrolling', 'show_if' => [ 'scene_mode' => 'story' ],
+                    'help' => 'When scrolling stops between two steps, the page glides to the nearest one.' ],
+            'scene_phone' => [ 'type' => 'select', 'label' => 'On Phones', 'tab' => 'layout', 'group' => 'When scrolling', 'default' => 'simple',
+                    'options' => [ 'same' => 'The same', 'simple' => 'Simpler (sideways: a swipe row; a story: shorter)', 'off' => 'A normal section' ],
+                    'show_if' => [ 'scene_mode' => [ 'sideways', 'story' ] ] ],
+    ];
+
+    /**
+     * What a block or nested section does inside a scene (Advanced → Scroll story / In a moving row). `in_scene`:
+     * the dashboard shows them only inside a top-level section with that scene. Times are % of the story (0-100).
+     */
+    const SCENE_ITEM_FIELDS = [
+            'sc_from' => [ 'type' => 'number', 'label' => 'Shows From (%)', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'min' => 0, 'max' => 99, 'default' => 0,
+                    'help' => '0 = the start of the story, 100 = the end. With 4 steps: step 1 is 0-25, step 2 is 25-50… A block from 0 is there from the start.' ],
+            'sc_to' => [ 'type' => 'number', 'label' => 'Until (%)', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'min' => 1, 'max' => 100, 'default' => 100,
+                    'help' => '100: it stays to the end.' ],
+            'sc_in' => [ 'type' => 'select', 'label' => 'Comes In', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'default' => 'fade',
+                    'options' => [ 'none' => 'Appears at once', 'fade' => 'Fade', 'rise' => 'Rise', 'drop' => 'Drop', 'from_start' => 'From the start side', 'from_end' => 'From the end side',
+                            'grow' => 'Grow', 'shrink' => 'Shrink into place', 'blur' => 'Come into focus', 'turn' => 'Turn', 'flip' => 'Flip up', 'wipe_up' => 'Wipe up', 'wipe_side' => 'Wipe from the side' ] ],
+            'sc_out' => [ 'type' => 'select', 'label' => 'Goes Out', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'default' => 'same',
+                    'options' => [ 'same' => 'The way it came in', 'none' => 'Disappears at once', 'fade' => 'Fade', 'rise' => 'Rise away', 'drop' => 'Drop away', 'to_start' => 'To the start side', 'to_end' => 'To the end side',
+                            'grow' => 'Grow away', 'shrink' => 'Shrink away', 'blur' => 'Blur away', 'wipe_up' => 'Wipe up', 'wipe_side' => 'Wipe to the side' ],
+                    'help' => 'Only when Until is less than 100.' ],
+            'sc_while' => [ 'type' => 'select', 'label' => 'While Shown', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'default' => 'none',
+                    'options' => [ 'none' => 'Stays still', 'drift_up' => 'Drifts up', 'drift_down' => 'Drifts down', 'drift_side' => 'Drifts sideways', 'grow' => 'Slowly grows',
+                            'shrink' => 'Slowly shrinks', 'zoom_out' => 'Zooms out from close', 'turn' => 'Slowly turns', 'custom' => 'My own movement' ] ],
+            'sc_move_x' => [ 'type' => 'number', 'label' => 'Move Sideways (px)', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'min' => -1200, 'max' => 1200, 'default' => 0,
+                    'show_if' => [ 'sc_while' => 'custom' ], 'help' => 'From where it is at its start to its end. Positive: towards the end side.' ],
+            'sc_move_y' => [ 'type' => 'number', 'label' => 'Move Down (px)', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'min' => -1200, 'max' => 1200, 'default' => 0,
+                    'show_if' => [ 'sc_while' => 'custom' ], 'help' => 'Negative: up.' ],
+            'sc_scale_from' => [ 'type' => 'number', 'label' => 'Size At Its Start (%)', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'min' => 10, 'max' => 400, 'default' => 100,
+                    'show_if' => [ 'sc_while' => 'custom' ] ],
+            'sc_scale' => [ 'type' => 'number', 'label' => 'Size At Its End (%)', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'min' => 10, 'max' => 400, 'default' => 100,
+                    'show_if' => [ 'sc_while' => 'custom' ] ],
+            'sc_rotate' => [ 'type' => 'number', 'label' => 'Turn (degrees)', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'min' => -720, 'max' => 720, 'default' => 0,
+                    'show_if' => [ 'sc_while' => 'custom' ] ],
+            'sc_fade_to' => [ 'type' => 'number', 'label' => 'See-through At Its End (%)', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'min' => 0, 'max' => 100, 'default' => 0,
+                    'show_if' => [ 'sc_while' => 'custom' ], 'help' => '0: fully visible. 70: mostly faded, e.g. a picture behind new text.' ],
+            'sc_ease' => [ 'type' => 'select', 'label' => 'Feel', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'default' => 'smooth',
+                    'options' => [ 'smooth' => 'Smooth', 'soft' => 'Soft landing', 'steady' => 'Steady', 'bouncy' => 'Bouncy' ] ],
+            'sc_count' => [ 'type' => 'toggle', 'label' => 'Count Numbers Up', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story',
+                    'help' => 'Numbers in its text count up from 0 as it comes in (e.g. "1,200 happy customers").' ],
+            'sc_speed' => [ 'type' => 'select', 'label' => 'Moves', 'tab' => 'advanced', 'group' => 'In a moving row', 'in_scene' => 'sideways', 'default' => 'normal',
+                    'options' => [ 'normal' => 'With the row', 'slower' => 'A little slower (depth)', 'faster' => 'A little faster (depth)', 'fixed' => 'Stays in place' ],
+                    'help' => 'Stays in place: e.g. a title above the row that doesn\'t move.' ],
+            'sc_row_cards' => [ 'type' => 'select', 'label' => 'In The Row', 'tab' => 'advanced', 'group' => 'In a moving row', 'in_scene' => 'sideways', 'default' => 'cards',
+                    'options' => [ 'cards' => 'Its cards join the row', 'one' => 'As one item' ],
+                    'help' => 'For Product Grid, Category Grid, Blog Posts and Testimonials.' ],
+    ];
+
     /**
      * "Position": a section or block that stays in view while the page scrolls
      * (CSS sticky), shared by containers and every block (Advanced tab). It
@@ -483,6 +573,8 @@ abstract class Shop_Builder_Constants {
             'gap' => [ 'type' => 'length', 'label' => 'Gap Between Blocks', 'tab' => 'layout', 'group' => 'Arrange blocks', 'responsive' => true,
                     'placeholder' => 'e.g. 24px' ],
 
+    ] + self::SCENE_FIELDS + [
+
             // --- Style tab ---
             'padding_preset' => [ 'type' => 'select', 'label' => 'Padding', 'tab' => 'style', 'group' => 'Spacing',
                     'options' => [ 'none' => 'None', 'small' => 'Small (90 / 60 / 24px)', 'medium' => 'Medium (120 / 80 / 48px)', 'large' => 'Large (150 / 110 / 80px)', 'custom' => 'Custom' ],
@@ -494,6 +586,14 @@ abstract class Shop_Builder_Constants {
                     'help' => 'Space outside the section. A negative value pulls it closer to its neighbour.' ],
 
     ] + self::BACKGROUND_FIELDS + [
+
+            // Moving backgrounds (2026-11-22): any section with a picture or video background (aura src/utils/scroll-scene.js).
+            'bg_depth' => [ 'type' => 'select', 'label' => 'Depth While Scrolling', 'tab' => 'style', 'group' => 'Background', 'default' => 'none',
+                    'options' => [ 'none' => 'Off', 'gentle' => 'Gentle', 'strong' => 'Strong' ], 'show_if' => [ 'bg_type' => [ 'image', 'video', 'slideshow' ] ],
+                    'help' => 'The background moves slower than the page, so the section feels deep. Phones always get the gentle version.' ],
+            'bg_zoom' => [ 'type' => 'select', 'label' => 'Slow Zoom', 'tab' => 'style', 'group' => 'Background', 'default' => 'none',
+                    'options' => [ 'none' => 'Off', 'in' => 'Zoom in slowly', 'out' => 'Zoom out slowly' ], 'show_if' => [ 'bg_type' => [ 'image', 'video' ] ],
+                    'help' => 'The background slowly grows (or shrinks) and back, over about 20 seconds. Never for visitors who turned animations off.' ],
 
             'text_color' => [ 'type' => 'color', 'label' => 'Default Text Color', 'tab' => 'style', 'group' => 'Colors & Border', 'responsive' => true, 'screens' => true ],
             'border_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Colors & Border', 'responsive' => true, 'screens' => true, 'placeholder' => 'e.g. 12px' ],
@@ -507,8 +607,8 @@ abstract class Shop_Builder_Constants {
             'link_label' => [ 'type' => 'text', 'label' => 'Link description (for screen readers)', 'tab' => 'style', 'group' => 'Link & hover',
                     'placeholder' => 'e.g. Shop necklaces' ],
             'hover_effect' => [ 'type' => 'select', 'label' => 'Hover Effect', 'tab' => 'style', 'group' => 'Link & hover', 'default' => 'none',
-                    'options' => [ 'none' => 'None', 'zoom' => 'Zoom the background', 'darken' => 'Darken', 'lift' => 'Lift' ],
-                    'help' => 'Plays when the mouse is over the section, and on phones while a finger touches it.' ],
+                    'options' => [ 'none' => 'None', 'zoom' => 'Zoom the background', 'darken' => 'Darken', 'lift' => 'Lift', 'tilt' => 'Tilt toward the mouse' ],
+                    'help' => 'Plays when the mouse is over the section, and on phones while a finger touches it. Tilt: computers only (good for cards in a card design).' ],
 
     ] + self::POSITION_FIELDS + self::ORDER_FIELDS + [
 
@@ -526,11 +626,14 @@ abstract class Shop_Builder_Constants {
                     'help' => 'Lets a button link to this section with #your-id.' ],
             // Entrance animation of the whole section (blocks have their own: BLOCK_COMMON_FIELDS).
             'animation' => [ 'type' => 'select', 'label' => 'Entrance Animation', 'tab' => 'advanced', 'group' => 'Animation', 'default' => 'none',
-                    'options' => [ 'none' => 'None', 'fade_up' => 'Fade in and rise', 'fade' => 'Fade in', 'zoom_in' => 'Grow in', 'reveal' => 'Reveal from the bottom' ],
+                    'options' => self::ENTRANCE_OPTIONS,
                     'help' => 'Plays once when the section scrolls into view. Not for the page\'s first section, and never for visitors who turned animations off.' ],
             'animation_delay' => [ 'type' => 'number', 'label' => 'Delay (milliseconds)', 'tab' => 'advanced', 'group' => 'Animation', 'min' => 0, 'max' => 1500, 'default' => 0,
-                    'show_if' => [ 'animation' => [ 'fade_up', 'fade', 'zoom_in', 'reveal' ] ] ],
-    ];
+                    'show_if' => [ 'animation' => [ 'fade_up', 'fade', 'zoom_in', 'reveal', 'slide_start', 'slide_end', 'blur_in', 'flip', 'words' ] ] ],
+            // A container inside a story (or the story section itself): its blocks on top of each other, e.g. texts that swap in one place.
+            'sc_layers' => [ 'type' => 'toggle', 'label' => 'Put Its Blocks On Top Of Each Other', 'tab' => 'advanced', 'group' => 'Scroll story', 'in_scene' => 'story', 'scene_self' => true,
+                    'help' => 'For blocks that take turns in one place, like texts or pictures that swap during the story. Each block keeps its own alignment; place one freely with Position → Absolute.' ],
+    ] + self::SCENE_ITEM_FIELDS;
 
     /**
      * Wrapper fields every non-section block gets. `tab => style` ones
@@ -554,11 +657,11 @@ abstract class Shop_Builder_Constants {
             'anchor_id' => [ 'type' => 'anchor', 'label' => 'Anchor ID', 'tab' => 'advanced', 'group' => 'Visibility' ],
             // Entrance animation: this block, once, when it scrolls into view (sections: SECTION_STYLE_FIELDS).
             'animation' => [ 'type' => 'select', 'label' => 'Entrance Animation', 'tab' => 'advanced', 'group' => 'Animation', 'default' => 'none',
-                    'options' => [ 'none' => 'None', 'fade_up' => 'Fade in and rise', 'fade' => 'Fade in', 'zoom_in' => 'Grow in', 'reveal' => 'Reveal from the bottom' ],
+                    'options' => self::ENTRANCE_OPTIONS,
                     'help' => 'Plays once when the block scrolls into view. Not in the page\'s first section, and never for visitors who turned animations off.' ],
             'animation_delay' => [ 'type' => 'number', 'label' => 'Delay (milliseconds)', 'tab' => 'advanced', 'group' => 'Animation', 'min' => 0, 'max' => 1500, 'default' => 0,
-                    'show_if' => [ 'animation' => [ 'fade_up', 'fade', 'zoom_in', 'reveal' ] ] ],
-    ] + self::POSITION_FIELDS + self::ORDER_FIELDS;
+                    'show_if' => [ 'animation' => [ 'fade_up', 'fade', 'zoom_in', 'reveal', 'slide_start', 'slide_end', 'blur_in', 'flip', 'words' ] ] ],
+    ] + self::POSITION_FIELDS + self::ORDER_FIELDS + self::SCENE_ITEM_FIELDS;
 
     /**
      * Allowed icon keys for Advantages cards. Each entry carries the Material
