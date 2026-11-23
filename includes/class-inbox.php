@@ -272,6 +272,21 @@ class Qwoo_Inbox {
         ], $body );
     }
 
+    /** The accessibility tool's "Report a problem" (Qwoo_Accessibility): every plan, it's a legal channel. */
+    public static function from_accessibility( string $email, string $name, string $body, string $page ): int {
+        $email = strtolower( sanitize_email( $email ) );
+        $body  = self::clean( $body );
+        if ( ! is_email( $email ) || $body === '' ) return 0;
+        self::maybe_install();
+        return self::open( [
+            'email'  => $email,
+            'name'   => $name,
+            'topic'  => self::he() ? 'נגישות' : 'Accessibility',
+            'source' => 'a11y',
+            'page'   => $page,
+        ], $body );
+    }
+
     /** Opens a conversation with its first message, tells the owner, and confirms to the shopper. */
     private static function open( array $conv, string $body ): int {
         global $wpdb;

@@ -570,6 +570,8 @@ class Qwoo_Platform_Dashboard {
             'reviews'  => self::action_reviews_pending(),
             // Legal pages written and published at setup: the owner is asked to read them.
             'legal_review' => Shop_Settings_Builder::legal_review(),
+            // Settings → Accessibility: no coordinator yet, pictures with no description.
+            'a11y'         => class_exists( 'Qwoo_Accessibility' ) ? Qwoo_Accessibility::overview() : null,
             // "Add to home screen" is on but the store has no app icon (nor a logo to make one from):
             // the storefront asks no one, and Home tells the owner (2026-11-20).
             'app_icon_missing' => self::app_icon_missing(),
@@ -2118,6 +2120,8 @@ class Qwoo_Platform_Dashboard {
             'product_start' => self::product_start(),
             // Sell online + Shopper accounts (Qwoo_Shop_Mode).
             'shop_mode'  => class_exists( 'Qwoo_Shop_Mode' ) ? Qwoo_Shop_Mode::for_dashboard() : null,
+            // Settings → Accessibility (Qwoo_Accessibility).
+            'accessibility' => class_exists( 'Qwoo_Accessibility' ) ? Qwoo_Accessibility::for_dashboard() : null,
             'store'    => [
                 'name'           => html_entity_decode( get_option( 'blogname' ), ENT_QUOTES ),
                 'email'          => (string) ( $new_order['recipient'] ?? '' ) ?: (string) get_option( 'admin_email' ),
@@ -2387,6 +2391,13 @@ class Qwoo_Platform_Dashboard {
             case 'shop_mode':
             case 'accounts':
                 $saved = Qwoo_Shop_Mode::save( $v, $params['section'] === 'accounts' ? 'accounts' : 'shop' );
+                if ( is_wp_error( $saved ) ) {
+                    return $saved;
+                }
+                break;
+
+            case 'accessibility':
+                $saved = Qwoo_Accessibility::save( $v );
                 if ( is_wp_error( $saved ) ) {
                     return $saved;
                 }

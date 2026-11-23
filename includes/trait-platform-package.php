@@ -348,6 +348,10 @@ trait Qwoo_Platform_Package {
             $done = Qwoo_Zero_Price::save( $q['zero_price'] );
             if ( is_wp_error( $done ) ) self::mig_problem( 'The settings for products with no price weren\'t copied: ' . $done->get_error_message() );
         }
+        if ( is_array( $q['accessibility'] ?? null ) && class_exists( 'Qwoo_Accessibility' ) ) {
+            $done = Qwoo_Accessibility::save( json_decode( wp_json_encode( $q['accessibility'] ), true ) ?: [] );
+            if ( is_wp_error( $done ) ) self::mig_problem( 'The accessibility settings were not copied: ' . $done->get_error_message() );
+        }
         if ( is_array( $q['giftcard_rules'] ?? null ) && class_exists( 'Qwoo_Gift_Cards' ) ) {
             update_option( Qwoo_Gift_Cards::RULES, Qwoo_Gift_Cards::clean_rules( $q['giftcard_rules'] ), false );
         }
