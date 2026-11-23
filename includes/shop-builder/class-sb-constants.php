@@ -903,6 +903,9 @@ abstract class Shop_Builder_Constants {
     ];
 
     /** Form field types that need an `options` list. */
+    /** The HTML block's code: at most this many bytes (a bigger tool lives on its own site and is shown by its address). */
+    const HTML_BLOCK_MAX_BYTES = 102400;
+
     const FORM_FIELD_TYPES_WITH_OPTIONS = [ 'select', 'radio', 'checkboxes' ];
 
     /** Shared by the checkout blocks: a title and the card look. */
@@ -1182,6 +1185,42 @@ abstract class Shop_Builder_Constants {
                                     'help' => 'Moves the icon up (minus) or down, e.g. -2px.' ],
                             'icon_color' => [ 'type' => 'color', 'label' => 'Icon Color', 'tab' => 'style', 'group' => 'Icon', 'show_if' => [ 'show_icon' => true ], 'help' => 'Empty: the text colour.' ],
                             'ts:label' => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'keys' => [ 'font' => 'font', 'size' => 'text_size', 'weight' => 'font_weight', 'color' => 'text_color' ] ],
+                    ],
+            ],
+
+            // The owner's own HTML / CSS / JavaScript, or a tool from another site (owner, 2026-11-23, approved prototype
+            // https://claude.ai/artifact/UCvQfa2ZvJDPu5qY1umTYt). The storefront never puts it in the page: it runs in a
+            // sealed frame on its own address (aura HtmlBlock.vue + the openly-frames shell). AI apps add it only when the
+            // owner asked for code or an outside tool and our blocks can't do it, and only after the owner's OK (yallaflow-ai).
+            'html_block' => [
+                    'label'    => 'HTML',
+                    'category' => 'interactive',
+                    'icon'     => 'code',
+                    'fields'   => [
+                            'source' => [ 'type' => 'select', 'label' => 'What To Show', 'tab' => 'content', 'default' => 'code',
+                                    'options' => [ 'code' => 'Code', 'url' => 'A tool from another site (its address)' ] ],
+                            'code'   => [ 'type' => 'code', 'label' => 'The Code', 'tab' => 'content', 'default' => '', 'max_bytes' => self::HTML_BLOCK_MAX_BYTES,
+                                    'show_if' => [ 'source' => 'code' ],
+                                    'help' => 'HTML, CSS and JavaScript. It runs in a closed box: it works, but it can\'t see the cart, the shopper\'s account or the rest of the page. If it breaks, only this block breaks.' ],
+                            'url'    => [ 'type' => 'url', 'label' => 'Address Of The Tool', 'tab' => 'content', 'placeholder' => 'https://…',
+                                    'show_if' => [ 'source' => 'url' ],
+                                    'help' => 'A page the tool lets you embed (booking calendars, forms, maps…). If the site doesn\'t allow embedding, the box stays empty.' ],
+                            'title'  => [ 'type' => 'text', 'label' => 'Name For Screen Readers', 'tab' => 'content', 'placeholder' => 'e.g. Coffee amount calculator',
+                                    'help' => 'What screen readers say for this box.' ],
+                            'height_mode' => [ 'type' => 'select', 'label' => 'Height', 'tab' => 'style', 'group' => 'Size', 'default' => 'auto', 'show_if' => [ 'source' => 'code' ],
+                                    'options' => [ 'auto' => 'Fits the content', 'fixed' => 'Fixed height' ] ],
+                            'height' => [ 'type' => 'length', 'label' => 'Fixed Height', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'default' => '480px',
+                                    'help' => 'Used with "Fixed height", and always for a tool from another site.' ],
+                            'max_width' => [ 'type' => 'length', 'label' => 'Max Width', 'tab' => 'style', 'group' => 'Size', 'responsive' => true, 'placeholder' => 'e.g. 960px' ],
+                            'use_theme' => [ 'type' => 'toggle', 'label' => 'Use the store\'s fonts and colours', 'tab' => 'style', 'group' => 'Look', 'default' => true, 'show_if' => [ 'source' => 'code' ],
+                                    'help' => 'The code gets --store-font, --store-headings-font, --store-text, --store-primary and --store-secondary.' ],
+                            'transparent' => [ 'type' => 'toggle', 'label' => 'Transparent background', 'tab' => 'style', 'group' => 'Look', 'default' => true, 'show_if' => [ 'source' => 'code' ] ],
+                            'allow_forms'  => [ 'type' => 'toggle', 'label' => 'Allow forms', 'tab' => 'advanced', 'group' => 'What The Code May Do', 'default' => true,
+                                    'help' => 'The code can send a form to its own service (a newsletter sign-up at another provider, say).' ],
+                            'allow_popups' => [ 'type' => 'toggle', 'label' => 'Allow opening new windows', 'tab' => 'advanced', 'group' => 'What The Code May Do',
+                                    'help' => 'For tools that open a payment or sign-in in a window of their own.' ],
+                            'links_here'   => [ 'type' => 'toggle', 'label' => 'Links in the code open in this window', 'tab' => 'advanced', 'group' => 'What The Code May Do',
+                                    'help' => 'Off: links open in a new tab.' ],
                     ],
             ],
 

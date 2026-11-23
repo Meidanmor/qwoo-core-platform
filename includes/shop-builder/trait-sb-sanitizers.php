@@ -199,6 +199,16 @@ trait SB_Sanitizers {
             case 'rich_text':
                 return wp_kses( is_scalar( $value ) ? (string) $value : '', self::RICH_TEXT_ALLOWED_TAGS );
 
+            // The HTML block's code, kept as the owner wrote it: the storefront only ever runs it inside a sealed
+            // frame on another address, never in the page (aura HtmlBlock.vue). Valid UTF-8, no NUL, size cap.
+            case 'code':
+                $code = is_scalar( $value ) ? str_replace( "\0", '', (string) $value ) : '';
+                if ( function_exists( 'wp_check_invalid_utf8' ) ) {
+                    $code = wp_check_invalid_utf8( $code, true );
+                }
+                $max = (int) ( $spec['max_bytes'] ?? 102400 );
+                return strlen( $code ) > $max ? mb_strcut( $code, 0, $max, 'UTF-8' ) : $code;
+
             case 'html':
                 return self::sanitize_html_value( is_scalar( $value ) ? (string) $value : '' );
 
