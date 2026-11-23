@@ -130,6 +130,8 @@ class Qwoo_Site_Content {
         if ( class_exists( 'Qwoo_Floating_Buttons' ) ) $body += Qwoo_Floating_Buttons::site_fields();
         // Products → Product settings → Product options (live, no publish).
         if ( class_exists( 'Qwoo_Platform_Dashboard' ) ) $body['product_start'] = Qwoo_Platform_Dashboard::product_start();
+        // Settings → General → Faster pictures: the storefront offers the WebP copies (live, no publish).
+        if ( class_exists( 'Qwoo_Webp' ) ) $body += Qwoo_Webp::site_fields();
         // Notifications → Settings → Home screen off: the app file offers no install (live, no publish).
         if ( class_exists( 'Qwoo_Push' ) && empty( Qwoo_Push::settings()['install']['on'] ) ) $body['app'] = false;
         // Tracking & custom code: only a hash of its stamp (the settings come from qwoo/v1/site/code).
@@ -255,6 +257,12 @@ class Qwoo_Site_Content {
     /** The live version's [ version, time ], right now. */
     public static function live() {
         return self::fresh( self::CURRENT );
+    }
+
+    /** The live version's config files, decoded ([ "config/home.json" => [ … ] ]), or []. */
+    public static function live_json(): array {
+        $m = self::current_manifest();
+        return is_array( $m['json'] ?? null ) ? $m['json'] : [];
     }
 
     private static function current_manifest() {

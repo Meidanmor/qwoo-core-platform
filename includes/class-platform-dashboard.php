@@ -135,6 +135,7 @@ class Qwoo_Platform_Dashboard {
         'couriers_test'       => 'action_couriers_test',
         'couriers_disconnect' => 'action_couriers_disconnect',
         'usage'           => 'action_usage',
+        'plugins_list'    => 'action_plugins_list',
         'settings_get'    => 'action_settings_get',
         'settings_save'   => 'action_settings_save',
         'store_language'  => 'action_store_language',
@@ -2105,6 +2106,29 @@ class Qwoo_Platform_Dashboard {
     /* ---------------- settings ---------------- */
 
     /** General, store details, checkout & emails and tax options, plus the lists the forms need. */
+    /** The plugins installed on this store's WordPress (platform wp-admin → a store → Installed plugins). */
+    private static function action_plugins_list() {
+        if ( ! function_exists( 'get_plugins' ) ) require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        $active  = (array) get_option( 'active_plugins', [] );
+        $updates = get_site_transient( 'update_plugins' );
+        $out     = [];
+        foreach ( get_plugins() as $file => $p ) {
+            $out[] = [
+                'file'    => (string) $file,
+                'name'    => wp_strip_all_tags( (string) ( $p['Name'] ?? $file ) ),
+                'version' => (string) ( $p['Version'] ?? '' ),
+                'author'  => wp_strip_all_tags( (string) ( $p['Author'] ?? '' ) ),
+                'active'  => in_array( $file, $active, true ),
+                'update'  => is_object( $updates ) && isset( $updates->response[ $file ]->new_version ) ? (string) $updates->response[ $file ]->new_version : '',
+            ];
+        }
+        $mu = [];
+        foreach ( function_exists( 'get_mu_plugins' ) ? get_mu_plugins() : [] as $file => $p ) {
+            $mu[] = [ 'file' => (string) $file, 'name' => wp_strip_all_tags( (string) ( $p['Name'] ?? $file ) ), 'version' => (string) ( $p['Version'] ?? '' ) ];
+        }
+        return [ 'plugins' => $out, 'mu' => $mu, 'wp' => get_bloginfo( 'version' ), 'php' => PHP_VERSION ];
+    }
+
     private static function action_settings_get() {
         [ $country, $state ] = array_pad( explode( ':', (string) get_option( 'woocommerce_default_country', '' ) ), 2, '' );
         $new_order = (array) get_option( 'woocommerce_new_order_settings', [] );
@@ -2120,6 +2144,8 @@ class Qwoo_Platform_Dashboard {
             'product_start' => self::product_start(),
             // Sell online + Shopper accounts (Qwoo_Shop_Mode).
             'shop_mode'  => class_exists( 'Qwoo_Shop_Mode' ) ? Qwoo_Shop_Mode::for_dashboard() : null,
+            // Settings → General → Faster pictures (Qwoo_Webp).
+            'webp' => class_exists( 'Qwoo_Webp' ) ? Qwoo_Webp::for_dashboard() : null,
             // Settings → Accessibility (Qwoo_Accessibility).
             'accessibility' => class_exists( 'Qwoo_Accessibility' ) ? Qwoo_Accessibility::for_dashboard() : null,
             'store'    => [
@@ -2394,6 +2420,10 @@ class Qwoo_Platform_Dashboard {
                 if ( is_wp_error( $saved ) ) {
                     return $saved;
                 }
+                break;
+
+            case 'webp':
+                Qwoo_Webp::save( $v );
                 break;
 
             case 'accessibility':

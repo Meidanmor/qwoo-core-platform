@@ -23,7 +23,7 @@ class Qwoo_Content_Stamp {
     const QUIET_PREFIXES = [ '_transient_', '_site_transient_', 'action_scheduler', 'as_', 'woocommerce_admin_', 'wc_admin_', 'wcpay_', 'jetpack_', 'litespeed', 'hostinger', 'auto_updater', 'wp_' ];
 
     /** Post meta that changes while someone edits in wp-admin, not the post itself. */
-    const QUIET_META = [ '_edit_lock', '_edit_last', '_wp_old_date', '_encloseme', '_pingme' ];
+    const QUIET_META = [ '_qwoo_webp', '_edit_lock', '_edit_last', '_wp_old_date', '_encloseme', '_pingme' ];
 
     /** Why this request changed it (null: nothing changed). */
     private static $why = null;

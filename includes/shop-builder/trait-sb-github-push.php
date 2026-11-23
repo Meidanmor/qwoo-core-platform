@@ -80,6 +80,10 @@ trait SB_Github_Push {
             $payload    = self::attachment_payload( $attachment_id, $public_url );
             $srcset     = self::stage_section_image_sizes( $batch, $attachment_id, $file, $label, $path_to_label, $kept_paths );
             if ( $payload && $srcset ) $payload['srcset'] = $srcset;
+            // Settings → General → Faster pictures: the WebP files next to them (Qwoo_Webp).
+            if ( $payload && class_exists( 'Qwoo_Webp' ) ) {
+                $payload = Qwoo_Webp::stage_payload( $batch, (int) $attachment_id, $payload, self::$sections_image_dir, $kept_paths, $path_to_label, (string) $label );
+            }
             return $cache[ $attachment_id ] = $payload;
         };
     }
@@ -392,6 +396,10 @@ trait SB_Github_Push {
 
                     $page_data[ $url_field ]           = wp_get_attachment_url( $attachment_id );
                     $page_data[ $url_field . '_path' ] = '/branding/' . $filename;
+                    // The logo's WebP file (Qwoo_Webp), kept in the folder with it.
+                    if ( $url_field === 'logo' && class_exists( 'Qwoo_Webp' ) ) {
+                        $page_data = Qwoo_Webp::branding_logo( $batch, $page_data, $branding_kept, $path_to_label );
+                    }
 
                     // The logo's own size: the header gives it width/height so nothing jumps while it loads
                     // (SVGs too, see Qwoo_Media_Support).
