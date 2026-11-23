@@ -1049,6 +1049,11 @@ trait SB_Sanitizers {
             ];
         }
 
+        // Floating buttons (Qwoo_Floating_Buttons): one layout for Contact, cookie, Accessibility, Help.
+        if ( isset( $input['floating'] ) && class_exists( 'Qwoo_Floating_Buttons' ) ) {
+            $clean['floating'] = Qwoo_Floating_Buttons::clean( $input['floating'] );
+        }
+
         // Internal bookkeeping — never user-editable.
         $clean['_schema_version'] = $existing['_schema_version'] ?? self::SCHEMA_VERSION;
 

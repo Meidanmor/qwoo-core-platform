@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 trait SB_Platform {
 
     /** Options other than page sections that the dashboard edits. */
-    private static $platform_option_groups = [ 'header', 'footer', 'home', 'checkout', 'account', 'branding', 'pwa', 'contact' ];
+    private static $platform_option_groups = [ 'header', 'footer', 'home', 'checkout', 'account', 'branding', 'pwa', 'contact', 'floating' ];
 
     /**
      * Everything the Design screen needs: data, schema, display data and
@@ -195,6 +195,8 @@ trait SB_Platform {
                     ];
                 }, (array) ( $o['contact']['methods'] ?? [] ) ) ),
             ],
+            // Store builder → Floating buttons (the defaults until saved).
+            'floating' => class_exists( 'Qwoo_Floating_Buttons' ) ? Qwoo_Floating_Buttons::settings( $o ) : null,
         ];
         if ( isset( $o['header']['navigation'] ) ) {
             $out['header']['navigation'] = $o['header']['navigation'];
@@ -248,7 +250,12 @@ trait SB_Platform {
                 $input[ $page_slug ]['layouts'] = $layouts[ $page_slug ];
             }
         }
+        $floating_before = isset( $input['floating'] ) && class_exists( 'Qwoo_Floating_Buttons' ) ? Qwoo_Floating_Buttons::settings() : null;
         self::instance()->save_input( $input );
+        // Floating buttons go to the storefront through the live pointer: written when they change.
+        if ( $floating_before !== null && $floating_before !== Qwoo_Floating_Buttons::settings() && class_exists( 'Qwoo_Site_Content' ) ) {
+            Qwoo_Site_Content::write_pointer();
+        }
         if ( $sync !== null ) {
             self::save_section_sync( class_exists( 'Qwoo_Store_Language' ) ? Qwoo_Store_Language::get() : 'en', $sync );
         }

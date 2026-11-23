@@ -126,6 +126,8 @@ class Qwoo_Site_Content {
         if ( class_exists( 'Qwoo_Shop_Mode' ) ) $body += Qwoo_Shop_Mode::site_fields();
         // Settings → Accessibility: the storefront's accessibility tool (live, no publish).
         if ( class_exists( 'Qwoo_Accessibility' ) ) $body += Qwoo_Accessibility::site_fields();
+        // Store builder → Floating buttons: their places, read live by the storefront.
+        if ( class_exists( 'Qwoo_Floating_Buttons' ) ) $body += Qwoo_Floating_Buttons::site_fields();
         // Products → Product settings → Product options (live, no publish).
         if ( class_exists( 'Qwoo_Platform_Dashboard' ) ) $body['product_start'] = Qwoo_Platform_Dashboard::product_start();
         // Notifications → Settings → Home screen off: the app file offers no install (live, no publish).
