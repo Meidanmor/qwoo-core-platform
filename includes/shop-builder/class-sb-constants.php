@@ -3455,6 +3455,8 @@ abstract class Shop_Builder_Constants {
                             'click_action'    => [ 'type' => 'select', 'label' => 'When Clicked', 'tab' => 'content', 'default' => 'drawer',
                                     'options' => [ 'drawer' => 'Open the cart drawer', 'page' => 'Go to the cart page' ] ],
                             'hide_when_empty' => [ 'type' => 'toggle', 'label' => 'Hide while the cart is empty', 'tab' => 'content' ],
+                            // The button and its drawer, on the cart and checkout pages (they show the cart themselves).
+                            'hide_on_cart_pages' => [ 'type' => 'toggle', 'label' => 'Hide on the cart and checkout pages', 'tab' => 'content' ],
                             'drawer_content' => [ 'type' => 'select', 'label' => 'Drawer Content', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'standard', 'show_if' => [ 'click_action' => 'drawer' ],
                                     'options' => self::DRAWER_CONTENT_OPTIONS, 'drawer_edit' => true,
                                     'help' => 'Built from blocks: the cart items, a free shipping bar, suggestions, totals… "Edit the drawer" opens it.' ],
