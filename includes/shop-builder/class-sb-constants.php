@@ -2405,7 +2405,10 @@ abstract class Shop_Builder_Constants {
             ],
             'checkout_contact' => [
                     'label' => 'Contact Details', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'person',
-                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Personal Details' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + self::CHECKOUT_STEP_FIELD,
+                    'fields' => [ 'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Personal Details' ],
+                            // The guests' "Create an account" box right under these fields, instead of next to Place Order.
+                            'show_signup' => [ 'type' => 'toggle', 'label' => 'Show "Create an account" here', 'tab' => 'content', 'default' => false,
+                                    'help' => 'For shoppers who aren\'t signed in, while Settings → Sign-in lets them sign up at checkout. It then leaves the Place Order block.' ] ] + self::CHECKOUT_CARD_FIELDS + self::CHECKOUT_FIELD_LOOK + self::CHECKOUT_STEP_FIELD,
             ],
             'checkout_shipping_address' => [
                     'label' => 'Shipping Address', 'category' => 'dynamic', 'pages' => [ 'checkout' ], 'icon' => 'person',
