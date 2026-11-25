@@ -148,6 +148,62 @@ trait SB_Store_Pages {
     }
 
     /**
+     * A drawer's starting sections (a new store's header): the same as the dashboard's
+     * drawerStarter() (qwoo-platform-app design/store.js). Menu: the menu as a folding list
+     * (rows with the current page marked), the language switcher (it shows once the store has more
+     * languages), and the Push Notifications box kept at the bottom. Cart: free shipping, the
+     * items and suggestions, then the coupon (folded), totals and buttons at the bottom.
+     * Wishlist: the saved products and "Add all to cart".
+     */
+    public static function drawer_starter( $kind, $menu_id = '' ) {
+        $rwd  = static fn( $d ) => [ 'desktop' => $d, 'tablet' => '', 'mobile' => '' ];
+        $held = static function ( array $blocks, array $style = [] ) use ( $rwd ) {
+            return [ 'id' => self::new_id( 'blk' ), 'type' => 'section', 'label' => '', 'enabled' => true, 'style' => $style + [
+                'width_mode'     => 'full',
+                'padding_preset' => 'custom',
+                'padding'        => [ 'desktop' => [ 'top' => '8', 'right' => '16', 'bottom' => '16', 'left' => '16' ], 'tablet' => [ 'top' => '', 'right' => '', 'bottom' => '', 'left' => '' ], 'mobile' => [ 'top' => '', 'right' => '', 'bottom' => '', 'left' => '' ] ],
+                'gap'            => $rwd( '16px' ),
+            ], 'blocks' => array_values( array_filter( $blocks ) ) ];
+        };
+        $b = static fn( $type, array $data = [] ) => self::store_page_block( $type, $data );
+        $stretch = $rwd( 'stretch' );
+        if ( 'menu' === $kind ) {
+            $pin   = $held( [ $b( 'push_notifications', [ 'layout' => 'card' ] ) ], [ 'drawer_pin' => true ] );
+            $pin['style']['padding']['desktop']['top'] = '12';
+            return [
+                $held( [
+                    $b( 'menu_widget', [
+                        'menu_id' => (string) $menu_id, 'layout' => $rwd( 'folding' ), 'enable_mobile_menu' => false,
+                        'link_size' => $rwd( '16px' ), 'link_weight' => '500',
+                        'link_padding' => [ 'desktop' => [ 'top' => '12px', 'right' => '12px', 'bottom' => '12px', 'left' => '12px' ], 'tablet' => [ 'top' => '', 'right' => '', 'bottom' => '', 'left' => '' ], 'mobile' => [ 'top' => '', 'right' => '', 'bottom' => '', 'left' => '' ] ],
+                        'link_radius' => '8px', 'link_hover_color' => '', 'active_link_bg' => 'global:secondary', 'active_link_color' => 'global:primary',
+                    ] ),
+                    // Shows only once the store has more than one language.
+                    $b( 'language_switcher', [ 'display' => 'flag_name' ] ),
+                ] ),
+                $pin,
+            ];
+        }
+        if ( 'cart' === $kind ) {
+            $bottom = $held( [
+                $b( 'checkout_coupon', [ 'show_title' => false, 'card' => false, 'folded' => true ] ),
+                $b( 'cart_summary', [ 'card' => false ] ),
+                $b( 'button', [ 'text' => Qwoo_I18n::t( 'Checkout' ), 'click_action' => 'checkout', 'style' => 'secondary', 'alignment' => $stretch ] ),
+                $b( 'button', [ 'text' => Qwoo_I18n::t( 'View cart' ), 'click_action' => 'cart_page', 'style' => 'outline', 'alignment' => $stretch ] ),
+            ], [ 'drawer_pin' => true ] );
+            $bottom['style']['gap'] = $rwd( '8px' );
+            return [ $held( [ $b( 'free_shipping_bar' ), $b( 'cart_items' ), $b( 'cart_suggestions' ) ] ), $bottom ];
+        }
+        if ( 'wishlist' === $kind ) {
+            return [ $held( [
+                $b( 'wishlist_items' ),
+                $b( 'button', [ 'text' => Qwoo_I18n::t( 'Add all to cart' ), 'click_action' => 'wishlist_to_cart', 'alignment' => $stretch ] ),
+            ] ) ];
+        }
+        return [];
+    }
+
+    /**
      * A new store's header, when its template has none (the storefront
      * draws the header from these sections only): the logo (or the store's
      * name) and the menu on one side; the language switcher, the phone menu
@@ -175,17 +231,25 @@ trait SB_Store_Pages {
             ] )
             : self::store_page_block( 'text_block', [ 'text' => '<p><a href="/"><strong>' . esc_html( $name ) . '</strong></a></p>', 'font_size' => $rwd( '20px', '18px' ) ] );
         $menu = [ 'menu_id' => '', 'layout' => $rwd( 'horizontal' ), 'enable_mobile_menu' => true, 'icon' => 'menu', 'drawer_title' => Qwoo_I18n::t( 'Menu' ), 'swipe' => 'auto' ];
+        // Drawers built from blocks (Store builder → the widget → Edit the drawer), like the dashboard's starting ones.
+        $phone_menu = self::store_page_block( 'menu_widget', $menu + [ 'mobile_menu_breakpoint' => 'custom', 'mobile_menu_custom_breakpoint' => 1024, 'drawer_content' => 'blocks' ], $hide( true, false, false ) );
+        $phone_menu['blocks'] = self::drawer_starter( 'menu' );
+        $desk_menu = self::store_page_block( 'menu_widget', $menu + [ 'mobile_menu_breakpoint' => '767', 'drawer_content' => 'same', 'drawer_source' => $phone_menu['id'] ], $hide( false, true, true ) );
+        $wishlist = self::store_page_block( 'mini_wishlist', [ 'icon' => 'heart_outline', 'drawer_title' => Qwoo_I18n::t( 'Wishlist' ), 'swipe' => 'none', 'drawer_content' => 'blocks' ] );
+        $wishlist['blocks'] = self::drawer_starter( 'wishlist' );
+        $cart = self::store_page_block( 'mini_cart', [ 'icon' => 'cart', 'click_action' => 'drawer', 'drawer_title' => Qwoo_I18n::t( 'Cart' ), 'swipe' => 'auto', 'drawer_content' => 'blocks' ] );
+        $cart['blocks'] = self::drawer_starter( 'cart' );
 
         $left  = $nested( [ 'width_mode' => 'full', 'padding_preset' => 'none' ] + $row( 'flex-start', '10' ), [
             $logo,
-            self::store_page_block( 'menu_widget', $menu + [ 'mobile_menu_breakpoint' => '767', 'drawer_show_languages' => true ], $hide( false, true, true ) ),
+            $desk_menu,
         ] );
         $right = $nested( [ 'width_mode' => 'full', 'padding_preset' => 'none' ] + $row( 'flex-start', '5', 'nowrap' ), [
             self::store_page_block( 'language_switcher', [ 'display' => 'flag' ], $hide( false, true, true ) ),
-            self::store_page_block( 'menu_widget', $menu + [ 'mobile_menu_breakpoint' => 'custom', 'mobile_menu_custom_breakpoint' => 1024, 'drawer_show_languages' => true ], $hide( true, false, false ) ),
+            $phone_menu,
             self::store_page_block( 'account_widget', [ 'icon' => 'person_outline' ] ),
-            self::store_page_block( 'mini_wishlist', [ 'icon' => 'heart_outline', 'drawer_title' => Qwoo_I18n::t( 'Wishlist' ), 'swipe' => 'none' ] ),
-            self::store_page_block( 'mini_cart', [ 'icon' => 'cart', 'click_action' => 'drawer', 'drawer_title' => Qwoo_I18n::t( 'Cart' ), 'swipe' => 'auto' ] ),
+            $wishlist,
+            $cart,
         ] );
         $section = [ 'id' => self::new_id( 'sec' ), 'label' => Qwoo_I18n::t( 'Header' ), 'enabled' => true, 'style' => [
             'width_mode'     => 'contained',

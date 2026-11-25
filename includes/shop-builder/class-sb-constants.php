@@ -3292,6 +3292,8 @@ abstract class Shop_Builder_Constants {
                     'category' => 'basic',
                     'holds'    => 'drawer',
                     'drawer'   => 'menu',
+                    // New ones start with a drawer built from blocks (the dashboard adds the starting sections).
+                    'start'    => [ 'data' => [ 'drawer_content' => 'blocks' ] ],
                     'fields'   => [
                             'menu_id' => [
                                     'type'    => 'menu',
@@ -3384,7 +3386,8 @@ abstract class Shop_Builder_Constants {
                             'drawer_close_size' => [ 'hide_if' => [ 'drawer_content' => 'same' ], 'type' => 'length', 'label' => 'Close Button Size', 'tab' => 'style', 'group' => 'Drawer', 'placeholder' => '24px', 'show_if' => [ 'enable_mobile_menu' => true, 'drawer_content' => 'blocks', 'drawer_close' => true ] ],
                             'drawer_close_color' => [ 'hide_if' => [ 'drawer_content' => 'same' ], 'type' => 'color', 'label' => 'Close Button Color', 'tab' => 'style', 'group' => 'Drawer', 'show_if' => [ 'enable_mobile_menu' => true, 'drawer_content' => 'blocks', 'drawer_close' => true ] ],
                             'drawer_show_languages' => [ 'type' => 'toggle', 'label' => 'Show the language switcher in the drawer', 'tab' => 'content', 'group' => 'Drawer', 'default' => true, 'show_if' => [ 'enable_mobile_menu' => true, 'drawer_content' => 'standard' ] ],
-                            'drawer_show_notifications' => [ 'hide_if' => [ 'drawer_content' => 'same' ], 'type' => 'toggle', 'label' => 'Offer push notifications in the drawer', 'tab' => 'content', 'group' => 'Drawer', 'default' => true, 'show_if' => [ 'enable_mobile_menu' => true ] ],
+                            'drawer_show_notifications' => [ 'hide_if' => [ 'drawer_content' => 'same' ], 'type' => 'toggle', 'label' => 'Offer push notifications in the drawer', 'tab' => 'content', 'group' => 'Drawer', 'default' => true, 'show_if' => [ 'enable_mobile_menu' => true ],
+                                    'help' => 'The ready-made box. In a drawer built from blocks, a Push Notifications block takes its place (with its own look).' ],
                             'swipe'        => [ 'hide_if' => [ 'drawer_content' => 'same' ], 'type' => 'select', 'label' => 'Open by Swiping (Phones)', 'tab' => 'content', 'group' => 'Drawer', 'default' => 'auto',
                                     'options' => self::SWIPE_OPTIONS, 'show_if' => [ 'enable_mobile_menu' => true ], 'swipe' => true,
                                     'help' => 'Automatic: the menu from the start side of the screen (left in English, right in Hebrew), the cart and wishlist from the other side. One drawer per edge: the first in the header wins.' ],
@@ -3434,6 +3437,42 @@ abstract class Shop_Builder_Constants {
                             ],
                     ],
             ],
+        // Push notifications (aura PushNotificationsBlock.vue): a box or a button that asks the shopper to turn
+        // them on. Shows only where it can work (push set up, a browser that has it, not answered yet); the
+        // Store builder preview always shows it. Replaces the menu drawer's own box in drawers built from blocks.
+        'push_notifications' => [
+            'label'    => 'Push Notifications',
+            'category' => 'interactive',
+            'icon'     => 'bell',
+            'summary'  => 'title',
+            'fields'   => [
+                            'layout'      => [ 'type' => 'select', 'label' => 'Look', 'tab' => 'content', 'default' => 'card',
+                                    'options' => [ 'card' => 'A box with text and a button', 'button' => 'Only a button' ] ],
+                            'title'       => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'placeholder' => 'Get notifications', 'show_if' => [ 'layout' => 'card' ],
+                                    'help' => 'Empty: "Get notifications", in the store\'s language.' ],
+                            'text'        => [ 'type' => 'textarea', 'label' => 'Text', 'tab' => 'content', 'placeholder' => 'New products, offers and updates on your orders.', 'show_if' => [ 'layout' => 'card' ],
+                                    'help' => 'Empty: "New products, offers and updates on your orders." Leave it short.' ],
+                            'button_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'placeholder' => 'Turn on' ],
+                            'show_icon'   => [ 'type' => 'toggle', 'label' => 'Show a bell', 'tab' => 'content', 'default' => true ],
+                            'card_bg'     => [ 'type' => 'color', 'label' => 'Background', 'tab' => 'style', 'group' => 'Box', 'show_if' => [ 'layout' => 'card' ],
+                                    'help' => 'Empty: a light tint of the text colour, so it suits any background.' ],
+                            'card_border' => [ 'type' => 'color', 'label' => 'Border Color', 'tab' => 'style', 'group' => 'Box', 'show_if' => [ 'layout' => 'card' ] ],
+                            'card_radius' => [ 'type' => 'length', 'label' => 'Corner Radius', 'tab' => 'style', 'group' => 'Box', 'placeholder' => '12px', 'show_if' => [ 'layout' => 'card' ] ],
+                            'card_padding' => [ 'type' => 'length', 'label' => 'Padding', 'tab' => 'style', 'group' => 'Box', 'placeholder' => '16px', 'show_if' => [ 'layout' => 'card' ] ],
+                            'icon_color'  => [ 'type' => 'color', 'label' => 'Bell Color', 'tab' => 'style', 'group' => 'Box', 'show_if' => [ 'show_icon' => true ] ],
+                            'ts:title'    => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings', 'show_if' => [ 'layout' => 'card' ] ],
+                            'ts:text'     => [ 'type' => 'text_style', 'label' => 'Text', 'show_if' => [ 'layout' => 'card' ] ],
+                            'button_style' => [ 'type' => 'select', 'label' => 'Button Style', 'tab' => 'style', 'group' => 'Button', 'default' => 'filled',
+                                    'options' => [ 'filled' => 'Filled', 'outline' => 'Outline', 'text' => 'Text only' ] ],
+                            'button_bg'   => [ 'type' => 'color', 'label' => 'Button Color', 'tab' => 'style', 'group' => 'Button',
+                                    'help' => 'Empty: the store\'s second colour.' ],
+                            'button_text' => [ 'type' => 'color', 'label' => 'Button Text Color', 'tab' => 'style', 'group' => 'Button',
+                                    'help' => 'Empty: whatever reads on the button colour.' ],
+                            'button_radius' => [ 'type' => 'length', 'label' => 'Button Corner Radius', 'tab' => 'style', 'group' => 'Button', 'placeholder' => '8px' ],
+                            'button_full' => [ 'type' => 'toggle', 'label' => 'Full width button', 'tab' => 'style', 'group' => 'Button' ],
+                            'ts:button'   => [ 'type' => 'text_style', 'label' => 'Button Text', 'default_font' => 'buttons', 'parts' => [ 'font', 'size', 'weight', 'spacing', 'case' ] ],
+            ],
+        ],
         'language_switcher' => [
             'label'    => 'Language Switcher',
             'category' => 'basic',
@@ -3451,6 +3490,8 @@ abstract class Shop_Builder_Constants {
             'category' => 'basic',
             'holds'    => 'drawer',
             'drawer'   => 'cart',
+            // New ones start with a drawer built from blocks (the dashboard adds the starting sections).
+            'start'    => [ 'data' => [ 'drawer_content' => 'blocks' ] ],
             'fields'   => [
                             'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'cart', 'default' => 'cart' ],
                             'custom_icon' => [ 'type' => 'image', 'label' => 'Your Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],
@@ -3533,6 +3574,8 @@ abstract class Shop_Builder_Constants {
             'category' => 'basic',
             'holds'    => 'drawer',
             'drawer'   => 'wishlist',
+            // New ones start with a drawer built from blocks (the dashboard adds the starting sections).
+            'start'    => [ 'data' => [ 'drawer_content' => 'blocks' ] ],
             'fields'   => [
                             'icon'        => [ 'type' => 'icon', 'label' => 'Icon', 'tab' => 'content', 'icon_set' => 'wishlist', 'default' => 'heart_outline' ],
                             'custom_icon' => [ 'type' => 'image', 'label' => 'Your Icon', 'tab' => 'content', 'show_if' => [ 'icon' => 'custom' ],

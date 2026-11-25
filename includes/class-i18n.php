@@ -260,6 +260,8 @@ class Qwoo_I18n {
         'Main menu'                                                                                 => 'תפריט ראשי',
         'Footer menu'                                                                               => 'תפריט תחתון',
         'Checkout'                                                                                  => 'קופה',
+        'View cart'                                                                                 => 'צפייה בעגלה',
+        'Add all to cart'                                                                           => 'הוספת הכל לעגלה',
         'My account'                                                                                => 'החשבון שלי',
         'Shop'                                                                                      => 'חנות',
         'Uncategorized'                                                                             => 'ללא קטגוריה',
