@@ -388,7 +388,8 @@ class Qwoo_Email_Render {
         switch ( $type ) {
             case 'logo':
                 $url = (string) ( $d['url'] ?? '' ) ?: (string) ( $ctx['logo'] ?? '' );
-                if ( $url === '' ) {
+                // Gmail and Outlook show no SVG pictures (a broken image and the alt text): the store name instead (2026-11-25).
+                if ( $url === '' || self::is_svg( $url ) ) {
                     return '<div style="font-family:' . $font . ';font-size:22px;font-weight:bold;color:' . esc_attr( $s['color'] ) . ';text-align:' . self::align( (string) $d['align'], $env ) . ';">{store_name}</div>';
                 }
                 $front = class_exists( 'Qwoo_Technical_Settings' ) ? rtrim( Qwoo_Technical_Settings::get_primary_frontend_domain(), '/' ) : '';
@@ -401,7 +402,7 @@ class Qwoo_Email_Render {
                 $html = str_replace( '<p>', '<p style="margin:0 0 12px;">', (string) $html );
                 return '<div style="' . self::text_style( $d, $env ) . '">' . $html . '</div>';
             case 'image':
-                if ( $d['url'] === '' ) return '';
+                if ( $d['url'] === '' || self::is_svg( (string) $d['url'] ) ) return '';
                 $w   = (int) round( ( $env['width'] * $share - 2 * (int) $d['padH'] ) * $d['width'] / 100 );
                 $img = '<img src="' . esc_url( $d['url'] ) . '" alt="' . esc_attr( $d['alt'] ) . '" width="' . $w . '" style="display:inline-block;width:' . (int) $d['width'] . '%;max-width:' . $w . 'px;height:auto;border:0;border-radius:' . (int) $d['radius'] . 'px;">';
                 return '<div style="text-align:' . self::align( (string) $d['align'], $env ) . ';">' . ( $d['link'] !== '' ? '<a href="' . esc_url( $link( $d['link'] ) ) . '">' . $img . '</a>' : $img ) . '</div>';
@@ -716,5 +717,10 @@ class Qwoo_Email_Render {
             }
         }
         return $cells === '' ? '' : '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' . $cells . '</tr></table>';
+    }
+
+    /** An SVG picture: email apps don't show them. */
+    private static function is_svg( string $url ): bool {
+        return (bool) preg_match( '~\.svgz?$~i', (string) wp_parse_url( $url, PHP_URL_PATH ) );
     }
 }

@@ -476,7 +476,9 @@ class Qwoo_Email_Marketing {
     public static function send_test( array $campaign, string $to ) {
         if ( ! is_email( $to ) ) return new WP_Error( 'email', 'Enter a valid email address.' );
         $html = self::render( (array) $campaign['design'], (string) $campaign['preheader'], static fn( $u ) => $u, self::footer( self::front_home() ), 'Dana' );
-        $ok   = wp_mail( $to, '[Test] ' . $campaign['subject'], $html, [ 'Content-Type: text/html; charset=UTF-8' ] );
+        // The subject's placeholders filled like a real send (a test showed "{first_name}, …", owner 2026-11-25).
+        $subject = str_replace( [ '{first_name}', '{store_name}' ], [ 'Dana', (string) self::settings()['from_name'] ], (string) $campaign['subject'] );
+        $ok   = wp_mail( $to, '[Test] ' . $subject, $html, [ 'Content-Type: text/html; charset=UTF-8' ] );
         return $ok ? [ 'ok' => true ] : new WP_Error( 'mail', 'The test couldn\'t be sent.' );
     }
 
