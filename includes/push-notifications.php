@@ -49,7 +49,8 @@ function qwoo_get_push_sender_email() {
     return 'mailto:' . sanitize_email( $email );
 }
 
-require_once plugin_dir_path(__FILE__) . 'vendor/autoload.php';
+// The push libraries load only when a push is sent (push-lib.php: one packed file).
+require_once plugin_dir_path(__FILE__) . 'push-lib.php';
 
 use Minishlink\WebPush\WebPush;
 use Minishlink\WebPush\Subscription;

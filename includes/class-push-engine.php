@@ -1016,6 +1016,10 @@ class Qwoo_Push_Engine {
             foreach ( $web as $it ) $results[ $it['row'] ] = 'no push keys';
             return $results;
         }
+        if ( ! qwoo_push_lib() ) {
+            foreach ( $web as $it ) $results[ $it['row'] ] = 'push library missing';
+            return $results;
+        }
         try {
             $push = new WebPush( [ 'VAPID' => [
                 'subject'    => qwoo_get_push_sender_email(),

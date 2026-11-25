@@ -655,15 +655,12 @@ class Qwoo_Technical_Settings {
             wp_send_json_error( 'VAPID keys are defined in wp-config.php and cannot be generated from here. Remove those constants first if you want to manage keys from this screen.' );
         }
 
-        if ( ! class_exists( '\Minishlink\WebPush\VAPID' ) ) {
-            $autoload = plugin_dir_path( __FILE__ ) . 'vendor/autoload.php';
-            if ( file_exists( $autoload ) ) {
-                require_once $autoload;
-            }
+        if ( ! function_exists( 'qwoo_push_lib' ) ) {
+            require_once plugin_dir_path( __FILE__ ) . 'push-lib.php';
         }
 
-        if ( ! class_exists( '\Minishlink\WebPush\VAPID' ) ) {
-            wp_send_json_error( 'Push notification library not found. Please reinstall the plugin (composer dependencies missing).' );
+        if ( ! qwoo_push_lib() || ! class_exists( '\Minishlink\WebPush\VAPID' ) ) {
+            wp_send_json_error( 'Push notification library not found. Please reinstall the plugin (includes/push-lib.phar missing or the server has no phar support).' );
         }
 
         try {

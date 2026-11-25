@@ -95,6 +95,7 @@ require_once QWOO_PATH . 'includes/class-automations.php';
 require_once QWOO_PATH . 'includes/class-personalization.php';
 require_once QWOO_PATH . 'includes/class-product-feed.php';
 require_once QWOO_PATH . 'includes/class-back-in-stock.php';
+require_once QWOO_PATH . 'includes/class-file-trim.php';
 require_once QWOO_PATH . 'includes/admin-options.php';
 
 // ── Admin settings ──
