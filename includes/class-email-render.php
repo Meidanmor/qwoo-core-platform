@@ -86,7 +86,8 @@ class Qwoo_Email_Render {
         $text = [ 'font' => $font, 'weight' => in_array( (int) ( $d['weight'] ?? 0 ), [ 400, 500, 600, 700 ], true ) ? (int) $d['weight'] : 0, 'color' => sanitize_hex_color( (string) ( $d['color'] ?? '' ) ) ?: '', 'lh' => self::num( $d['lh'] ?? null, 0, 0, 3 ) ];
         switch ( $type ) {
             case 'logo':
-                $data += [ 'url' => self::url( $d['url'] ?? '' ), 'width' => (int) self::num( $d['width'] ?? null, 160, 40, 400 ), 'align' => $align ];
+                // Only a picture's address: an AI once put the store's own address here (a broken image, 2026-11-26).
+                $data += [ 'url' => self::picture( self::url( $d['url'] ?? '' ) ), 'width' => (int) self::num( $d['width'] ?? null, 160, 40, 400 ), 'align' => $align ];
                 break;
             case 'heading':
                 $data += $text + [ 'text' => mb_substr( sanitize_textarea_field( (string) ( $d['text'] ?? '' ) ), 0, 200 ), 'size' => (int) self::num( $d['size'] ?? null, 26, 14, 60 ), 'align' => $align ];
@@ -387,7 +388,7 @@ class Qwoo_Email_Render {
         $order = $ctx['order'] ?? null;
         switch ( $type ) {
             case 'logo':
-                $url = (string) ( $d['url'] ?? '' ) ?: (string) ( $ctx['logo'] ?? '' );
+                $url = self::picture( (string) ( $d['url'] ?? '' ) ) ?: (string) ( $ctx['logo'] ?? '' );
                 // Gmail and Outlook show no SVG pictures (a broken image and the alt text): the store name instead (2026-11-25).
                 if ( $url === '' || self::is_svg( $url ) ) {
                     return '<div style="font-family:' . $font . ';font-size:22px;font-weight:bold;color:' . esc_attr( $s['color'] ) . ';text-align:' . self::align( (string) $d['align'], $env ) . ';">{store_name}</div>';
@@ -402,7 +403,7 @@ class Qwoo_Email_Render {
                 $html = str_replace( '<p>', '<p style="margin:0 0 12px;">', (string) $html );
                 return '<div style="' . self::text_style( $d, $env ) . '">' . $html . '</div>';
             case 'image':
-                if ( $d['url'] === '' || self::is_svg( (string) $d['url'] ) ) return '';
+                if ( self::picture( (string) $d['url'] ) === '' || self::is_svg( (string) $d['url'] ) ) return '';
                 $w   = (int) round( ( $env['width'] * $share - 2 * (int) $d['padH'] ) * $d['width'] / 100 );
                 $img = '<img src="' . esc_url( $d['url'] ) . '" alt="' . esc_attr( $d['alt'] ) . '" width="' . $w . '" style="display:inline-block;width:' . (int) $d['width'] . '%;max-width:' . $w . 'px;height:auto;border:0;border-radius:' . (int) $d['radius'] . 'px;">';
                 return '<div style="text-align:' . self::align( (string) $d['align'], $env ) . ';">' . ( $d['link'] !== '' ? '<a href="' . esc_url( $link( $d['link'] ) ) . '">' . $img . '</a>' : $img ) . '</div>';
@@ -717,6 +718,11 @@ class Qwoo_Email_Render {
             }
         }
         return $cells === '' ? '' : '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' . $cells . '</tr></table>';
+    }
+
+    /** The address when it points at a picture file (png, jpg, gif, webp, svg), else '' (a page's address is no picture). */
+    private static function picture( string $url ): string {
+        return preg_match( '~\.(png|jpe?g|gif|webp|svgz?)$~i', (string) wp_parse_url( $url, PHP_URL_PATH ) ) ? $url : '';
     }
 
     /** An SVG picture: email apps don't show them. */
