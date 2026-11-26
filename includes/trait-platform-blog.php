@@ -183,7 +183,7 @@ trait Qwoo_Platform_Blog {
         $id = wp_insert_post( wp_slash( [
             'post_type'      => 'post',
             'post_status'    => 'draft',
-            'post_title'     => mb_substr( html_entity_decode( $post->post_title, ENT_QUOTES ) . ' (Copy)', 0, 200 ),
+            'post_title'     => mb_substr( html_entity_decode( $post->post_title, ENT_QUOTES ) . ( 'he' === Qwoo_Store_Language::get() ? ' (עותק)' : ' (Copy)' ), 0, 200 ),
             'post_content'   => $post->post_content,
             'post_excerpt'   => $post->post_excerpt,
             'comment_status' => 'closed',
