@@ -120,6 +120,8 @@ class Qwoo_Site_Content {
         $body        += Qwoo_Store_Visibility::site_fields();
         // Suspended by the platform: the storefront shows "This store is unavailable" to everyone.
         if ( class_exists( 'Qwoo_Store_Suspension' ) ) $body = Qwoo_Store_Suspension::site_fields() + $body;
+        // A template's demo store: the platform's dashboard may frame its public pages (live, no build).
+        if ( class_exists( 'Qwoo_Gallery_Demo' ) ) $body += Qwoo_Gallery_Demo::site_fields();
         // The Free plan: the storefront shows "Made with Openly" (a plan change rewrites this file, no publish needed).
         if ( class_exists( 'Qwoo_Platform_Dashboard' ) && Qwoo_Platform_Dashboard::is_free_plan() ) $body['free'] = true;
         // Sell online / Shopper accounts off (Qwoo_Shop_Mode): which pages the storefront sends away.
