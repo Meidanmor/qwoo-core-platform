@@ -15,6 +15,11 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
  * Orders that never went through (pending payment, failed, drafts) don't
  * make anyone a customer and aren't counted. "Spent" is paid orders
  * (processing, completed) minus refunds.
+ *
+ * People who only booked an appointment (no order, no account) are
+ * customers too when asked for (the list's "Show people who only booked",
+ * on by default): key "b<booking id>" (their latest booking), grouped by
+ * email. Bookings with no email (a walk-in the owner added) don't count.
  */
 trait Qwoo_Platform_Customers {
 
@@ -25,13 +30,14 @@ trait Qwoo_Platform_Customers {
     private static $customer_note_meta = '_qwoo_customer_note';  // accounts' private note
     private static $customer_sorts     = [ 'recent', 'spent', 'orders', 'name' ];
     private static $customer_filters   = [ 'accounts', 'guests', 'repeat' ];
+    private static $customer_booked    = [ 'requested', 'confirmed', 'done', 'noshow', 'cancelled' ]; // booking statuses that make someone a customer
 
     /* ---------------- dashboard actions ---------------- */
 
     /**
      * { page, search (name, email or phone), filter: '' | accounts | guests
      * | repeat, sort: recent | spent | orders | name, per_page (20; up to
-     * 500 for the export) }.
+     * 500 for the export), bookers: 0 leaves out people who only booked }.
      */
     private static function action_customers_list( array $params ) {
         $page     = max( 1, min( 10000, (int) ( $params['page'] ?? 1 ) ) );
@@ -41,7 +47,11 @@ trait Qwoo_Platform_Customers {
         $filter   = in_array( $params['filter'] ?? '', self::$customer_filters, true ) ? $params['filter'] : '';
         $sort     = in_array( $params['sort'] ?? '', self::$customer_sorts, true ) ? $params['sort'] : 'recent';
 
-        $all  = self::customer_groups();
+        $all     = self::customer_groups( true );
+        $bookers = count( array_filter( $all, static fn( $c ) => ! empty( $c['booker'] ) ) );
+        if ( ! self::customer_with_bookers( $params ) ) {
+            $all = array_filter( $all, static fn( $c ) => empty( $c['booker'] ) );
+        }
         $rows = array_values( array_filter( $all, static function ( $c ) use ( $search, $filter ) {
             if ( $filter === 'accounts' && ! $c['account'] ) return false;
             if ( $filter === 'guests' && $c['account'] ) return false;
@@ -73,6 +83,7 @@ trait Qwoo_Platform_Customers {
             'counts'   => [
                 'all'      => count( $all ),
                 'accounts' => count( array_filter( $all, static fn( $c ) => $c['account'] ) ),
+                'bookers'  => $bookers, // people who only booked, shown or not
             ],
             'currency' => get_woocommerce_currency(),
         ];
@@ -164,6 +175,9 @@ trait Qwoo_Platform_Customers {
         if ( is_wp_error( $customer ) ) {
             return $customer;
         }
+        if ( self::customer_upcoming_bookings( $customer['email'] ) ) {
+            return self::bad( 'This customer has upcoming bookings. Cancel them in Appointments first.' );
+        }
         $result = self::erase_customer( $customer );
         if ( $result === 'open_orders' ) {
             return self::bad( 'This customer has orders that aren\'t finished (processing or on hold). Complete or cancel them first.' );
@@ -195,6 +209,9 @@ trait Qwoo_Platform_Customers {
         foreach ( array_unique( array_map( 'strtolower', $addresses ) ) as $address ) {
             Qwoo_Email_Marketing::erase_email( $address );
             Qwoo_Automations::erase_email( $address );
+            if ( class_exists( 'Qwoo_Appointments' ) && self::customer_bookings_table() ) {
+                Qwoo_Appointments::erase_email( $address );
+            }
         }
         if ( ! class_exists( 'WC_Privacy_Erasers', false ) ) {
             include_once WC_ABSPATH . 'includes/class-wc-privacy-erasers.php';
@@ -222,11 +239,104 @@ trait Qwoo_Platform_Customers {
 
     /* ---------------- helpers ---------------- */
 
+    /** The list's "bookers" switch: on unless the app sends 0. */
+    private static function customer_with_bookers( array $params ) {
+        $value = $params['bookers'] ?? '1';
+        return ! in_array( strtolower( (string) $value ), [ '0', 'false', 'off' ], true ) && $value !== false;
+    }
+
+    /** The bookings table, or '' while Appointments has never been set up. */
+    private static function customer_bookings_table() {
+        static $table = null;
+        if ( $table === null ) {
+            $table = class_exists( 'Qwoo_Appointments' ) && self::export_table_exists( Qwoo_Appointments::bookings_table() ) ? Qwoo_Appointments::bookings_table() : '';
+        }
+        return $table;
+    }
+
+    /**
+     * Everyone who booked, by email: [ email => { id (latest booking), name,
+     * phone, bookings, first, last (when booked, timestamps) } ].
+     */
+    private static function booking_people() {
+        static $people = null;
+        if ( $people !== null ) {
+            return $people;
+        }
+        $people = [];
+        $table  = self::customer_bookings_table();
+        if ( $table === '' ) {
+            return $people;
+        }
+        global $wpdb;
+        $in   = "'" . implode( "','", self::$customer_booked ) . "'";
+        $rows = (array) $wpdb->get_results( "SELECT id, name, email, phone, created FROM $table WHERE email <> '' AND status IN ($in) ORDER BY id LIMIT 50000", ARRAY_A ); // phpcs:ignore
+        foreach ( $rows as $r ) {
+            $email = mb_strtolower( trim( (string) $r['email'] ) );
+            if ( $email === '' ) {
+                continue;
+            }
+            $ts = $r['created'] ? (int) strtotime( $r['created'] . ' UTC' ) : 0;
+            $p  = $people[ $email ] ?? [ 'bookings' => 0, 'first' => $ts, 'name' => '', 'phone' => '' ];
+            $people[ $email ] = [
+                'id'       => (int) $r['id'],
+                'name'     => trim( (string) $r['name'] ) ?: $p['name'],
+                'phone'    => trim( (string) $r['phone'] ) ?: $p['phone'],
+                'bookings' => $p['bookings'] + 1,
+                'first'    => $p['first'] ?: $ts,
+                'last'     => $ts,
+            ];
+        }
+        return $people;
+    }
+
+    /** Whether someone has a booking still to come (waiting for the owner or confirmed). */
+    private static function customer_upcoming_bookings( $email ) {
+        $table = self::customer_bookings_table();
+        if ( $table === '' || $email === '' ) {
+            return false;
+        }
+        global $wpdb;
+        return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $table WHERE LOWER(email) = %s AND status IN ('requested','confirmed') AND start_utc > %s", mb_strtolower( $email ), gmdate( 'Y-m-d H:i:s' ) ) ); // phpcs:ignore
+    }
+
+    /** A customer's latest bookings (by email, and an account's own), newest first, for the customer page. */
+    private static function customer_bookings( array $customer, $limit = 20 ) {
+        $table = self::customer_bookings_table();
+        if ( $table === '' ) {
+            return [];
+        }
+        global $wpdb;
+        $where = $customer['account']
+            ? $wpdb->prepare( 'LOWER(email) = %s OR customer_id = %d', $customer['email'], (int) $customer['user'] )
+            : $wpdb->prepare( 'LOWER(email) = %s', $customer['email'] );
+        $in   = "'" . implode( "','", self::$customer_booked ) . "'";
+        $rows = (array) $wpdb->get_results( "SELECT id, service_id, start_utc, status, price, currency FROM $table WHERE ($where) AND status IN ($in) ORDER BY start_utc DESC LIMIT " . (int) $limit, ARRAY_A ); // phpcs:ignore
+        $names = [];
+        $out   = [];
+        foreach ( $rows as $r ) {
+            $sid = (int) $r['service_id'];
+            if ( ! array_key_exists( $sid, $names ) ) {
+                $svc            = Qwoo_Appointments::service( $sid );
+                $names[ $sid ] = $svc ? (string) $svc['name'] : '';
+            }
+            $out[] = [
+                'id'      => (int) $r['id'],
+                'service' => $names[ $sid ],
+                'start'   => $r['start_utc'] ? (int) strtotime( $r['start_utc'] . ' UTC' ) : 0,
+                'status'  => (string) $r['status'],
+                'price'   => (float) $r['price'],
+            ];
+        }
+        return $out;
+    }
+
     /**
      * Every customer: [ key => { key, account, user, name, email, phone,
      * orders, spent, first, last, registered } ] (dates as timestamps).
+     * With $bookers, people who only booked too ({ booker: true, bookings }).
      */
-    private static function customer_groups() {
+    private static function customer_groups( $bookers = false ) {
         $groups = [];
         $add    = static function ( $key, array $row ) use ( &$groups ) {
             if ( ! isset( $groups[ $key ] ) ) {
@@ -316,6 +426,34 @@ trait Qwoo_Platform_Customers {
                 // Accounts without orders sort by when they joined.
                 'last'   => $g['last'] ?: ( $row['registered'] ?? 0 ),
             ];
+        }
+
+        if ( $bookers ) {
+            $known = array_fill_keys( array_column( $out, 'email' ), true );
+            foreach ( array_keys( $accounts ) as $email ) {
+                $known[ $email ] = true;
+            }
+            foreach ( self::booking_people() as $email => $p ) {
+                if ( isset( $known[ $email ] ) ) {
+                    continue;
+                }
+                $key         = 'b' . $p['id'];
+                $out[ $key ] = [
+                    'key'        => $key,
+                    'account'    => false,
+                    'booker'     => true,
+                    'name'       => $p['name'],
+                    'email'      => $email,
+                    'phone'      => $p['phone'],
+                    'registered' => 0,
+                    'orders'     => 0,
+                    'paid'       => 0,
+                    'spent'      => 0,
+                    'first'      => 0,
+                    'last'       => $p['last'],
+                    'bookings'   => $p['bookings'],
+                ];
+            }
         }
         return $out;
     }
@@ -413,6 +551,20 @@ trait Qwoo_Platform_Customers {
             }
             return [ 'key' => $key, 'account' => false, 'user' => 0, 'email' => $email ];
         }
+        if ( preg_match( '/^b(\d{1,10})$/', $key, $m ) && self::customer_bookings_table() !== '' ) {
+            global $wpdb;
+            $in    = "'" . implode( "','", self::$customer_booked ) . "'";
+            $table = self::customer_bookings_table();
+            $email = mb_strtolower( trim( (string) $wpdb->get_var( $wpdb->prepare( "SELECT email FROM $table WHERE id = %d AND status IN ($in)", (int) $m[1] ) ) ) ); // phpcs:ignore
+            if ( $email === '' ) {
+                return $gone;
+            }
+            $user = get_user_by( 'email', $email );
+            if ( $user && array_intersect( self::$customer_roles, (array) $user->roles ) ) {
+                return [ 'key' => 'u' . $user->ID, 'account' => true, 'user' => (int) $user->ID, 'email' => $email ];
+            }
+            return [ 'key' => $key, 'account' => false, 'user' => 0, 'email' => $email ];
+        }
         return $gone;
     }
 
@@ -434,7 +586,7 @@ trait Qwoo_Platform_Customers {
 
     private static function customer_full( array $customer ) {
         $orders = self::customer_orders( $customer );
-        $groups = self::customer_groups();
+        $groups = self::customer_groups( true );
         $stats  = $groups[ $customer['key'] ] ?? null;
         if ( ! $stats && ! $customer['account'] ) {
             // Any guest key gives the same customer: find the row by email.
@@ -481,6 +633,13 @@ trait Qwoo_Platform_Customers {
                 'registered' => 0,
                 'note'       => self::guest_note( $customer['email'] ),
             ];
+            // Someone who only booked: the details they gave with their latest booking.
+            $booked = self::booking_people()[ $customer['email'] ] ?? null;
+            if ( ! $latest && $booked ) {
+                $data['name']   = $booked['name'];
+                $data['phone']  = $booked['phone'];
+                $data['booker'] = true;
+            }
         }
         $open = count( array_filter( $orders, static fn( $o ) => in_array( $o->get_status(), self::$customer_open, true ) ) );
         return $data + [
@@ -499,6 +658,7 @@ trait Qwoo_Platform_Customers {
                 'last'   => $stats['last'] ?? 0,
             ],
             'orders'        => array_map( [ __CLASS__, 'order_summary' ], $orders ),
+            'bookings'      => self::customer_bookings( $customer ),
             'open_orders'   => $open,
             'currency'      => get_woocommerce_currency(),
         ];

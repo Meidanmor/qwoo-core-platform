@@ -179,11 +179,14 @@ trait Qwoo_Platform_Exports {
 
     private static $export_address_parts = [ 'company', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ];
 
-    /** { page }: every customer (accounts and guests, as the Customers list), A–Z, with billing and shipping addresses. */
+    /**
+     * { page, bookers }: every customer (accounts, guests and, unless bookers is 0, people who only
+     * booked, as the Customers list), A–Z, with billing and shipping addresses.
+     */
     private static function action_customers_export( array $params ) {
         $page = self::export_page( $params );
         $per  = self::$export_rows_per_page;
-        $all  = self::customer_groups();
+        $all  = array_values( self::customer_groups( self::customer_with_bookers( $params ) ) );
         usort( $all, static fn( $a, $b ) => strcasecmp( $a['name'] ?: $a['email'], $b['name'] ?: $b['email'] ) );
         $part = array_slice( $all, ( $page - 1 ) * $per, $per );
 
@@ -393,7 +396,7 @@ trait Qwoo_Platform_Exports {
         return [
             'orders'      => (int) $orders->total,
             'products'    => (int) ( $products->publish ?? 0 ) + (int) ( $products->draft ?? 0 ) + (int) ( $products->private ?? 0 ) + (int) ( $products->pending ?? 0 ),
-            'customers'   => count( self::customer_groups() ),
+            'customers'   => count( self::customer_groups( true ) ),
             'reviews'     => (int) get_comments( [ 'type' => 'review', 'post_type' => 'product', 'status' => 'all', 'count' => true ] ),
             'subscribers' => $count( Qwoo_Email_Marketing::subs_table(), "source <> 'suppressed'" ),
             'bookings'    => $count( Qwoo_Appointments::bookings_table(), "status NOT IN ('held','blocked')" ),
