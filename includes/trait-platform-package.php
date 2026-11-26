@@ -168,6 +168,9 @@ trait Qwoo_Platform_Package {
             'package_mode' => $mode,
             // A store copy template the platform brings in while setting up a new store.
             'package_template' => ! empty( $params['template'] ),
+            // A template: the file's main language and the new store's (mig_lang_item / package_swap_language).
+            'package_lang'     => (string) ( $file['file']['lang'] ?? '' ),
+            'package_lang_to'  => ! empty( $params['template'] ) && class_exists( 'Qwoo_Store_Language' ) && isset( Qwoo_Store_Language::LANGS[ (string) ( $params['lang'] ?? '' ) ] ) ? (string) $params['lang'] : '',
             // "Put the changes live when the import ends" (mig_finish → package_go_live).
             'package_publish'  => ! empty( $params['publish'] ) && empty( $params['template'] ),
             'package_identity' => $identity,
@@ -264,6 +267,48 @@ trait Qwoo_Platform_Package {
         return self::$mig_cache[ $key ] = $id;
     }
 
+    /**
+     * A template brought into a store of another language: that language's
+     * code when the swap applies (the file's copy in it becomes the main
+     * texts, owner 2026-11-26), else ''.
+     */
+    private static function mig_swap_lang() {
+        if ( empty( self::$mig['package_template'] ) ) return '';
+        $from = (string) ( self::$mig['package_lang'] ?? '' );
+        $to   = (string) ( self::$mig['package_lang_to'] ?? '' );
+        return ( $from !== '' && $to !== '' && $to !== $from ) ? $to : '';
+    }
+
+    /**
+     * An item (product, term, post) in the store's language: its texts from
+     * the file's copy in that language, the file's own texts kept as the
+     * main language's copy (ready if the owner turns that language on).
+     */
+    private static function mig_lang_item( $kind, array $item ) {
+        $to = self::mig_swap_lang();
+        if ( $to === '' || ! is_array( $item['i18n'][ $to ] ?? null ) ) return $item;
+        $from = (string) self::$mig['package_lang'];
+        $own  = $item['i18n'][ $to ];
+        $keep = [];
+        foreach ( array_keys( Qwoo_Translations::FIELDS[ $kind ] ?? [] ) as $field ) {
+            $is_seo = strpos( $field, 'seo_' ) === 0;
+            $sub    = $is_seo ? substr( $field, 4 ) : $field;
+            $now    = $is_seo ? ( $item['seo'][ $sub ] ?? '' ) : ( $item[ $field ] ?? '' );
+            if ( is_scalar( $now ) && trim( (string) $now ) !== '' ) $keep[ $field ] = (string) $now;
+            $new = $own[ $field ] ?? '';
+            if ( ! is_scalar( $new ) || trim( (string) $new ) === '' ) continue;
+            if ( $is_seo ) {
+                $item['seo']         = is_array( $item['seo'] ?? null ) ? $item['seo'] : [];
+                $item['seo'][ $sub ] = (string) $new;
+            } else {
+                $item[ $field ] = (string) $new;
+            }
+        }
+        unset( $item['i18n'][ $to ] );
+        if ( $keep ) $item['i18n'][ $from ] = $keep;
+        return $item;
+    }
+
     /** Translations from the file: { lang: { field: text } } cleaned like the dashboard's (any known language). */
     private static function mig_i18n( $kind, $input ) {
         $out    = [];
@@ -303,7 +348,13 @@ trait Qwoo_Platform_Package {
             $seo['home_title']       = mb_substr( sanitize_text_field( (string) ( $q['seo']['home_title'] ?? '' ) ), 0, Qwoo_Seo::MAX_TITLE );
             $seo['home_description'] = mb_substr( sanitize_text_field( (string) ( $q['seo']['home_description'] ?? '' ) ), 0, Qwoo_Seo::MAX_DESCRIPTION );
             $seo['image_id']         = ! empty( $q['seo']['image'] ) ? self::mig_image( $q['seo']['image'] ) : 0;
+            // A template in another language: the file's home title is in the wrong language (the home page's own SEO is swapped).
+            if ( self::mig_swap_lang() !== '' ) $seo['home_title'] = $seo['home_description'] = '';
             update_option( Qwoo_Seo::OPTION, $seo );
+        }
+        // Settings → Cookie banner: look, texts and rules (templates too).
+        if ( is_array( $q['cookie_banner'] ?? null ) && class_exists( 'Qwoo_Custom_Code' ) ) {
+            Qwoo_Custom_Code::package_banner_in( $q['cookie_banner'] );
         }
         // A template at setup: the store keeps the language its owner chose.
         if ( ! empty( self::$mig['package_template'] ) ) {
@@ -669,6 +720,10 @@ trait Qwoo_Platform_Package {
             return 0;
         };
         $mode   = (string) ( self::$mig['package_mode'] ?? 'add' );
+        $to     = self::mig_swap_lang();
+        if ( $to !== '' && is_array( $data['options'] ?? null ) ) {
+            $data['options'] = Shop_Settings_Builder::package_swap_language( $data['options'], (string) self::$mig['package_lang'], $to );
+        }
         $result = Shop_Settings_Builder::package_builder_import( $data, $map, $mode );
         for ( $i = 0; $i < (int) $result['pages']; $i++ ) {
             self::mig_count( 'builder', $mode === 'replace' ? 'updated' : 'created' );

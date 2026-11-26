@@ -941,6 +941,7 @@ trait Qwoo_Platform_Migration {
      * the same slug is used, else it's added. Returns its ID here, or 0.
      */
     private static function mig_term_item( $taxonomy, array $t, $with_extras = true ) {
+        if ( self::mig_is_package() ) $t = self::mig_lang_item( 'term', $t );
         $old  = (int) ( $t['id'] ?? 0 );
         $name = trim( wp_specialchars_decode( self::mig_text( $t['name'] ?? '', 200 ), ENT_QUOTES ) );
         if ( ! $old || $name === '' ) {
@@ -1112,6 +1113,7 @@ trait Qwoo_Platform_Migration {
     }
 
     private static function mig_product( array $p ) {
+        if ( self::mig_is_package() ) $p = self::mig_lang_item( 'product', $p );
         $type = (string) ( $p['type'] ?? '' );
         $name = trim( wp_specialchars_decode( self::mig_text( $p['name'] ?? '', 200 ), ENT_QUOTES ) );
         if ( ! in_array( $type, self::EDITABLE_TYPES, true ) ) {
@@ -1823,6 +1825,7 @@ trait Qwoo_Platform_Migration {
     }
 
     private static function mig_post_item( array $p ) {
+        if ( self::mig_is_package() ) $p = self::mig_lang_item( 'post', $p );
         $title = trim( wp_specialchars_decode( self::mig_text( $p['title'] ?? '', 200 ), ENT_QUOTES ) );
         if ( $title === '' ) {
             return 'skipped';

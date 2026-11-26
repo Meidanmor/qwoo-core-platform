@@ -178,6 +178,22 @@ class Qwoo_Custom_Code {
         self::put( self::get() );
     }
 
+    /**
+     * The cookie banner for a store copy file (Qwoo_Store_Package, owner 2026-11-26):
+     * its look, texts and rules. Never the tracking codes, snippets or allowed addresses.
+     */
+    public static function package_banner(): array {
+        $c          = self::consent_of( self::get() );
+        $c['texts'] = (array) $c['texts'];
+        unset( $c['version'] );
+        return $c;
+    }
+
+    /** Brings a file's cookie banner in (cleaned like a save from the dashboard). */
+    public static function package_banner_in( array $c ): void {
+        self::save( [ 'consent' => array_intersect_key( $c, array_flip( [ 'mode', 'banner', 'texts', 'design', 'months', 'gcm' ] ) ) ] );
+    }
+
     /** The test link's key, made the first time it's needed. */
     private static function key( array &$v ): string {
         if ( empty( $v['test_key'] ) || ! preg_match( '/^[a-f0-9]{32}$/', (string) $v['test_key'] ) ) {

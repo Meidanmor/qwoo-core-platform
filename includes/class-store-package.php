@@ -470,6 +470,8 @@ class Qwoo_Store_Package {
         // Settings → Accessibility (the tool, the coordinator, the statement's own texts).
         if ( class_exists( 'Qwoo_Accessibility' ) ) $qwoo['accessibility'] = Qwoo_Accessibility::settings();
         if ( class_exists( 'Qwoo_Gift_Cards' ) ) $qwoo['giftcard_rules'] = Qwoo_Gift_Cards::rules();
+        // Settings → Cookie banner: look, texts and rules only (never tracking codes).
+        if ( class_exists( 'Qwoo_Custom_Code' ) ) $qwoo['cookie_banner'] = Qwoo_Custom_Code::package_banner();
         if ( class_exists( 'Qwoo_Inbox' ) ) {
             // Not where the alerts go: that's this store's own address.
             $inbox = Qwoo_Inbox::settings();

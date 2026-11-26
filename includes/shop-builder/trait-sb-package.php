@@ -206,6 +206,45 @@ trait SB_Package {
     }
 
     /**
+     * A template file made in $from, brought into a store whose language is
+     * $to: the file's $to copy (pages, menus, own pages) becomes the main
+     * content, and the file's main content becomes the $from copy. Pages the
+     * $to copy kept in step with $from (section_sync) keep the main sections.
+     * Card designs, popups and branding have no copies: they stay as they are.
+     */
+    public static function package_swap_language( array $o, $from, $to ) {
+        $tr = $o['i18n'][ $to ] ?? null;
+        if ( ! is_array( $tr ) || $from === $to ) return $o;
+        $orig = $o;
+        $old  = [];
+        foreach ( (array) ( $tr['pages'] ?? [] ) as $key => $value ) {
+            if ( ! in_array( $key, self::$translatable_keys, true ) || ! is_array( $value ) ) continue;
+            if ( isset( $o[ $key ] ) ) $old['pages'][ $key ] = $o[ $key ];
+            $o[ $key ] = $value;
+        }
+        if ( isset( $tr['menus'] ) && is_array( $tr['menus'] ) ) {
+            if ( isset( $o['menus'] ) ) $old['menus'] = $o['menus'];
+            $o['menus'] = $tr['menus'];
+        }
+        $own_keys = [ 'title', 'show_title', 'seo', 'sections' ];
+        foreach ( (array) ( $o['custom_pages'] ?? [] ) as $i => $page ) {
+            $own = is_array( $page ) ? ( $tr['custom_pages'][ $page['id'] ?? '' ] ?? null ) : null;
+            if ( ! is_array( $own ) ) continue;
+            // The page keeps its address and whether it's live; its texts come from the copy.
+            $old['custom_pages'][ $page['id'] ] = array_intersect_key( $page, array_flip( array_merge( $own_keys, [ 'status' ] ) ) );
+            $o['custom_pages'][ $i ] = array_merge( $page, array_intersect_key( $own, array_flip( $own_keys ) ) );
+        }
+        foreach ( (array) ( $o['section_sync'][ $to ] ?? [] ) as $key => $source ) {
+            if ( $source !== $from ) continue;
+            $sections = self::sections_at( $orig, (string) $key );
+            if ( $sections !== null ) $o = self::set_sections_at( $o, (string) $key, $sections );
+        }
+        unset( $o['i18n'][ $to ], $o['section_sync'][ $to ] );
+        if ( $old ) $o['i18n'][ $from ] = $old;
+        return $o;
+    }
+
+    /**
      * Brings the file's Store builder in ($data from package_builder_export(),
      * IDs mapped by $map). Returns [ 'pages' => how many pages came, 'skipped' => [titles] ].
      */
