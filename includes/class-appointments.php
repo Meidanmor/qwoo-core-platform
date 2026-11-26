@@ -1076,7 +1076,7 @@ class Qwoo_Appointments {
     private static function cal_info( int $link ): array {
         if ( ! $link ) return self::calendar();
         $p = self::staff_one( $link );
-        return [ 'connected' => ! empty( $p['cal']['connected'] ), 'email' => (string) ( $p['cal']['email'] ?? '' ), 'invite' => ! empty( $p['cal']['invite'] ), 'error' => '' ];
+        return [ 'connected' => ! empty( $p['cal']['connected'] ), 'provider' => (string) ( $p['cal']['provider'] ?? '' ), 'email' => (string) ( $p['cal']['email'] ?? '' ), 'invite' => ! empty( $p['cal']['invite'] ), 'error' => '' ];
     }
 
     private static function calendar_error( string $error ): void {
@@ -1146,6 +1146,8 @@ class Qwoo_Appointments {
         if ( ! $b || ! class_exists( 'Qwoo_Platform_Connection' ) ) return;
         $link = self::cal_target( (int) $b['staff_id'] );
         if ( $link === null ) return;
+        // A pasted calendar link (Apple iCloud, any .ics) is read only: bookings aren't written there.
+        if ( self::cal_info( $link )['provider'] === 'ical' ) return;
         $live = in_array( $b['status'], [ 'confirmed', 'done', 'noshow', 'blocked' ], true );
         if ( ! $live ) {
             if ( $b['cal_event'] === '' ) return;
@@ -1219,7 +1221,7 @@ class Qwoo_Appointments {
         }
         update_option( self::BUSY_GEN, (int) get_option( self::BUSY_GEN, 0 ) + 1, false );
         // Upcoming bookings go into a newly connected calendar (the tick chain does the rest).
-        if ( ! empty( $p['connected'] ) ) {
+        if ( ! empty( $p['connected'] ) && $info['provider'] !== 'ical' ) {
             $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::bookings_table() . " SET cal_state = 'retry', cal_tries = 0 WHERE status IN ('confirmed','blocked') AND cal_event = '' AND start_utc > %s", self::now() ) );
         }
         return [ 'ok' => true ];
