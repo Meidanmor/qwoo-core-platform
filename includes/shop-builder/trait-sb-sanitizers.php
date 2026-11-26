@@ -197,7 +197,7 @@ trait SB_Sanitizers {
                 return sanitize_textarea_field( is_scalar( $value ) ? (string) $value : '' );
 
             case 'rich_text':
-                return wp_kses( is_scalar( $value ) ? (string) $value : '', self::RICH_TEXT_ALLOWED_TAGS );
+                return self::copy_codes( wp_kses( is_scalar( $value ) ? (string) $value : '', self::RICH_TEXT_ALLOWED_TAGS ) );
 
             // The HTML block's code, kept as the owner wrote it: the storefront only ever runs it inside a sealed
             // frame on another address, never in the page (aura HtmlBlock.vue). Valid UTF-8, no NUL, size cap.
@@ -365,7 +365,7 @@ trait SB_Sanitizers {
 
     /** Text block HTML: whitelisted tags; links opening in a new tab get rel=noopener. */
     private static function sanitize_html_value( $html ) {
-        $html = wp_kses( $html, self::HTML_ALLOWED_TAGS );
+        $html = self::copy_codes( wp_kses( $html, self::HTML_ALLOWED_TAGS ) );
         return preg_replace_callback( '/<a\s[^>]*target=("|\')_blank\1[^>]*>/i', function ( $m ) {
             return stripos( $m[0], 'rel=' ) === false
                     ? substr( $m[0], 0, -1 ) . ' rel="noopener noreferrer">'
@@ -403,6 +403,31 @@ trait SB_Sanitizers {
     /* =====================================================================
        Section / block tree
        ===================================================================== */
+
+    /**
+     * Codes to copy inside text (<span data-copy="CODE">): the attributes are rebuilt from known values, and each gets
+     * whether the code is live now (data-ok) and its end date (data-ends), read when saved like the Coupon block.
+     * data-look: underline | tag | bold; data-end: text (an ended code stays as plain text) | hide.
+     */
+    public static function copy_codes( string $html ): string {
+        if ( strpos( $html, 'data-copy' ) === false ) return $html;
+        static $info = [];
+        return (string) preg_replace_callback( '/<span\b([^>]*\bdata-copy\s*=[^>]*)>/i', static function ( $m ) use ( &$info ) {
+            $attr = static function ( string $name ) use ( $m ): string {
+                return preg_match( '/\b' . preg_quote( $name, '/' ) . '\s*=\s*("([^"]*)"|\'([^\']*)\')/i', $m[1], $a ) ? html_entity_decode( (string) ( $a[2] !== '' ? $a[2] : ( $a[3] ?? '' ) ), ENT_QUOTES ) : '';
+            };
+            $code = mb_substr( trim( wp_strip_all_tags( $attr( 'data-copy' ) ) ), 0, 60 );
+            if ( $code === '' ) return '<span>';
+            $look = in_array( $attr( 'data-look' ), [ 'underline', 'tag', 'bold' ], true ) ? $attr( 'data-look' ) : 'tag';
+            $end  = $attr( 'data-end' ) === 'hide' ? 'hide' : 'text';
+            $key  = strtolower( $code );
+            if ( ! isset( $info[ $key ] ) ) $info[ $key ] = self::coupon_info( $code );
+            $i    = $info[ $key ];
+            $out  = '<span data-copy="' . esc_attr( $code ) . '" data-look="' . $look . '" data-end="' . $end . '" data-ok="' . ( empty( $i['ok'] ) ? '0' : '1' ) . '"';
+            if ( ! empty( $i['ends'] ) ) $out .= ' data-ends="' . esc_attr( $i['ends'] ) . '"';
+            return $out . '>';
+        }, $html );
+    }
 
     /** { ok, type: percent | fixed_cart | fixed_product, amount, ends: Y-m-d, min, free_shipping } of a discount code, or [] when unknown. */
     public static function coupon_info( string $code ): array {
