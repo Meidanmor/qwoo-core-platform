@@ -1935,7 +1935,13 @@ abstract class Shop_Builder_Constants {
             ],
             'product_reviews' => [
                     'label' => 'Product Reviews', 'category' => 'dynamic', 'pages' => [ 'product' ], 'icon' => 'format-quote',
-                    'fields' => [],
+                    // 2026-11-26: the block's title, star and bar colours (it had no options).
+                    'fields' => [
+                            'title'      => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => 'Reviews', 'help' => 'Empty: no title.' ],
+                            'star_color' => [ 'type' => 'color', 'label' => 'Stars', 'tab' => 'style' ],
+                            'bar_color'  => [ 'type' => 'color', 'label' => 'Rating Bars', 'tab' => 'style' ],
+                            'ts:title'   => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+                    ],
             ],
             // Replaced (2026-11-11) by the Carousel / Product Grid with "Related to this page's product":
             // saved ones become a Heading + one of those (SB_Shop_Templates::related_as_carousel).
