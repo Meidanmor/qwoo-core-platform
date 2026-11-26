@@ -1091,6 +1091,9 @@ abstract class Shop_Builder_Constants {
                                     'help' => 'Empty: the text from Appointments → Settings.' ],
                             'layout' => [ 'type' => 'select', 'label' => 'Calendar And Times', 'tab' => 'style', 'default' => 'side', 'responsive' => true,
                                     'options' => [ 'side' => 'Side by side', 'stack' => 'Times under the calendar' ] ],
+                            // owner, 2026-11-26: a real month calendar on phones too, or a row of days everywhere.
+                            'days_look' => [ 'type' => 'select', 'label' => 'Days', 'tab' => 'style', 'default' => 'auto',
+                                    'options' => [ 'auto' => 'Calendar on computers, a row on phones', 'calendar' => 'Always a month calendar', 'row' => 'Always a row of days' ] ],
                             'taken_look' => [ 'type' => 'select', 'label' => 'Days And Times You Can\'t Book', 'tab' => 'style', 'default' => 'hide',
                                     'options' => [ 'hide' => 'Hide them', 'grey' => 'Show them in grey' ],
                                     'help' => 'Hide: only free times show (days with none stay faint in the month). Grey: taken times and closed days show in grey and can\'t be chosen.' ],
