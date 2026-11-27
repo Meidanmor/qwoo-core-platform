@@ -139,6 +139,7 @@ class Qwoo_Platform_Dashboard {
         'settings_get'    => 'action_settings_get',
         'settings_save'   => 'action_settings_save',
         'store_language'  => 'action_store_language',
+        'setup_repair'    => 'action_setup_repair',
         'languages_get'   => 'action_languages_get',
         'languages_save'  => 'action_languages_save',
         'plan_set'        => 'action_plan_set',
@@ -2205,6 +2206,19 @@ class Qwoo_Platform_Dashboard {
             return self::bad( $set->get_error_message() );
         }
         return [ 'language' => Qwoo_Store_Language::get(), 'warning' => is_wp_error( $set ) ? $set->get_error_message() : '' ];
+    }
+
+    /**
+     * Platform wp-admin "Apply the setup details again": the setup's language, country, logo, legal
+     * pages… for a store whose setup skipped them (no content repo, platform 0.199.0 to 0.228.x).
+     * Only fills what's missing (Shop_Settings_Builder::repair_platform_branding).
+     */
+    private static function action_setup_repair( array $params ) {
+        $result = Shop_Settings_Builder::repair_platform_branding( $params );
+        if ( ! empty( $result['error'] ) ) {
+            return self::bad( wp_strip_all_tags( (string) $result['error'] ) );
+        }
+        return $result;
     }
 
     /** The store's languages: main, extra (with address prefix and live), and whether the plan allows extra ones. */

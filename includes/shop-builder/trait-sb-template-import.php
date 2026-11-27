@@ -193,10 +193,9 @@ trait SB_Template_Import {
         if ( ! empty( $state['done'] ) ) {
             return [ 'done' => true, 'warnings' => (array) ( $state['warnings'] ?? [] ) ];
         }
-        $gh = Qwoo_Platform_Connection::github_settings();
-        if ( ! $gh ) {
-            return [ 'error' => 'No access to the content repository.' ];
-        }
+        // Stores made since platform 0.199.0 have no content repo of their own (they publish on
+        // themselves, Qwoo_Site_Content). Nothing here needs one: the owner's files come in the request.
+        $gh = Qwoo_Platform_Connection::github_settings() ?: [];
 
         // The store's language first: the pages made below are in it.
         if ( ! empty( $input['lang'] ) && class_exists( 'Qwoo_Store_Language' ) && empty( $state['lang_done'] ) ) {
@@ -324,6 +323,215 @@ trait SB_Template_Import {
 
         update_option( self::$branding_option, [ 'done' => true, 'warnings' => $warnings ], false );
         return [ 'done' => true, 'warnings' => $warnings ];
+    }
+
+    /**
+     * "Apply the setup details again" (platform wp-admin, a store's page): stores made with platform
+     * 0.199.0 to 0.228.x skipped apply_platform_branding (no content repo). Same input, but only what
+     * is still missing or at WordPress' / WooCommerce's default is filled; nothing the owner set is
+     * changed. Never hides the store (Coming soon) and never swaps a template's names.
+     *
+     * @return array [ 'filled' => [ what ], 'kept' => [ what was left as it is ], 'warnings' => [...] ] or [ 'error' => message ].
+     */
+    public static function repair_platform_branding( array $input ) {
+        $filled   = [];
+        $kept     = [];
+        $warnings = [];
+        $lang     = (string) ( $input['lang'] ?? '' );
+        $lang     = class_exists( 'Qwoo_Store_Language' ) && isset( Qwoo_Store_Language::LANGS[ $lang ] ) ? $lang : '';
+        $setup    = (array) ( $input['setup'] ?? [] );
+        $name     = trim( (string) ( $input['name'] ?? '' ) );
+        $lang_set = false;
+
+        // 1. Language: only when nobody ever chose one (the option is missing until set).
+        if ( $lang !== '' ) {
+            if ( get_option( Qwoo_Store_Language::OPTION, null ) === null && $lang !== Qwoo_Store_Language::get() ) {
+                $set = Qwoo_Store_Language::set( $lang, false );
+                if ( is_wp_error( $set ) && $set->get_error_code() !== 'qwoo_lang_partial' ) {
+                    return [ 'error' => $set->get_error_message() ];
+                }
+                if ( is_wp_error( $set ) ) $warnings[] = $set->get_error_message();
+                $lang_set = true;
+                $filled[] = 'language (' . $lang . ')';
+            } elseif ( Qwoo_Store_Language::get() !== $lang ) {
+                $kept[] = 'language (the owner chose ' . Qwoo_Store_Language::get() . ')';
+            }
+        }
+
+        // 2. Country, currency, units, time zone, week, time and date formats, address: only WordPress' and WooCommerce's defaults change.
+        $country = strtoupper( (string) ( $setup['country'] ?? '' ) );
+        if ( $country === '' && $lang === 'he' ) $country = 'IL';
+        $default_country = in_array( (string) get_option( 'woocommerce_default_country', '' ), [ '', 'US', 'US:CA' ], true );
+        if ( preg_match( '/^[A-Z]{2}$/', $country ) && function_exists( 'WC' ) && isset( WC()->countries->get_countries()[ $country ] ) ) {
+            if ( $default_country ) {
+                update_option( 'woocommerce_default_country', $country );
+                $filled[] = 'country';
+            } elseif ( strtok( (string) get_option( 'woocommerce_default_country' ), ':' ) !== $country ) {
+                $kept[] = 'country';
+            }
+        }
+        $currency = strtoupper( (string) ( $setup['currency'] ?? '' ) );
+        if ( $currency === '' && $country === 'IL' ) $currency = 'ILS';
+        if ( preg_match( '/^[A-Z]{3}$/', $currency ) && function_exists( 'get_woocommerce_currencies' ) && isset( get_woocommerce_currencies()[ $currency ] ) ) {
+            $now = (string) get_option( 'woocommerce_currency', 'USD' );
+            if ( $now === 'USD' && $currency !== 'USD' ) {
+                update_option( 'woocommerce_currency', $currency );
+                $filled[] = 'currency';
+            } elseif ( $now !== $currency ) {
+                $kept[] = 'currency';
+            }
+        }
+        if ( $country === 'IL' ) {
+            if ( get_option( 'woocommerce_weight_unit', 'lbs' ) === 'lbs' ) update_option( 'woocommerce_weight_unit', 'kg' );
+            if ( get_option( 'woocommerce_dimension_unit', 'in' ) === 'in' ) update_option( 'woocommerce_dimension_unit', 'cm' );
+        }
+        foreach ( [ 'address1' => 'woocommerce_store_address', 'city' => 'woocommerce_store_city', 'postcode' => 'woocommerce_store_postcode' ] as $key => $option ) {
+            $value = mb_substr( trim( sanitize_text_field( (string) ( $setup[ $key ] ?? '' ) ) ), 0, 120 );
+            if ( $value !== '' && (string) get_option( $option, '' ) === '' ) {
+                update_option( $option, $value );
+                $filled[] = 'business address';
+            }
+        }
+        $zone_now = (string) get_option( 'timezone_string', '' );
+        if ( $zone_now === '' || $zone_now === 'UTC' ) {
+            $before = $zone_now;
+            // The same choice as at setup (browser zone, else the country's only one, else Israel for Hebrew).
+            $zone = (string) ( $setup['timezone'] ?? '' );
+            if ( $zone === '' || $zone === 'UTC' || strpos( $zone, 'Etc/' ) === 0 || ! in_array( $zone, timezone_identifiers_list(), true ) ) {
+                $zone  = '';
+                $store_country = strtok( (string) get_option( 'woocommerce_default_country' ), ':' );
+                if ( is_string( $store_country ) && preg_match( '/^[A-Z]{2}$/', $store_country ) ) {
+                    $zones = DateTimeZone::listIdentifiers( DateTimeZone::PER_COUNTRY, $store_country );
+                    if ( is_array( $zones ) && count( $zones ) === 1 ) $zone = $zones[0];
+                }
+                if ( $zone === '' && $lang === 'he' ) $zone = 'Asia/Jerusalem';
+            }
+            if ( $zone !== '' && (float) get_option( 'gmt_offset', 0 ) == 0 && $zone !== $before ) {
+                update_option( 'timezone_string', $zone );
+                update_option( 'gmt_offset', '' );
+                $filled[] = 'time zone';
+            }
+        }
+        $store_country = strtok( (string) get_option( 'woocommerce_default_country' ), ':' );
+        $israel        = $store_country === 'IL' || get_option( 'timezone_string' ) === 'Asia/Jerusalem' || $lang === 'he';
+        if ( $israel && (int) get_option( 'start_of_week', 1 ) === 1 ) {
+            update_option( 'start_of_week', 0 );
+        }
+        if ( ( $store_country === 'IL' || $lang === 'he' ) ) {
+            if ( get_option( 'time_format' ) === 'g:i a' ) update_option( 'time_format', 'H:i' );
+            if ( get_option( 'date_format' ) === 'F j, Y' ) update_option( 'date_format', 'd/m/Y' );
+        }
+
+        // 3. Tagline and how shoppers reach the store.
+        $description = mb_substr( trim( sanitize_textarea_field( (string) ( $input['description'] ?? '' ) ) ), 0, 300 );
+        $tagline     = trim( (string) get_option( 'blogdescription', '' ) );
+        if ( $description !== '' && ( $tagline === '' || $tagline === 'Just another WordPress site' ) ) {
+            update_option( 'blogdescription', $description );
+            $filled[] = 'tagline';
+        }
+        $contact = (array) ( $input['contact'] ?? [] );
+        $c_email = sanitize_email( (string) ( $contact['email'] ?? '' ) );
+        $c_phone = preg_replace( '/[^\d+]/', '', (string) ( $contact['phone'] ?? '' ) );
+        if ( ( $c_email !== '' || $c_phone !== '' ) && get_option( 'qwoo_store_contact', null ) === null ) {
+            update_option( 'qwoo_store_contact', [ 'email' => is_email( $c_email ) ? $c_email : '', 'phone' => (string) $c_phone ], false );
+            $filled[] = 'contact details';
+        }
+
+        // 4. Store builder: home and legal pages (only missing ones, and only when they were never made), logo, app icon, font, app name, header, Sign in popup.
+        $before_opts = (array) get_option( 'shop_builder_options', [] );
+        $roles_now   = array_filter( array_map( static fn( $p ) => (string) ( $p['role'] ?? '' ), self::custom_pages_of( $before_opts ) ) );
+        // Made before (still to read, or any of them there): the owner may have removed one on purpose.
+        $legal_made  = get_option( self::$legal_review_option, null ) !== null || array_intersect( [ 'privacy', 'terms', 'returns' ], $roles_now );
+        if ( self::ensure_store_pages( ! $legal_made, $name ) ) {
+            $roles_after = array_filter( array_map( static fn( $p ) => (string) ( $p['role'] ?? '' ), self::custom_pages_of( (array) get_option( 'shop_builder_options', [] ) ) ) );
+            $added       = array_values( array_diff( $roles_after, $roles_now ) );
+            if ( $added ) $filled[] = 'pages: ' . implode( ', ', $added );
+        } elseif ( $legal_made ) {
+            $kept[] = 'legal pages (made before; any the owner removed stay removed)';
+        }
+
+        $options  = (array) get_option( 'shop_builder_options', [] );
+        $branding = (array) ( $options['branding'] ?? [] );
+        $pwa      = (array) ( $options['pwa'] ?? [] );
+        $icons    = false;
+        foreach ( [ 'logo' => 'logo_id', 'icon' => 'app_icon_id' ] as $key => $field ) {
+            if ( empty( $input[ $key ]['data'] ) ) continue;
+            if ( (int) ( $branding[ $field ] ?? 0 ) > 0 ) {
+                $kept[] = $key . ' (the store has one)';
+                continue;
+            }
+            $bytes = base64_decode( (string) $input[ $key ]['data'], true );
+            $file  = sanitize_file_name( (string) ( $input[ $key ]['name'] ?? $key ) );
+            $id    = $bytes ? self::template_import_media( [], [ 'bytes' => $bytes, 'name' => $file ] ) : 'empty file';
+            if ( ! is_int( $id ) ) {
+                $warnings[] = "The {$key} could not be added: {$id}";
+                continue;
+            }
+            $branding[ $field ] = $id;
+            $filled[] = $key;
+            $icons    = true;
+        }
+        if ( $lang === 'he' && class_exists( 'Qwoo_Brand_Fonts' ) ) {
+            $fonts = Qwoo_Brand_Fonts::sanitize( $branding['fonts'] ?? [] );
+            if ( $fonts['text'] === '' && in_array( 'Heebo', Qwoo_Brand_Fonts::families(), true ) ) {
+                $fonts['text']     = 'Heebo';
+                $branding['fonts'] = $fonts;
+                $filled[] = 'Hebrew font';
+            }
+        }
+        $colors = (array) ( $branding['global_colors'] ?? [] );
+        foreach ( (array) ( $input['colors'] ?? [] ) as $key => $value ) {
+            if ( ! isset( self::GLOBAL_COLOR_KEYS[ $key ] ) || ! sanitize_hex_color( $value ) ) continue;
+            if ( empty( $colors[ $key ] ) ) {
+                $colors[ $key ] = $value;
+                $filled[] = 'colour ' . $key;
+            } elseif ( strtolower( (string) $colors[ $key ] ) !== strtolower( (string) $value ) ) {
+                $kept[] = 'colours (already set in the Store builder)';
+            }
+        }
+        $branding['global_colors'] = $colors;
+        if ( $name !== '' && trim( (string) ( $pwa['name'] ?? '' ) ) === '' ) {
+            $pwa['name']       = $name;
+            $pwa['short_name'] = mb_substr( $name, 0, 12 );
+            $filled[] = 'app name';
+        }
+        $clean = self::instance()->sanitize_options( [ 'branding' => $branding, 'pwa' => $pwa ] );
+        $final = array_merge( $options, $clean );
+        $had_header = ! empty( $final['header']['sections'] );
+        $had_popups = ! empty( $final['popups'] );
+        self::ensure_default_header( $final, (int) ( $branding['logo_id'] ?? 0 ), $name );
+        self::ensure_default_popups( $final );
+        if ( ! $had_header && ! empty( $final['header']['sections'] ) ) $filled[] = 'header';
+        if ( ! $had_popups && ! empty( $final['popups'] ) ) $filled[] = 'Sign in popup';
+
+        $builder = wp_json_encode( $final ) !== wp_json_encode( $before_opts );
+        if ( $builder ) {
+            update_option( 'shop_builder_options', $final );
+            self::record_revision( $final );
+        }
+
+        // 5. Live: the whole Store builder when it changed (it carries languages.json), else only the language file.
+        if ( $builder ) {
+            $push = self::instance()->push_all_pages();
+            if ( isset( $push['error'] ) ) {
+                return [ 'error' => 'Saved, but publishing failed: ' . wp_strip_all_tags( (string) $push['error'] ) ];
+            }
+            if ( $icons ) {
+                $icon_warning = self::platform_sync_icons( $final );
+                if ( $icon_warning !== '' ) $warnings[] = $icon_warning;
+            }
+        } elseif ( $lang_set && function_exists( 'aps_commit_to_github' ) ) {
+            if ( aps_commit_to_github( Qwoo_Store_Language::config_json(), 'public/config/languages.json', 'Store language: ' . $lang ) === false ) {
+                $warnings[] = 'The storefront couldn\'t be updated. Publish from the Store builder to try again.';
+            }
+        }
+
+        // The first setup counts as done now: a late "Apply branding" call won't run over the owner's store.
+        $state = get_option( self::$branding_option, [] );
+        if ( ! is_array( $state ) || empty( $state['done'] ) ) {
+            update_option( self::$branding_option, [ 'done' => true, 'warnings' => $warnings, 'repaired' => time() ], false );
+        }
+        return [ 'filled' => array_values( array_unique( $filled ) ), 'kept' => array_values( array_unique( $kept ) ), 'warnings' => $warnings, 'published' => $builder || $lang_set ];
     }
 
     /**
