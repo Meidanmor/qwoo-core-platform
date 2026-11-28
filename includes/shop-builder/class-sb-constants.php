@@ -2662,6 +2662,77 @@ abstract class Shop_Builder_Constants {
                     ],
             ],
 
+            /* ---- The booking page (/booking/<id>?k=key, Appointments): Store builder → Shop pages → Booking page. ----
+               Empty texts = the built-in one in the page's language. The defaults draw the page as it was before
+               it became a Store builder page (2026-11-28); cancelling, refunds and free times follow Appointments. */
+            'booking_details' => [
+                    'label' => 'Booking Details', 'category' => 'dynamic', 'pages' => [ 'booking' ], 'icon' => 'event',
+                    'fields' => [
+                            'show_coming'  => [ 'type' => 'toggle', 'label' => 'Yes, I\'m coming', 'tab' => 'content', 'group' => 'Buttons', 'default' => true,
+                                    'help' => 'Only for a service that asks the customer to confirm, before the booking.' ],
+                            'coming_label' => [ 'type' => 'text', 'label' => 'Yes, I\'m Coming Text', 'tab' => 'content', 'group' => 'Buttons', 'default' => '', 'placeholder' => 'Yes, I\'m coming', 'show_if' => [ 'show_coming' => true ] ],
+                            'show_move'    => [ 'type' => 'toggle', 'label' => 'Move to another time', 'tab' => 'content', 'group' => 'Buttons', 'default' => true,
+                                    'help' => 'Follows how long before a booking it can be changed (Appointments → Settings).' ],
+                            'move_label'   => [ 'type' => 'text', 'label' => 'Move Text', 'tab' => 'content', 'group' => 'Buttons', 'default' => '', 'placeholder' => 'Move to another time', 'show_if' => [ 'show_move' => true ] ],
+                            'show_cancel'  => [ 'type' => 'toggle', 'label' => 'Cancel booking', 'tab' => 'content', 'group' => 'Buttons', 'default' => true ],
+                            'cancel_label' => [ 'type' => 'text', 'label' => 'Cancel Text', 'tab' => 'content', 'group' => 'Buttons', 'default' => '', 'placeholder' => 'Cancel booking', 'show_if' => [ 'show_cancel' => true ] ],
+                            'show_again'   => [ 'type' => 'toggle', 'label' => 'Book again', 'tab' => 'content', 'group' => 'Buttons', 'default' => false,
+                                    'help' => 'On a cancelled or past booking.' ],
+                            'again_label'  => [ 'type' => 'text', 'label' => 'Book Again Text', 'tab' => 'content', 'group' => 'Buttons', 'default' => '', 'placeholder' => 'Book again', 'show_if' => [ 'show_again' => true ] ],
+                            'again_url'    => [ 'type' => 'url', 'label' => 'Book Again Link', 'tab' => 'content', 'group' => 'Buttons', 'default' => '', 'show_if' => [ 'show_again' => true ],
+                                    'help' => 'Empty: the service\'s own product page, when it\'s also shown as a product (otherwise the button is hidden).' ],
+                            'show_store'   => [ 'type' => 'toggle', 'label' => 'Go to the store', 'tab' => 'content', 'group' => 'Buttons', 'default' => true ],
+                            'store_label'  => [ 'type' => 'text', 'label' => 'Go To The Store Text', 'tab' => 'content', 'group' => 'Buttons', 'default' => '', 'placeholder' => 'Go to the store', 'show_if' => [ 'show_store' => true ] ],
+                            'show_map'      => [ 'type' => 'toggle', 'label' => 'Address and map', 'tab' => 'content', 'group' => 'What It Shows', 'default' => false,
+                                    'help' => 'An "Open in Maps" link under the address, for bookings at a place.' ],
+                            'show_calendar' => [ 'type' => 'toggle', 'label' => 'Add to calendar', 'tab' => 'content', 'group' => 'What It Shows', 'default' => true ],
+                            'show_contact'  => [ 'type' => 'toggle', 'label' => 'Contact line', 'tab' => 'content', 'group' => 'What It Shows', 'default' => false,
+                                    'help' => 'The phone and email from your store\'s contact details.' ],
+                            'show_staff'    => [ 'type' => 'toggle', 'label' => 'Staff name', 'tab' => 'content', 'group' => 'What It Shows', 'default' => true ],
+                            'show_price'    => [ 'type' => 'toggle', 'label' => 'Price and payment', 'tab' => 'content', 'group' => 'What It Shows', 'default' => true ],
+                            'card'   => [ 'type' => 'toggle', 'label' => 'In a card', 'tab' => 'style', 'default' => false,
+                                    'help' => 'A thin border, padding and rounded corners around the booking.' ],
+                            'wide'   => [ 'type' => 'toggle', 'label' => 'Wider', 'tab' => 'style', 'default' => false ],
+                            'accent' => [ 'type' => 'color', 'label' => 'Chosen Day And Time', 'tab' => 'style', 'default' => '' ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+                            'ts:text'  => [ 'type' => 'text_style', 'label' => 'Text' ],
+                    ],
+            ],
+            'booking_message' => [
+                    'label' => 'Message For This Service', 'category' => 'dynamic', 'pages' => [ 'booking' ], 'icon' => 'text',
+                    'fields' => [
+                            'show_title' => [ 'type' => 'toggle', 'label' => 'Show the title', 'tab' => 'content', 'default' => true,
+                                    'help' => 'Shows each service\'s own message (Appointments → Services → a service → Message on the booking page). Hidden when the service has none.' ],
+                            'title' => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Before you come', 'show_if' => [ 'show_title' => true ] ],
+                            'look'  => [ 'type' => 'select', 'label' => 'Look', 'tab' => 'style', 'default' => 'note',
+                                    'options' => [ 'note' => 'A coloured note', 'plain' => 'Plain text' ] ],
+                            'note_bg' => [ 'type' => 'color', 'label' => 'Note Color', 'tab' => 'style', 'default' => '', 'show_if' => [ 'look' => 'note' ] ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+                            'ts:text'  => [ 'type' => 'text_style', 'label' => 'Text' ],
+                    ],
+            ],
+
+            /* ---- The thank-you page (order received, /thank-you): Store builder → Shop pages → Thank-you page. ---- */
+            'thankyou_order' => [
+                    'label' => 'Order Details', 'category' => 'dynamic', 'pages' => [ 'thank_you' ], 'icon' => 'cart',
+                    'fields' => [
+                            'title'         => [ 'type' => 'text', 'label' => 'Title', 'tab' => 'content', 'default' => '', 'placeholder' => 'Thank you!' ],
+                            'show_greeting' => [ 'type' => 'toggle', 'label' => 'Show the line under the title', 'tab' => 'content', 'default' => true ],
+                            'greeting'      => [ 'type' => 'textarea', 'label' => 'Line Under The Title', 'tab' => 'content', 'default' => '', 'show_if' => [ 'show_greeting' => true ],
+                                    'placeholder' => 'Hey {first_name}. Your order is being processed and will get to you soon! Please check your email inbox at {email} for more details.',
+                                    'help' => '{first_name} becomes the customer\'s first name, {email} their email.' ],
+                            'show_summary'  => [ 'type' => 'toggle', 'label' => 'Order summary (amounts, delivery, pickup)', 'tab' => 'content', 'default' => true ],
+                            'show_items'    => [ 'type' => 'toggle', 'label' => 'Products', 'tab' => 'content', 'default' => true ],
+                            'show_images'   => [ 'type' => 'toggle', 'label' => 'Product photos', 'tab' => 'content', 'default' => true, 'show_if' => [ 'show_items' => true ] ],
+                            'show_continue' => [ 'type' => 'toggle', 'label' => 'Continue shopping button', 'tab' => 'content', 'default' => true ],
+                            'continue_label' => [ 'type' => 'text', 'label' => 'Button Text', 'tab' => 'content', 'default' => '', 'placeholder' => 'Continue shopping', 'show_if' => [ 'show_continue' => true ] ],
+                            'continue_url'  => [ 'type' => 'url', 'label' => 'Button Link', 'tab' => 'content', 'default' => '', 'placeholder' => '/products', 'show_if' => [ 'show_continue' => true ] ],
+                            'boxed'         => [ 'type' => 'toggle', 'label' => 'Details in cards', 'tab' => 'style', 'default' => true ],
+                            'ts:title' => [ 'type' => 'text_style', 'label' => 'Title', 'default_font' => 'headings' ],
+                            'ts:text'  => [ 'type' => 'text_style', 'label' => 'Text' ],
+                    ],
+            ],
+
             'latest_posts' => [
                     'label'  => 'Latest Blog Posts',
                     'category' => 'shop',
@@ -3786,7 +3857,7 @@ abstract class Shop_Builder_Constants {
      * Template pages: built entirely from sections (like the homepage), with
      * dynamic blocks for what the page shows ("Post title", "Posts grid"…).
      */
-    const TEMPLATE_PAGES = [ 'blog', 'blog_post', 'blog_author', 'blog_authors', 'shop', 'category', 'product', 'cart', 'checkout', 'account' ];
+    const TEMPLATE_PAGES = [ 'blog', 'blog_post', 'blog_author', 'blog_authors', 'shop', 'category', 'product', 'cart', 'checkout', 'account', 'booking', 'thank_you' ];
 
     /** Shown in the Store builder only while author profiles are on (Qwoo_Blog_Authors). */
     const AUTHOR_TEMPLATE_PAGES = [ 'blog_author', 'blog_authors' ];
@@ -3795,7 +3866,10 @@ abstract class Shop_Builder_Constants {
      * The shop pages, block-built since the slots (PAGE_SECTION_LOCATIONS) were
      * replaced: their published config says `template: 1` (trait-sb-shop-templates.php).
      */
-    const SHOP_TEMPLATE_PAGES = [ 'shop', 'category', 'product', 'cart', 'checkout', 'account' ];
+    const SHOP_TEMPLATE_PAGES = [ 'shop', 'category', 'product', 'cart', 'checkout', 'account', 'booking', 'thank_you' ];
+
+    /** Shown in the Store builder only while Appointments is on (Qwoo_Appointments::active()). */
+    const BOOKING_TEMPLATE_PAGES = [ 'booking' ];
 
     /**
      * Pages that can have extra layouts, each used where its conditions
@@ -3810,6 +3884,8 @@ abstract class Shop_Builder_Constants {
             'shop'      => [ 'archive', 'categories' ],
             'blog'      => [ 'blog_categories' ],
             'blog_post' => [ 'blog_categories' ],
+            // The booking page: a layout for chosen services or staff (the booking's service_id / staff_id).
+            'booking'   => [ 'services', 'staff' ],
             // Header and footer templates: the main one, plus others shown on chosen pages.
             'header'    => [ 'targets' ],
             'footer'    => [ 'targets' ],

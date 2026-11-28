@@ -37,9 +37,13 @@ trait SB_Package {
             } elseif ( $key === 'layouts' && is_array( $item ) && $item === array_values( $item ) ) {
                 foreach ( $item as $i => $layout ) {
                     if ( ! is_array( $layout ) ) continue;
-                    foreach ( [ 'products' => 'product', 'categories' => 'category', 'blog_categories' => 'blog_category' ] as $cond => $kind ) {
+                    // The booking page's layouts pick services and staff (Appointments): their new ids too.
+                    foreach ( [ 'products' => 'product', 'categories' => 'category', 'blog_categories' => 'blog_category', 'services' => 'service', 'staff' => 'staff' ] as $cond => $kind ) {
                         if ( isset( $layout['conditions'][ $cond ] ) ) {
                             $layout['conditions'][ $cond ] = self::package_ids( (array) $layout['conditions'][ $cond ], $kind, $map );
+                        }
+                        if ( isset( $layout['conditions']['exclude'][ $cond ] ) ) {
+                            $layout['conditions']['exclude'][ $cond ] = self::package_ids( (array) $layout['conditions']['exclude'][ $cond ], $kind, $map );
                         }
                     }
                     if ( isset( $layout['sections'] ) && is_array( $layout['sections'] ) ) {

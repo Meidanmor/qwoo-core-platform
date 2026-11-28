@@ -206,6 +206,21 @@ trait SB_Shop_Templates {
                 ];
                 break;
 
+            case 'booking':
+                // The booking from its email link, then the service's own message (hidden when it has none).
+                // The blocks keep today's look by themselves (max 560px wide, centred).
+                $out = [
+                    $sec( [ $block( 'booking_details' ), $block( 'booking_message' ) ], $pad( '16', '16', '24', '16' ) + [ 'gap' => $rwd( '16px' ) ] ),
+                ];
+                break;
+
+            case 'thank_you':
+                // The order: thank you, payment notes, summary, products, Continue shopping.
+                $out = [
+                    $sec( [ $block( 'thankyou_order' ) ], $pad( '16', '16', '16', '16' ) ),
+                ];
+                break;
+
             default:
                 return [];
         }

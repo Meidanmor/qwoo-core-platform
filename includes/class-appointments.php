@@ -501,6 +501,8 @@ class Qwoo_Appointments {
             'approval_hours' => min( 168, max( 1, (int) $g( 'approval_hours', 24 ) ) ),
             'name'          => mb_substr( sanitize_text_field( (string) $g( 'name', '' ) ), 0, 120 ),
             'description'   => mb_substr( sanitize_textarea_field( (string) $g( 'description', '' ) ), 0, 2000 ),
+            // Shown to the customer on their booking page (the Message For This Service block), e.g. "Come 10 minutes early".
+            'page_message'  => mb_substr( sanitize_textarea_field( (string) $g( 'page_message', '' ) ), 0, 1000 ),
             'category'      => mb_substr( sanitize_text_field( (string) $g( 'category', '' ) ), 0, 60 ),
             'image'         => $image && wp_attachment_is_image( $image ) ? $image : 0,
             'duration'      => $dur,
@@ -1913,20 +1915,20 @@ class Qwoo_Appointments {
         $ts      = self::ts( $b['start_utc'] );
         $minutes = (int) round( ( self::ts( $b['end_utc'] ) - $ts ) / 60 );
         $rows    = [];
-        $rows[]  = [ 'k' => self::l( 'Service', 'שירות' ), 'v' => $svc ? $svc['name'] : '' ];
-        $rows[]  = [ 'k' => self::l( 'When', 'מתי' ), 'v' => wp_date( 'l, j F Y', $ts ) . ' · ' . wp_date( 'H:i', $ts ) . ' (' . sprintf( self::l( '%d minutes', '%d דקות' ), $minutes ) . ')' ];
+        $rows[]  = [ 'kind' => 'service', 'k' => self::l( 'Service', 'שירות' ), 'v' => $svc ? $svc['name'] : '' ];
+        $rows[]  = [ 'kind' => 'when', 'k' => self::l( 'When', 'מתי' ), 'v' => wp_date( 'l, j F Y', $ts ) . ' · ' . wp_date( 'H:i', $ts ) . ' (' . sprintf( self::l( '%d minutes', '%d דקות' ), $minutes ) . ')' ];
         if ( $b['tz'] !== '' && $b['tz'] !== wp_timezone_string() && in_array( $b['tz'], timezone_identifiers_list(), true ) ) {
-            $rows[] = [ 'k' => self::l( 'Your time', 'אצלך' ), 'v' => wp_date( 'l, j F · H:i', $ts, new DateTimeZone( $b['tz'] ) ) ];
+            $rows[] = [ 'kind' => 'your_time', 'k' => self::l( 'Your time', 'אצלך' ), 'v' => wp_date( 'l, j F · H:i', $ts, new DateTimeZone( $b['tz'] ) ) ];
         }
         $person = self::staff_one( (int) $b['staff_id'] );
-        if ( $person ) $rows[] = [ 'k' => self::l( 'With', 'עם' ), 'v' => $person['name'] ];
-        if ( (int) $b['seats'] > 1 ) $rows[] = [ 'k' => self::l( 'Places', 'מקומות' ), 'v' => (string) (int) $b['seats'] ];
-        if ( $b['place'] !== '' ) $rows[] = [ 'k' => self::l( 'Where', 'איפה' ), 'v' => (string) $b['place'] ];
+        if ( $person ) $rows[] = [ 'kind' => 'staff', 'k' => self::l( 'With', 'עם' ), 'v' => $person['name'] ];
+        if ( (int) $b['seats'] > 1 ) $rows[] = [ 'kind' => 'seats', 'k' => self::l( 'Places', 'מקומות' ), 'v' => (string) (int) $b['seats'] ];
+        if ( $b['place'] !== '' ) $rows[] = [ 'kind' => 'place', 'k' => self::l( 'Where', 'איפה' ), 'v' => (string) $b['place'] ];
         $video = $b['video'] !== '' ? (string) $b['video'] : ( $svc ? (string) $svc['place']['link'] : '' );
-        if ( $svc && $svc['place']['type'] === 'video' && $video !== '' && $b['status'] === 'confirmed' ) $rows[] = [ 'k' => self::l( 'Video link', 'קישור לשיחה' ), 'v' => $video, 'link' => true ];
-        if ( (float) $b['due_now'] > 0 && $b['order_id'] ) $rows[] = [ 'k' => self::l( 'Paid', 'שולם' ), 'v' => html_entity_decode( wp_strip_all_tags( wc_price( (float) $b['due_now'], [ 'currency' => $b['currency'] ] ) ), ENT_QUOTES ) ];
+        if ( $svc && $svc['place']['type'] === 'video' && $video !== '' && $b['status'] === 'confirmed' ) $rows[] = [ 'kind' => 'video', 'k' => self::l( 'Video link', 'קישור לשיחה' ), 'v' => $video, 'link' => true ];
+        if ( (float) $b['due_now'] > 0 && $b['order_id'] ) $rows[] = [ 'kind' => 'paid', 'k' => self::l( 'Paid', 'שולם' ), 'v' => html_entity_decode( wp_strip_all_tags( wc_price( (float) $b['due_now'], [ 'currency' => $b['currency'] ] ) ), ENT_QUOTES ) ];
         $rest = (float) $b['price'] - ( $b['order_id'] ? (float) $b['due_now'] : 0 );
-        if ( $rest > 0 && $svc && $svc['pay'] !== 'free' ) $rows[] = [ 'k' => self::l( 'To pay there', 'לתשלום במקום' ), 'v' => html_entity_decode( wp_strip_all_tags( wc_price( $rest, [ 'currency' => $b['currency'] ] ) ), ENT_QUOTES ) ];
+        if ( $rest > 0 && $svc && $svc['pay'] !== 'free' ) $rows[] = [ 'kind' => 'rest', 'k' => self::l( 'To pay there', 'לתשלום במקום' ), 'v' => html_entity_decode( wp_strip_all_tags( wc_price( $rest, [ 'currency' => $b['currency'] ] ) ), ENT_QUOTES ) ];
         return [ 'rows' => $rows, 'google' => self::google_link( $b ), 'outlook' => self::outlook_link( $b ), 'manage' => self::manage_url( $b ), 'labels' => [ 'google' => 'Google', 'outlook' => 'Outlook', 'manage' => self::l( 'Move or cancel', 'הזזה או ביטול' ) ] ];
     }
 

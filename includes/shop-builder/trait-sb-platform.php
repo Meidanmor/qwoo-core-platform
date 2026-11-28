@@ -68,6 +68,8 @@ trait SB_Platform {
             'template_pages' => self::TEMPLATE_PAGES,
             // The author pages' templates show while author profiles are on (Blog → Authors).
             'author_pages'  => class_exists( 'Qwoo_Blog_Authors' ) && Qwoo_Blog_Authors::is_public(),
+            // The booking page's template shows while Appointments is on (BOOKING_TEMPLATE_PAGES).
+            'booking_page'  => class_exists( 'Qwoo_Appointments' ) && Qwoo_Appointments::active(),
             'blog_categories' => self::blog_category_labels(),
             'schema'        => [
                 // New blocks start with texts ("View all"…) in the store's language.
@@ -94,7 +96,13 @@ trait SB_Platform {
                 'audiences_state'  => class_exists( 'Qwoo_Personalization' ) ? [ 'enabled' => Qwoo_Personalization::enabled(), 'allowed' => Qwoo_Personalization::plan_allows() ] : [ 'enabled' => false, 'allowed' => false ],
                 'coupons'          => self::coupon_choices(),
                 // Appointments → Services: the Booking block's picker.
-                'services'         => class_exists( 'Qwoo_Appointments' ) ? array_map( static fn( $s ) => [ 'id' => (int) $s['id'], 'name' => $s['name'], 'status' => $s['status'] ], Qwoo_Appointments::services() ) : [],
+                // The booking page's preview and its Services layouts use the rest (message, length, team).
+                'services'         => class_exists( 'Qwoo_Appointments' ) ? array_map( static fn( $s ) => [ 'id' => (int) $s['id'], 'name' => $s['name'], 'status' => $s['status'],
+                        'page_message' => (string) ( $s['page_message'] ?? '' ), 'duration' => (int) $s['duration'], 'price' => (float) $s['price'], 'pay' => (string) $s['pay'],
+                        'staff' => array_map( 'intval', (array) $s['staff'] ), 'confirm' => ! empty( $s['confirm']['on'] ), 'place' => (string) ( $s['place']['type'] ?? 'business' ) ], Qwoo_Appointments::services() ) : [],
+                'currency'         => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : '',
+                // Appointments → Staff: the booking page's Staff layouts.
+                'staff'            => class_exists( 'Qwoo_Appointments' ) ? array_values( array_map( static fn( $p ) => [ 'id' => (int) $p['id'], 'name' => (string) $p['name'], 'status' => (string) $p['status'] ], Qwoo_Appointments::staff_list() ) ) : [],
                 // Analytics → Events: the owner's own events that start with a click on a block.
                 'events'           => class_exists( 'Qwoo_Events' ) ? array_values( array_map( static fn( $e ) => [ 'id' => $e['id'], 'name' => $e['name'], 'start' => (string) ( $e['start']['type'] ?? '' ) ], Qwoo_Events::own() ) ) : [],
                 'max_popups'       => self::MAX_POPUPS,

@@ -23,6 +23,8 @@ trait SB_Github_Push {
                 'blog_author' => 'Author Page',
                 'blog_authors' => 'Authors Page',
                 'account'  => 'My Account',
+                'booking'  => 'Booking Page',
+                'thank_you' => 'Thank-you Page',
     ];
 
 

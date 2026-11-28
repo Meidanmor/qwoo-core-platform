@@ -49,6 +49,9 @@ trait SB_Rest {
                 'tab-blog_author'  => $frontend_domain ? $frontend_domain . self::first_author_path() : '',
                 'tab-blog_authors' => $frontend_domain ? $frontend_domain . '/blog/authors' : '',
                 'tab-account'  => $frontend_domain ? $frontend_domain . '/my-account' : '',
+                // No real booking or order in the preview: the storefront shows a sample (editor mode).
+                'tab-booking'  => $frontend_domain ? $frontend_domain . '/booking/0' : '',
+                'tab-thank_you' => $frontend_domain ? $frontend_domain . '/thank-you' : '',
                 'tab-branding' => $root,
                 'tab-pwa'      => $root,
                 'tab-contact'  => $root,

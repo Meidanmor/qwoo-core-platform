@@ -706,6 +706,8 @@ trait Qwoo_Platform_Package {
             switch ( $kind ) {
                 case 'service':
                     return (int) ( self::$mig['maps']['service'][ (int) $old ] ?? 0 );
+                case 'staff':
+                    return (int) ( self::$mig['maps']['staff'][ (int) $old ] ?? 0 );
                 case 'media':
                     return self::mig_package_media( [ 'id' => $old ] );
                 case 'product':

@@ -222,7 +222,21 @@ class Qwoo_Appointments_Shop {
             'cancel_hours' => $hours, 'google' => $card['google'], 'outlook' => $card['outlook'],
             'ics' => $b['email'] !== '' ? rtrim( (string) ( class_exists( 'Qwoo_Technical_Settings' ) ? Qwoo_Technical_Settings::get_primary_frontend_domain() : home_url() ), '/' ) . '/wp-json/qwoo/v1/appointments/ics?id=' . (int) $b['id'] . '&k=' . Qwoo_Appointments::key( (int) $b['id'], (string) $b['email'] ) : '',
             'refund' => $s ? ( array_key_exists( 'refund', $s['rules'] ) ? $s['rules']['refund'] : Qwoo_Appointments::settings()['rules']['refund'] ) : 'keep',
+            // The booking page's blocks (Store builder → Shop pages → Booking page): the service's own
+            // message, where it happens (an "Open in Maps" link only for a place), the store's contact
+            // details, and "Book again" (the service's product page, when it's shown as a product).
+            'page_message' => $s ? (string) ( $s['page_message'] ?? '' ) : '',
+            'place_type'   => $s ? (string) $s['place']['type'] : '',
+            'contact'      => self::store_contact(),
+            'again'        => $s && $s['status'] !== 'off' && ! empty( $s['in_shop'] ) && (int) $s['product_id'] ? '/product/' . rawurlencode( (string) get_post_field( 'post_name', (int) $s['product_id'] ) ) : '',
         ];
+    }
+
+    /** The store's own phone and email (Settings → contact details), for the booking page's contact line. */
+    private static function store_contact(): array {
+        $own   = (array) get_option( 'qwoo_store_contact', [] );
+        $email = (string) ( $own['email'] ?? '' );
+        return [ 'phone' => mb_substr( (string) ( $own['phone'] ?? '' ), 0, 40 ), 'email' => is_email( $email ) ? $email : '' ];
     }
 
     public static function rest_manage( WP_REST_Request $r ) {
